@@ -1,0 +1,35 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg: #0a0a0a;
+    --bg-card: #101010;
+    --bg-input: #1a1a1a;
+    --border: #222;
+    --border-hover: #333;
+    --text: #e8edf7;
+    --text-muted: #9ca3af;
+    --text-label: #6b7280;
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+    --font-sans: 'Space Grotesk', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: var(--font-sans);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, kbd, samp, tt, .font-mono {
+    font-family: var(--font-mono);
+}

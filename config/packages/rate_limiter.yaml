@@ -1,0 +1,8 @@
+# Submit throttling example: per client IP (limit from APP_SUBMIT_RATE_LIMIT).
+framework:
+    rate_limiter:
+        app_submit:
+            policy: 'sliding_window'
+            limit: '%env(int:APP_SUBMIT_RATE_LIMIT)%'
+            interval: '1 day'
+            cache_pool: cache.app

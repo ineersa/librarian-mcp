@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "vera": {
+      "command": "vera",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

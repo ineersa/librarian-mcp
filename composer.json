@@ -1,0 +1,138 @@
+{
+    "type": "project",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.5",
+        "ext-ctype": "*",
+        "ext-iconv": "*",
+        "doctrine/doctrine-bundle": "^3.2.2",
+        "doctrine/doctrine-migrations-bundle": "^4.0",
+        "doctrine/orm": "^3.6.3",
+        "phpdocumentor/reflection-docblock": "^5.6.7 || ^6.0",
+        "phpstan/phpdoc-parser": "^2.3.2",
+        "stof/doctrine-extensions-bundle": "^1.15.3",
+        "symfony/asset": "8.0.*",
+        "symfony/asset-mapper": "8.0.*",
+        "symfony/clock": "8.0.*",
+        "symfony/console": "8.0.*",
+        "symfony/doctrine-messenger": "8.0.*",
+        "symfony/dotenv": "8.0.*",
+        "symfony/expression-language": "8.0.*",
+        "symfony/flex": "^2.10",
+        "symfony/form": "8.0.*",
+        "symfony/framework-bundle": "8.0.*",
+        "symfony/http-client": "8.0.*",
+        "symfony/intl": "8.0.*",
+        "symfony/mailer": "8.0.*",
+        "symfony/mercure-bundle": "^0.4.2",
+        "symfony/mime": "8.0.*",
+        "symfony/monolog-bundle": "^3.0|^4.0.2",
+        "symfony/notifier": "8.0.*",
+        "symfony/process": "8.0.*",
+        "symfony/property-access": "8.0.*",
+        "symfony/property-info": "8.0.*",
+        "symfony/rate-limiter": "8.0.*",
+        "symfony/runtime": "8.0.*",
+        "symfony/security-bundle": "8.0.*",
+        "symfony/serializer": "8.0.*",
+        "symfony/stimulus-bundle": "^2.35",
+        "symfony/string": "8.0.*",
+        "symfony/translation": "8.0.*",
+        "symfony/twig-bundle": "8.0.*",
+        "symfony/ux-turbo": "^2.35",
+        "symfony/validator": "8.0.*",
+        "symfony/web-link": "8.0.*",
+        "symfony/yaml": "8.0.*",
+        "symfonycasts/tailwind-bundle": "^0.12.0",
+        "twig/extra-bundle": "^2.12|^3.24",
+        "twig/twig": "^2.12|^3.24"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "symfony/flex": true,
+            "symfony/runtime": true,
+            "symfony/ai-mate-composer-plugin": true
+        },
+        "bump-after-update": true,
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\Tests\\": "tests/",
+            "App\\Mate\\": "mate/src/"
+        }
+    },
+    "replace": {
+        "symfony/polyfill-ctype": "*",
+        "symfony/polyfill-iconv": "*",
+        "symfony/polyfill-php72": "*",
+        "symfony/polyfill-php73": "*",
+        "symfony/polyfill-php74": "*",
+        "symfony/polyfill-php80": "*",
+        "symfony/polyfill-php81": "*",
+        "symfony/polyfill-php82": "*",
+        "symfony/polyfill-php83": "*",
+        "symfony/polyfill-php84": "*"
+    },
+    "scripts": {
+        "auto-scripts": {
+            "cache:clear": "symfony-cmd",
+            "assets:install %PUBLIC_DIR%": "symfony-cmd",
+            "importmap:install": "symfony-cmd"
+        },
+        "post-install-cmd": [
+            "@auto-scripts"
+        ],
+        "post-update-cmd": [
+            "@auto-scripts"
+        ]
+    },
+    "conflict": {
+        "symfony/symfony": "*"
+    },
+    "extra": {
+        "symfony": {
+            "allow-contrib": false,
+            "require": "8.0.*"
+        },
+        "ai-mate": {
+            "scan-dirs": [
+                "mate/src"
+            ],
+            "includes": [
+                "mate/config.php"
+            ]
+        }
+    },
+    "require-dev": {
+        "dama/doctrine-test-bundle": "^8.6",
+        "friendsofphp/php-cs-fixer": "^3.95.1",
+        "helgesverre/toon": "^3.1",
+        "ineersa/ai-index": "^0.1.2",
+        "ineersa/call-graph": "^0.1.5",
+        "ineersa/database-extension": "^0.8",
+        "phpstan/phpstan": "^2.1.51",
+        "phpstan/phpstan-phpunit": "^2.0.16",
+        "phpstan/phpstan-strict-rules": "^2.0.10",
+        "phpunit/phpunit": "^13.1.7",
+        "shipmonk/dead-code-detector": "^0.15.1",
+        "symfony/ai-mate": "^0.8",
+        "symfony/ai-monolog-mate-extension": "dev-main",
+        "symfony/ai-symfony-mate-extension": "dev-main",
+        "symfony/browser-kit": "8.0.*",
+        "symfony/css-selector": "8.0.*",
+        "symfony/debug-bundle": "8.0.*",
+        "symfony/maker-bundle": "^1.67",
+        "symfony/stopwatch": "8.0.*",
+        "symfony/var-dumper": "8.0.*",
+        "symfony/web-profiler-bundle": "8.0.*"
+    }
+}

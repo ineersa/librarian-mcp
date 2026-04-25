@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{% block title %}Symfony Web Template{% endblock %}</title>
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+        {% block stylesheets %}
+        {% endblock %}
+
+        {% block javascripts %}
+            {% block importmap %}{{ importmap('app') }}{% endblock %}
+        {% endblock %}
+
+        {% set frankenphpHotReload = app.request.server.get('FRANKENPHP_HOT_RELOAD') %}
+        {% if frankenphpHotReload %}
+        <meta name="frankenphp-hot-reload:url" content="{{ frankenphpHotReload }}">
+        <script src="https://cdn.jsdelivr.net/npm/idiomorph"></script>
+        <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
+        {% endif %}
+    </head>
+    <body>
+        {% block body %}{% endblock %}
+    </body>
+</html>

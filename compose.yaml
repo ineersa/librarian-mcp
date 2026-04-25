@@ -1,0 +1,17 @@
+
+services:
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frankenphp_prod
+    restart: unless-stopped
+    # Symfony env: mounted .env files (dev) or .env.local.php from the image (prod). Do not inject
+    # host DATABASE_URL / APP_SECRET here — that bypasses .env layering and breaks %kernel.project_dir%.
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

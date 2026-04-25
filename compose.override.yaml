@@ -1,0 +1,55 @@
+services:
+  php:
+    restart: "no"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frankenphp_dev
+    environment:
+      APP_ENV: dev
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      SERVER_NAME: localhost, http://localhost
+      MERCURE_URL: http://localhost/.well-known/mercure
+      MERCURE_PUBLIC_URL: http://localhost:${HTTP_PORT:-8080}/.well-known/mercure
+      MERCURE_JWT_SECRET: ${MERCURE_PUBLISHER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
+      MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_PUBLISHER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
+      MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_SUBSCRIBER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
+      MERCURE_PUBLISHER_JWT_ALG: ${MERCURE_PUBLISHER_JWT_ALG:-HS256}
+      MERCURE_SUBSCRIBER_JWT_ALG: ${MERCURE_SUBSCRIBER_JWT_ALG:-HS256}
+      MERCURE_EXTRA_DIRECTIVES: |-
+        transport bolt {
+          path /data/mercure.db
+        }
+      FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
+    volumes:
+      - ./:/app:delegated
+      - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
+      - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
+      # Mount /tmp to allow PHP CS Fixer extension (junstyle.php-cs-fixer) to work.
+      # The extension creates temp files in /tmp/pcf-tmp*/ which need to be accessible
+      # inside the container when running fixer via Docker.
+      - /tmp:/tmp:delegated
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+      - "${HTTP3_PORT:-8443}:443/udp"
+    dns:
+      - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
+      - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
+    tty: true
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+  mailer:
+    restart: "no"
+    image: axllent/mailpit
+    ports:
+      - "${MAILER_SMTP_PORT:-1025}:1025"
+      - "${MAILER_UI_PORT:-8025}:8025"
+    dns:
+      - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
+      - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
