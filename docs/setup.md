@@ -49,15 +49,12 @@ This template runs on FrankenPHP with Symfony worker mode, built-in Mercure, and
 
    - HTTP: `http://localhost:${HTTP_PORT:-8080}`
    - HTTPS: `https://localhost:${HTTPS_PORT:-8443}`
-   - Mailpit UI: `http://localhost:${MAILER_UI_PORT:-8025}`
 
 Port overrides can be set in `.env.local`:
 
 ```bash
 HTTP_PORT=8081
 HTTPS_PORT=8444
-MAILER_SMTP_PORT=1026
-MAILER_UI_PORT=8026
 ```
 
 If `castor dev:bootstrap` fails resolving `github.com` during Tailwind binary download, set Docker DNS overrides in `.env.local`:

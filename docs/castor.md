@@ -137,7 +137,7 @@ For **Mate** tasks with **full** descriptions and option metadata (LLM-oriented,
 - Dev tasks use `compose.yaml` + `compose.override.yaml`.
 - Prod-like tasks use `compose.yaml` + `compose.prod.yaml`.
 - User-mapped container commands use `$(id -u):$(id -g)` to keep file ownership correct.
-- `castor dev:up` and `castor dev:restart` stop conflicting running containers from other compose projects if they already bind the configured dev ports (`HTTP_PORT`, `HTTPS_PORT`, `MAILER_SMTP_PORT`, `MAILER_UI_PORT`).
+- `castor dev:up` and `castor dev:restart` stop conflicting running containers from other compose projects if they already bind the configured dev ports (`HTTP_PORT`, `HTTPS_PORT`).
 - `castor dev:setup` and `castor dev:bootstrap` also stop conflicting running containers from other compose projects before doing their work.
 - `castor dev:bootstrap` checks DNS resolution for `github.com` inside the PHP container before `tailwind:build` and fails fast with a Docker DNS hint when resolution is broken.
 - `castor dev:bootstrap` removes invalid cached Tailwind binaries (for example zero-byte files after interrupted downloads) before triggering a fresh build.

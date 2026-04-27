@@ -21,6 +21,18 @@ services:
           path /data/mercure.db
         }
       FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
+
+      # Vera CLI — container-reachable API endpoints
+      EMBEDDING_MODEL_BASE_URL: http://host.docker.internal:${VERA_EMBED_PORT:-8059}/v1
+      EMBEDDING_MODEL_ID: ${VERA_EMBED_MODEL:-coderankembed-q8_0.gguf}
+      EMBEDDING_MODEL_API_KEY: not-needed
+      EMBEDDING_MODEL_QUERY_PREFIX: "Represent this query for searching relevant code:"
+      RERANKER_MODEL_BASE_URL: http://host.docker.internal:${VERA_RERANK_PORT:-8060}/v1
+      RERANKER_MODEL_ID: ${VERA_RERANK_MODEL:-bge-reranker-base-q8_0.gguf}
+      RERANKER_MODEL_API_KEY: not-needed
+      VERA_COMPLETION_BASE_URL: http://host.docker.internal:${VERA_COMPLETION_PORT:-8052}/v1
+      VERA_COMPLETION_MODEL_ID: ${VERA_COMPLETION_MODEL:-flash}
+      VERA_COMPLETION_API_KEY: not-needed
     volumes:
       - ./:/app:delegated
       - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -30,6 +42,8 @@ services:
       # The extension creates temp files in /tmp/pcf-tmp*/ which need to be accessible
       # inside the container when running fixer via Docker.
       - /tmp:/tmp:delegated
+      # Vera config (API endpoints overridden by env vars above)
+      - ./docker/vera:/root/.vera:delegated
     ports:
       - "${HTTP_PORT:-8080}:80"
       - "${HTTPS_PORT:-8443}:443"
@@ -41,15 +55,3 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
 
-  mailer:
-    restart: "no"
-    image: axllent/mailpit
-    ports:
-      - "${MAILER_SMTP_PORT:-1025}:1025"
-      - "${MAILER_UI_PORT:-8025}:8025"
-    dns:
-      - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
-      - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
-    environment:
-      MP_SMTP_AUTH_ACCEPT_ANY: 1
-      MP_SMTP_AUTH_ALLOW_INSECURE: 1

@@ -35,8 +35,8 @@ castor dev:bootstrap
 
 `castor dev:bootstrap` does not run database migrations.
 
-Ports are configurable (defaults: app `8080`, HTTPS `8443`, Mailpit UI `8025`).
-Set `HTTP_PORT`, `HTTPS_PORT`, `MAILER_SMTP_PORT`, and `MAILER_UI_PORT` in `.env.local` when needed.
+Ports are configurable (defaults: app `8080`, HTTPS `8443`).
+Set `HTTP_PORT` and `HTTPS_PORT` in `.env.local` when needed.
 If container DNS is broken (for example resolver `127.0.0.53`), set `DOCKER_DNS_PRIMARY` and `DOCKER_DNS_SECONDARY` in `.env.local`.
 
 If your project uses Doctrine migrations:
@@ -85,19 +85,6 @@ Useful commands:
 ## Command reference
 
 - `docs/castor.md`
-
-## Placeholder replacement checklist
-
-This template intentionally uses placeholders in some files.
-
-- `{{PROJECT_PATH}}`: absolute local project path used by `.vscode/*.sh` wrappers.
-- `{{APP_DOMAIN}}`: production domain example in `.env.prod.local.dist`.
-
-Suggested replacement command:
-
-```bash
-rg -l '\{\{PROJECT_PATH\}\}|\{\{APP_DOMAIN\}\}' . | xargs sed -i "s#{{PROJECT_PATH}}#/absolute/path/to/your/project#g; s#{{APP_DOMAIN}}#app.example.com#g"
-```
 
 ## Important files
 

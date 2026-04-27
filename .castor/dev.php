@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace dev;
 
 use Castor\Attribute\AsTask;
+
 use function Castor\run;
 use function CastorTasks\dev_compose;
 use function CastorTasks\dev_compose_interactive;
@@ -16,11 +17,11 @@ use function CastorTasks\phpunit_inputs_available;
 use function CastorTasks\relative_report_path;
 use function CastorTasks\report_path;
 use function CastorTasks\run_quiet_command;
+use function CastorTasks\stop_conflicting_dev_port_containers;
 use function CastorTasks\summarize_junit_xml;
 use function CastorTasks\summarize_php_cs_fixer_json;
 use function CastorTasks\summarize_phpstan_json;
 use function CastorTasks\write_empty_junit_report;
-use function CastorTasks\stop_conflicting_dev_port_containers;
 
 #[AsTask(description: 'Ensure local data directory and SQLite file exist')]
 function init(): void
@@ -99,12 +100,6 @@ function logs_php(): void
     dev_compose('logs -f php');
 }
 
-#[AsTask(description: 'Stream Mailpit logs (local)')]
-function logs_mailer(): void
-{
-    dev_compose('logs -f mailer');
-}
-
 #[AsTask(description: 'Pull latest base images')]
 function pull(): void
 {
@@ -140,13 +135,13 @@ function mate_generate_castor(): void
 #[AsTask(description: 'Run composer command in local container')]
 function composer(string $cmd): void
 {
-    dev_php_exec('composer ' . $cmd);
+    dev_php_exec('composer '.$cmd);
 }
 
 #[AsTask(description: 'Run ai-index command in local container')]
 function ai_index(string $cmd): void
 {
-    dev_php_exec('php vendor/bin/ai-index ' . $cmd);
+    dev_php_exec('php vendor/bin/ai-index '.$cmd);
 }
 
 #[AsTask(description: 'Install PHP dependencies (works with or without a running container)')]
@@ -164,7 +159,7 @@ function composer_update(): void
 #[AsTask(description: 'Run Symfony console command in local container')]
 function console(string $cmd): void
 {
-    dev_php_exec('php bin/console ' . $cmd);
+    dev_php_exec('php bin/console '.$cmd);
 }
 
 #[AsTask(description: 'Run Messenger consumer for all non-failed transports')]

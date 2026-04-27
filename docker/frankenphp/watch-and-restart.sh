@@ -12,7 +12,7 @@ echo "Press Ctrl+C to stop"
 
 while true; do
     inotifywait -e modify -e move -e create -e delete -r /app \
-        --exclude 'node_modules|vendor|.git|var' \
+        --exclude 'node_modules|vendor|\.git|var|data|\.playwright-cli|\.cache|\.phpunit.cache' \
         --format '%w%f %e' |
     while read path event; do
         # Only restart for PHP and Twig files

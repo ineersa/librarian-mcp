@@ -1,5 +1,10 @@
 twig:
     file_name_pattern: '*.twig'
+    globals:
+        site_name: 'Librarian MCP'
+        site_short_name: 'Librarian MCP'
+        site_description: 'System for libraries and documentation management, ingestion pipeline and MCP server'
+        github_url: 'https://github.com/ineersa/librarian-mcp'
 
 when@test:
     twig:

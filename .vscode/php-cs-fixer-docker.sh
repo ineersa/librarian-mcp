@@ -8,7 +8,7 @@
 args=()
 for arg in "$@"; do
     # Replace host project path with container path
-    arg="${arg//{{PROJECT_PATH}}/\/app}"
+    arg="${arg//\/home\/ineersa\/mcp-servers\/librarian-mcp/\/app}"
     args+=("$arg")
 done
 

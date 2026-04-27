@@ -1,0 +1,69 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Login — {{ site_name }}{% endblock %}
+
+{% block body %}
+    <div class="flex min-h-screen flex-col bg-[#0a0a0a]">
+        {# ── Navbar ─────────────────────────────────────────────── #}
+        <nav class="border-b border-[#222] bg-[#0a0a0a]">
+            <div class="mx-auto flex w-full max-w-[1200px] items-center justify-between px-6 py-4 lg:px-8 xl:max-w-[1200px]">
+                <a href="{{ path('app_home') }}" class="text-lg font-bold tracking-tight text-white no-underline">{{ site_short_name }}</a>
+                <div class="flex items-center gap-6">
+                    <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer"
+                       class="border border-[#444] bg-transparent px-3 py-1.5 text-xs text-gray-400 no-underline transition-colors hover:border-gray-500 hover:text-white">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        {# ── Main ───────────────────────────────────────────────── #}
+        <main class="flex-1">
+            <div class="mx-auto flex w-full max-w-[1200px] flex-col px-6 py-10 lg:px-8 lg:py-14 xl:max-w-[1200px]">
+
+                {# ── Hero ────────────────────────────────────────── #}
+                <header class="mt-8 w-full text-center lg:mt-[8vh]">
+                    <h1 class="m-0 text-[clamp(2rem,5vw,3.75rem)] tracking-tight text-white">
+                        {{ site_name }}
+                    </h1>
+                    <p class="mx-auto mt-4 max-w-[560px] text-base leading-7 text-gray-400 sm:text-lg">
+                        {{ site_description }}
+                    </p>
+
+                    {# ── Login Form (replaces buttons) ──────────────── #}
+                    <form method="post" action="{{ path('app_login') }}" class="mx-auto mt-8 w-full max-w-[560px]">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+
+                        {% if error %}
+                            <div class="mb-4 rounded border border-red-500/25 bg-red-500/10 px-3 py-2 text-left text-xs leading-snug text-red-300">
+                                {{ error.messageKey|trans(error.messageData, 'security') }}
+                            </div>
+                        {% endif %}
+
+                        <input type="email" name="_username" value="{{ last_username }}"
+                               required autofocus autocomplete="email" placeholder="Email"
+                               class="mb-3 w-full rounded border border-[#333] bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none placeholder:text-[#555] focus:border-[#60a5fa]">
+
+                        <input type="password" name="_password"
+                               required autocomplete="current-password" placeholder="Password"
+                               class="mb-4 w-full rounded border border-[#333] bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none placeholder:text-[#555] focus:border-[#60a5fa]">
+
+                        <div class="flex flex-wrap items-center justify-center gap-3">
+                            <button type="submit"
+                                    class="inline-flex cursor-pointer items-center gap-2 bg-white px-5 py-3 text-sm font-semibold text-black no-underline transition-colors hover:bg-gray-200"
+                                    style="cursor: pointer">
+                                Sign in
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </form>
+                </header>
+
+            </div>
+        </main>
+
+        {{ include('_footer.html.twig') }}
+    </div>
+{% endblock %}

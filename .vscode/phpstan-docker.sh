@@ -6,7 +6,7 @@ host_gid="$(id -g)"
 
 args=()
 for arg in "$@"; do
-    arg="${arg//{{PROJECT_PATH}}/\/app}"
+    arg="${arg//\/home\/ineersa\/mcp-servers\/librarian-mcp/\/app}"
     args+=("$arg")
 done
 

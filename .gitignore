@@ -33,5 +33,13 @@
 /.castor.stub.php
 .vera/
 
+# Vera runtime state written by the binary at runtime
+/docker/vera/lib/
+/docker/vera/models/
+/docker/vera/update-check.json
+
 # AI index artifacts
 *.toon
+.bash_history
+callgraph.json
+callgraph.html

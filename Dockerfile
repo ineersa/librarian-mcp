@@ -23,6 +23,16 @@ RUN set -eux; \
         opcache \
         zip
 
+# Vera CLI — download prebuilt binary from GitHub releases
+ARG VERA_VERSION=v0.11.8
+# musl build is statically linked (no glibc dependency), works on any Linux
+ARG VERA_ARCH=x86_64-unknown-linux-musl
+RUN set -eux; \
+    curl -fsSL "https://github.com/ineersa/Vera/releases/download/${VERA_VERSION}/vera-${VERA_ARCH}.tar.gz" \
+      | tar xzf - -C /usr/local/bin --strip-components=1 "vera-${VERA_ARCH}/vera"; \
+    chmod +x /usr/local/bin/vera; \
+    vera --version
+
 COPY docker/frankenphp/Caddyfile /etc/caddy/Caddyfile
 COPY docker/frankenphp/worker.Caddyfile /etc/caddy/worker.Caddyfile
 COPY docker/php/conf.d/app.ini /usr/local/etc/php/conf.d/app.ini

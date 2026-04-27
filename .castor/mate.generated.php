@@ -10,12 +10,13 @@ namespace mate;
 use Castor\Attribute\AsArgument;
 use Castor\Attribute\AsOption;
 use Castor\Attribute\AsTask;
+
 use function CastorTasks\mate_tool_exec;
 
 #[AsTask(name: 'database-query', namespace: 'mate-database', description: 'Runs read-only SQL queries against a Doctrine DBAL connection. Only SELECT and WITH (CTE) queries are allowed. Writes, DDL, and transaction control are blocked. One statement per call — semicolons are rejected; split into separate calls. ROW LIMIT: SELECT without WHERE must include LIMIT 10. Always default to LIMIT 10. Large text columns (>200 chars) are truncated to "<TEXT>" in multi-row results. To see full text, query must return exactly 1 row. Aggregates without GROUP BY (e.g. SELECT COUNT(*)) are exempt from the LIMIT requirement. Before writing SQL, use database-schema to discover table/column names and avoid errors. Connection names come from the application\'s Doctrine DBAL configuration. If `connection` is omitted, the default Doctrine DBAL connection is used.')]
 function tool_database_query(
     #[AsArgument(name: 'query', description: 'SQL query to validate and execute in read-only mode')] string $query,
-    #[AsOption(name: 'connection', description: 'Optional Doctrine DBAL connection name')] ?string $connection = null
+    #[AsOption(name: 'connection', description: 'Optional Doctrine DBAL connection name')] ?string $connection = null,
 ): void {
     $payload = [
         'query' => $query,
@@ -31,7 +32,7 @@ function tool_database_schema(
     #[AsOption(name: 'detail', description: 'One of: summary, columns, full')] string $detail = 'summary',
     #[AsOption(name: 'matchMode', description: 'One of: contains, prefix, exact, glob')] string $matchMode = 'contains',
     #[AsOption(name: 'includeViews', description: 'Include views in the response')] bool $includeViews = false,
-    #[AsOption(name: 'includeRoutines', description: 'Include procedures/functions/sequences/triggers in the response')] bool $includeRoutines = false
+    #[AsOption(name: 'includeRoutines', description: 'Include procedures/functions/sequences/triggers in the response')] bool $includeRoutines = false,
 ): void {
     $payload = [
         'connection' => $connection,
@@ -50,7 +51,7 @@ function tool_monolog_context_search(
     #[AsArgument(name: 'value', description: 'The value to match in the context field')] string $value,
     #[AsOption(name: 'level', description: 'Filter by log level: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY')] ?string $level = null,
     #[AsOption(name: 'environment', description: 'Filter by Symfony environment (e.g. dev, prod, test)')] ?string $environment = null,
-    #[AsOption(name: 'limit', description: 'Maximum number of entries to return')] int $limit = 100
+    #[AsOption(name: 'limit', description: 'Maximum number of entries to return')] int $limit = 100,
 ): void {
     $payload = [
         'key' => $key,
@@ -70,7 +71,7 @@ function tool_monolog_list_channels(): void
 
 #[AsTask(name: 'monolog-list-files', namespace: 'mate-monolog', description: 'List available log files with metadata (name, path, size, last modified). Use to discover which logs exist before searching.')]
 function tool_monolog_list_files(
-    #[AsOption(name: 'environment', description: 'Filter log files by Symfony environment (e.g. dev, prod, test)')] ?string $environment = null
+    #[AsOption(name: 'environment', description: 'Filter log files by Symfony environment (e.g. dev, prod, test)')] ?string $environment = null,
 ): void {
     $payload = [
         'environment' => $environment,
@@ -87,7 +88,7 @@ function tool_monolog_search(
     #[AsOption(name: 'environment', description: 'Filter by Symfony environment (e.g. dev, prod, test)')] ?string $environment = null,
     #[AsOption(name: 'from', description: 'Start date filter, any PHP-parseable date string (e.g. 2024-01-01, -1 hour, yesterday)')] ?string $from = null,
     #[AsOption(name: 'to', description: 'End date filter, any PHP-parseable date string')] ?string $to = null,
-    #[AsOption(name: 'limit', description: 'Maximum number of entries to return')] int $limit = 100
+    #[AsOption(name: 'limit', description: 'Maximum number of entries to return')] int $limit = 100,
 ): void {
     $payload = [
         'term' => $term,
@@ -106,7 +107,7 @@ function tool_monolog_search(
 function tool_monolog_tail(
     #[AsOption(name: 'lines', description: 'Number of most recent log entries to return')] int $lines = 50,
     #[AsOption(name: 'level', description: 'Filter by log level: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY')] ?string $level = null,
-    #[AsOption(name: 'environment', description: 'Filter by Symfony environment (e.g. dev, prod, test)')] ?string $environment = null
+    #[AsOption(name: 'environment', description: 'Filter by Symfony environment (e.g. dev, prod, test)')] ?string $environment = null,
 ): void {
     $payload = [
         'lines' => $lines,
@@ -124,7 +125,7 @@ function tool_server_info(): void
 
 #[AsTask(name: 'symfony-profiler-get', namespace: 'mate-symfony', description: 'Get a specific profiler profile by its token. Returns detailed profile data including available collectors and resource_uri for accessing collector-specific data.')]
 function tool_symfony_profiler_get(
-    #[AsArgument(name: 'token', description: 'The unique profiler token identifying the profile')] string $token
+    #[AsArgument(name: 'token', description: 'The unique profiler token identifying the profile')] string $token,
 ): void {
     $payload = [
         'token' => $token,
@@ -141,7 +142,7 @@ function tool_symfony_profiler_list(
     #[AsOption(name: 'statusCode', description: 'Filter by HTTP response status code (e.g. 200, 404, 500)')] ?int $statusCode = null,
     #[AsOption(name: 'context', description: 'Filter by Symfony kernel context')] ?string $context = null,
     #[AsOption(name: 'from', description: 'Start date filter for profile creation time')] ?string $from = null,
-    #[AsOption(name: 'to', description: 'End date filter for profile creation time')] ?string $to = null
+    #[AsOption(name: 'to', description: 'End date filter for profile creation time')] ?string $to = null,
 ): void {
     $payload = [
         'limit' => $limit,
@@ -158,11 +159,10 @@ function tool_symfony_profiler_list(
 
 #[AsTask(name: 'symfony-services', namespace: 'mate-symfony', description: 'Search Symfony dependency injection container services. Optionally filter by service ID or class name. Returns a map of service IDs to their class names.')]
 function tool_symfony_services(
-    #[AsOption(name: 'query', description: 'Filter services by ID or class name (case-insensitive partial match)')] ?string $query = null
+    #[AsOption(name: 'query', description: 'Filter services by ID or class name (case-insensitive partial match)')] ?string $query = null,
 ): void {
     $payload = [
         'query' => $query,
     ];
     mate_tool_exec('symfony-services', $payload);
 }
-
