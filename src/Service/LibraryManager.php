@@ -1,0 +1,186 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service;
+
+use App\Entity\Library;
+use App\Message\SyncLibraryMessage;
+use App\Repository\LibraryRepository;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\String\Slugger\SluggerInterface;
+
+/**
+ * All business logic for Library entities.
+ * Controllers are thin delegates to this service.
+ */
+class LibraryManager
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em,
+        private readonly LibraryRepository $repository,
+        private readonly SluggerInterface $slugger,
+        private readonly MessageBusInterface $messageBus,
+        private readonly string $projectDir,
+    ) {
+    }
+
+    /**
+     * Derive a human-readable name from gitUrl + branch.
+     */
+    public function deriveName(string $gitUrl, string $branch): string
+    {
+        $ownerRepo = $this->parseOwnerRepo($gitUrl);
+
+        return 'main' === $branch ? $ownerRepo : \sprintf('%s (%s)', $ownerRepo, $branch);
+    }
+
+    /**
+     * Generate a slug from a name.
+     */
+    public function generateSlug(string $name): string
+    {
+        return $this->slugger->slug($name)->lower()->toString();
+    }
+
+    /**
+     * Compute the relative storage path from gitUrl + branch.
+     */
+    public function computePath(string $gitUrl, string $branch): string
+    {
+        $ownerRepo = $this->parseOwnerRepo($gitUrl);
+
+        return \sprintf('%s/%s', $ownerRepo, $branch);
+    }
+
+    /**
+     * Resolve the absolute filesystem path for a library.
+     */
+    public function getAbsolutePath(Library $library): string
+    {
+        return rtrim($this->projectDir, '/').'/data/libraries/'.$library->getPath();
+    }
+
+    /**
+     * Persist a new library entity with all computed fields.
+     *
+     * @throws \LogicException if path is not unique
+     */
+    public function create(Library $library): void
+    {
+        // Compute path if not set
+        if ('' === $library->getPath()) {
+            $path = $this->computePath($library->getGitUrl(), $library->getBranch());
+            $library->initializePath($path);
+        }
+
+        // Derive name if empty
+        if ('' === $library->getName()) {
+            $library->setName($this->deriveName($library->getGitUrl(), $library->getBranch()));
+        }
+
+        // Generate slug if empty
+        if ('' === $library->getSlug()) {
+            $library->setSlug($this->generateSlug($library->getName()));
+        }
+
+        // Ensure slug uniqueness — reject if taken by another library
+        $this->assertSlugIsUnique($library);
+
+        // Pre-persist validation: unique path
+        $existing = $this->repository->findOneByPath($library->getPath());
+        if (null !== $existing) {
+            throw new \LogicException(\sprintf('Repository "%s" with branch "%s" already exists as library "%s".', $this->parseOwnerRepo($library->getGitUrl()), $library->getBranch(), $existing->getName()));
+        }
+
+        $library->touch();
+        $this->em->persist($library);
+        $this->em->flush();
+    }
+
+    /**
+     * Update an existing library.
+     */
+    public function update(Library $library): void
+    {
+        // Ensure slug uniqueness — reject if taken by another library
+        $this->assertSlugIsUnique($library);
+
+        $library->touch();
+        $this->em->flush();
+    }
+
+    /**
+     * Delete a library: remove filesystem directory + DB record.
+     */
+    public function delete(Library $library): void
+    {
+        $absolutePath = $this->getAbsolutePath($library);
+
+        if (is_dir($absolutePath)) {
+            $this->removeDirectory($absolutePath);
+        }
+
+        $this->em->remove($library);
+        $this->em->flush();
+    }
+
+    /**
+     * Mark a library as queued and dispatch SyncLibraryMessage.
+     */
+    public function markQueued(Library $library): void
+    {
+        $library->markQueued();
+        $library->touch();
+        $this->em->flush();
+
+        $this->messageBus->dispatch(new SyncLibraryMessage($library->getId()));
+    }
+
+    /**
+     * Parse owner/repo from a GitHub HTTPS URL.
+     */
+    private function parseOwnerRepo(string $gitUrl): string
+    {
+        $url = preg_replace('~\.git$~', '', $gitUrl);
+
+        if (!preg_match('~^https://github\.com/([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)$~', $url, $matches)) {
+            throw new \InvalidArgumentException(\sprintf('Cannot parse owner/repo from URL: "%s".', $gitUrl));
+        }
+
+        return $matches[1];
+    }
+
+    /**
+     * Assert that the slug is unique. Throws if another library already uses it.
+     */
+    private function assertSlugIsUnique(Library $library): void
+    {
+        $existing = $this->repository->findOneBySlug($library->getSlug());
+        if (null !== $existing && $existing->getId() !== $library->getId()) {
+            throw new \LogicException(\sprintf('Slug "%s" is already used by library "%s".', $library->getSlug(), $existing->getName()));
+        }
+    }
+
+    /**
+     * Recursively remove a directory.
+     */
+    private function removeDirectory(string $path): void
+    {
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($files as $file) {
+            if ($file->isDir()) {
+                rmdir($file->getRealPath());
+            } else {
+                unlink($file->getRealPath());
+            }
+        }
+
+        rmdir($path);
+    }
+}

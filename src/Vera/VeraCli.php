@@ -9,72 +9,49 @@ use Symfony\Component\Process\Process;
 /**
  * Wraps the vera CLI binary for safe invocation from Symfony.
  *
- * All commands run through Symfony Process with timeouts, structured error
- * handling, and path safety (no arbitrary user-supplied paths).
+ * Pure CLI wrapper — receives resolved absolute paths, no entity/slug awareness.
+ * LibraryManager resolves paths and passes them in.
  */
 class VeraCli
 {
     private string $veraBinary;
     private string $gitBinary;
-    private string $librariesDir;
     private int $processTimeout;
 
     public function __construct(
-        string $projectDir,
         ?string $veraBinary = null,
         int $processTimeout = 300,
     ) {
         $this->veraBinary = $veraBinary ?? 'vera';
         $this->gitBinary = 'git';
-        $this->librariesDir = rtrim($projectDir, '/').'/data/libraries';
         $this->processTimeout = $processTimeout;
     }
 
     /**
-     * Resolve the local repo path for a given slug.
-     *
-     * This is the only path ever passed to vera/git — no raw user input.
-     */
-    public function getRepoPath(string $slug): string
-    {
-        // Slug must be safe: lowercase alphanumeric + dashes only
-        if (!preg_match('/^[a-z0-9][a-z0-9-]*$/', $slug)) {
-            throw new \InvalidArgumentException(\sprintf('Invalid library slug: "%s". Use lowercase alphanumeric with dashes.', $slug));
-        }
-
-        return $this->librariesDir.'/'.$slug.'/repo';
-    }
-
-    /**
-     * Clone a git repository into the libraries directory.
+     * Clone a git repository to the given absolute path.
      *
      * @return string stdout from git
      *
      * @throws VeraCliException on failure
      */
-    public function cloneRepository(string $slug, string $repositoryUrl, ?string $branch = null): string
+    public function cloneRepository(string $absolutePath, string $gitUrl, string $branch): string
     {
-        $repoPath = $this->getRepoPath($slug);
-
-        if (is_dir($repoPath.'/.git')) {
-            throw VeraCliException::alreadyCloned($slug);
+        if (is_dir($absolutePath.'/.git')) {
+            throw VeraCliException::alreadyCloned($absolutePath);
         }
 
         // Ensure parent directory exists
-        $parentDir = \dirname($repoPath);
+        $parentDir = \dirname($absolutePath);
         if (!is_dir($parentDir)) {
             mkdir($parentDir, 0777, true);
         }
 
-        $args = [$this->gitBinary, 'clone'];
-        if (null !== $branch) {
-            $args[] = '--branch';
-            $args[] = $branch;
-        }
-        $args[] = $repositoryUrl;
-        $args[] = $repoPath;
-
-        return $this->runCommand($args);
+        return $this->runCommand([
+            $this->gitBinary, 'clone',
+            '--branch', $branch,
+            $gitUrl,
+            $absolutePath,
+        ]);
     }
 
     /**
@@ -82,18 +59,28 @@ class VeraCli
      *
      * @throws VeraCliException on failure
      */
-    public function indexLibrary(string $slug): string
+    public function indexLibrary(string $absolutePath, VeraIndexingConfig $config): string
     {
-        $repoPath = $this->getRepoPath($slug);
-
-        if (!is_dir($repoPath)) {
-            throw VeraCliException::notCloned($slug);
+        if (!is_dir($absolutePath)) {
+            throw VeraCliException::notCloned($absolutePath);
         }
 
-        return $this->runCommand(
-            [$this->veraBinary, 'index', $repoPath],
-            timeout: 600, // indexing can be slow for large repos
-        );
+        $args = [$this->veraBinary, 'index', $absolutePath];
+
+        foreach ($config->excludePatterns as $pattern) {
+            $args[] = '--exclude';
+            $args[] = $pattern;
+        }
+
+        if ($config->noIgnore) {
+            $args[] = '--no-ignore';
+        }
+
+        if ($config->noDefaultExcludes) {
+            $args[] = '--no-default-excludes';
+        }
+
+        return $this->runCommand($args, timeout: 600);
     }
 
     /**
@@ -105,12 +92,10 @@ class VeraCli
      *
      * @throws VeraCliException on failure
      */
-    public function searchLibrary(string $slug, string $query, array $filters = []): array
+    public function searchLibrary(string $absolutePath, string $query, array $filters = []): array
     {
-        $repoPath = $this->getRepoPath($slug);
-
-        if (!is_dir($repoPath)) {
-            throw VeraCliException::notCloned($slug);
+        if (!is_dir($absolutePath)) {
+            throw VeraCliException::notCloned($absolutePath);
         }
 
         $args = [$this->veraBinary, 'search', $query, '--json'];
@@ -120,7 +105,7 @@ class VeraCli
             $args[] = (string) $filters['limit'];
         }
 
-        $stdout = $this->runCommand($args, workingDirectory: $repoPath);
+        $stdout = $this->runCommand($args, workingDirectory: $absolutePath);
 
         $decoded = json_decode($stdout, true, 512, \JSON_THROW_ON_ERROR);
         if (!\is_array($decoded)) {

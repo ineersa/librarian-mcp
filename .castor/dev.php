@@ -175,6 +175,20 @@ function messenger_clear(): void
     dev_php_exec('php bin/console messenger:failed:remove --all --no-interaction');
 }
 
+#[AsTask(description: 'Clear Symfony cache for given env (default: test)')]
+function cache_clear(string $env = 'test'): void
+{
+    dev_php_exec(\sprintf('php bin/console cache:clear --env=%s --no-warmup', escapeshellarg($env)));
+}
+
+#[AsTask(description: 'Ensure test database schema is up to date')]
+function test_db_prepare(): void
+{
+    // Remove stale test DB so migrations run fresh
+    dev_php_exec('rm -f var/test.db');
+    dev_php_exec('php bin/console doctrine:migrations:migrate --env=test --no-interaction');
+}
+
 #[AsTask(description: 'Run PHPUnit tests in local container (LLM_MODE=true => concise output + JUnit report)')]
 function test(): void
 {
@@ -187,6 +201,11 @@ function test(): void
 
         return;
     }
+
+    // Always clear test cache to avoid stale container dumps blocking kernel boot
+    cache_clear('test');
+    // Ensure test DB schema exists
+    test_db_prepare();
 
     if (!is_llm_mode()) {
         dev_php_exec('php bin/phpunit');

@@ -44,9 +44,11 @@ class DashboardController extends AbstractDashboardController
         yield MenuItem::linkTo(UserCrudController::class, 'Users', 'fas fa-users');
 
         yield MenuItem::section('Libraries');
+        yield MenuItem::linkTo(LibraryCrudController::class, 'Libraries', 'fas fa-book');
 
-        #yield MenuItem::linkToLogout('Logout', 'fa fa-sign-out');
-        #yield MenuItem::linkToRoute('Back to site', 'fas fa-arrow-left', 'app_home');
+        yield MenuItem::section();
+        yield MenuItem::linkToLogout('Logout', 'fa fa-sign-out');
+        yield MenuItem::linkToRoute('Back to site', 'fas fa-arrow-left', 'app_home');
     }
 }
 // test

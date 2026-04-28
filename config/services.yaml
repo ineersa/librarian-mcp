@@ -26,6 +26,9 @@ services:
 
     App\Vera\VeraCli:
         arguments:
-            $projectDir: '%kernel.project_dir%'
             $veraBinary: '%app.vera.binary%'
             $processTimeout: '%app.vera.timeout%'
+
+    App\Service\LibraryManager:
+        arguments:
+            $projectDir: '%kernel.project_dir%'

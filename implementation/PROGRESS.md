@@ -127,22 +127,105 @@ All 12 tests pass (`castor dev:test` → tests=12, assertions=30, errors=0, fail
 - Library entity + CRUD
 - Library list and detail pages
 
+## Stage 3 — Library Catalog ✅
+
+**Status:** Complete
+**Date:** 2026-04-28
+
+### What was done
+
+#### Library entity + Doctrine persistence
+- **`src/Entity/Library.php`** — Doctrine entity with auto-increment int PK, asymmetric visibility via getters/setters for all fields. Properties: `name`, `slug` (unique), `gitUrl`, `branch`, `path` (unique, immutable), `description`, `status` (backed enum), `veraConfig` (JSON → `VeraIndexingConfig` VO), `lastError`, `lastSyncedAt`, `lastIndexedAt`, timestamps. Domain methods for status transitions: `markQueued()`, `syncStarted()`, `syncFailed()`, `syncSucceeded()` — each enforces allowed transitions and throws `LogicException` on invalid ones.
+- **`src/Entity/LibraryStatus.php`** — Backed enum: `Draft`, `Queued`, `Indexing`, `Ready`, `Failed`.
+- **`src/Repository/LibraryRepository.php`** — Service entity repository with `findOneByPath()` and `findOneBySlug()`.
+- **`src/Vera/VeraIndexingConfig.php`** — Readonly value object for vera indexing config (`excludePatterns`, `noIgnore`, `noDefaultExcludes`) with `fromArray()`/`toArray()` for JSON persistence.
+- **`src/Message/SyncLibraryMessage.php`** — Message class carrying `libraryId`. Handler is Stage 4's concern.
+- **`migrations/Version20260428015040.php`** — Creates `libraries` table with unique indexes on `slug` and `path`.
+
+#### LibraryManager service
+- **`src/Service/LibraryManager.php`** — All business logic:
+  - `deriveName()` — parses `owner/repo` from git URL, appends branch if not `main`
+  - `generateSlug()` — slugifies name via Symfony Slugger
+  - `computePath()` — `owner/repo/branch` from git URL + branch
+  - `create()` — computes fields, unique path/slug validation, persists
+  - `update()` — slug uniqueness check, persists
+  - `delete()` — removes filesystem directory + DB record
+  - `markQueued()` — status transition + dispatches `SyncLibraryMessage`
+  - `getAbsolutePath()` — resolves `data/libraries/<path>` absolute path
+
+#### VeraCli refactored to pure CLI wrapper
+- **`src/Vera/VeraCli.php`** — Removed `getRepoPath()` and slug-based path logic. Now receives resolved absolute paths:
+  - `cloneRepository(string $absolutePath, string $gitUrl, string $branch)`
+  - `indexLibrary(string $absolutePath, VeraIndexingConfig $config)` — passes exclude patterns, `--no-ignore`, `--no-default-excludes` flags
+  - `searchLibrary(string $absolutePath, string $query, array $filters)`
+- **`src/Vera/VeraCliException.php`** — Updated factory methods to accept paths instead of slugs.
+
+#### EasyAdmin CRUD
+- **`src/Controller/Admin/LibraryCrudController.php`** — Full CRUD at `/admin/libraries`:
+  - Index: list with search by name/slug/gitUrl/branch, status badges, last synced/indexed timestamps
+  - Detail: all fields + read-only vera config preview
+  - New/Edit: form with virtual unmapped fields for `excludePatterns` (textarea), `noIgnore` (checkbox), `noDefaultExcludes` (checkbox). Assembled into `VeraIndexingConfig` VO in `persistEntity()`/`updateEntity()`.
+  - Sync Now: custom action dispatches `SyncLibraryMessage` via `LibraryManager::markQueued()`
+  - Delete: delegates to `LibraryManager::delete()` (filesystem + DB cleanup)
+- **`src/Controller/Admin/DashboardController.php`** — Added Libraries menu item in sidebar.
+
+#### Config
+- **`config/services.yaml`** — Added `LibraryManager` service config with `$projectDir` injection.
+
+### Tests added
+
+**Unit tests (48 tests, 79 assertions):**
+- **`tests/Unit/Entity/LibraryStatusTransitionTest.php`** — 21 tests covering:
+  - All 5 allowed transitions (draft→queued, queued→indexing, indexing→ready, indexing→failed, failed→queued)
+  - 8 disallowed transitions (draft→indexing, draft→ready, draft→failed, queued→ready, queued→failed, ready→queued, ready→indexing, indexing→queued, failed→indexing)
+  - Domain behavior: error truncation (2000 chars), error clearing on retry/success, touch updates timestamps, path immutability
+- **`tests/Unit/Entity/LibraryValidationTest.php`** — 11 tests covering:
+  - gitUrl: accepts valid HTTPS + `.git` suffix, rejects empty/http/SSH/non-GitHub
+  - branch: accepts `main`, rejects empty
+  - name/slug/description: reject empty
+- **`tests/Unit/Vera/VeraIndexingConfigTest.php`** — 6 tests covering defaults, fromArray full/partial/empty, round-trip, readonly class
+- **`tests/Unit/Service/LibraryManagerTest.php`** — 11 tests covering:
+  - `deriveName()`: main branch, non-main branch, `.git` suffix
+  - `generateSlug()`, `computePath()`
+  - `create()`: auto-derives fields, preserves user overrides, rejects duplicate path
+  - `markQueued()`: dispatches message, transitions status
+  - `getAbsolutePath()`
+
+**Application tests (9 tests):**
+- **`tests/Application/Admin/LibraryCrudTest.php`** — Tests for index/create/detail pages, list content, auth requirement, Sync Now action (draft→queued, failed→queued), search by name
+
+### Verified
+- `castor dev:console "lint:container"` → container lints clean
+- `castor dev:console "doctrine:schema:validate"` → mapping OK, migration applied
+- `castor dev:phpstan` → only pre-existing shipmonk dead-code + minor style warnings
+- `castor dev:cs-fix` → clean, 0 files fixed
+- `castor dev:test` → **68 tests, 127 assertions, 0 errors, 0 failures**
+- Browser verified: CRUD works end-to-end, VeraConfig shows JSON on detail page
+
+### Key decisions made
+
+| Decision | Choice | Why |
+|---|---|---|
+| Entity field access | Getters/setters | Property hooks confused Doctrine's schema comparator ("no column slug on table libraries") |
+| Path immutability | `initializePath()` throws if already set | Prevents accidental path change after creation |
+| Vera config storage | JSON column + VO with getter/setter | Clean separation between DB representation and domain logic |
+| Virtual form fields | Unmapped EA fields + `applyVeraConfigFromForm()` | EasyAdmin can't auto-bind VO to form; manual assembly in lifecycle hooks |
+| Slug field | Plain TextField instead of SlugField | Symfony slugger strips `/` → `symfonysymfony-docs` instead of `symfony-symfony-docs`; manager generates correct slug on create |
+| Unique path check | Reject on create if any existing library has same path | Simpler than allowing duplicate for same entity |
+| Test DB setup | `cache_clear` + `test_db_prepare` castor tasks | Stale test container cache caused kernel boot to hang; test DB needed fresh migrations each run |
+| DAMA config | `enable_static_meta_data_cache` (not `meta_cache`) | Config key naming in v8.x |
+
+### Next stage
+
+**Stage 4 — Ingestion & Indexing Pipeline** (`04-ingestion-indexing.md`)
+- SyncLibraryMessageHandler
+- Clone/index pipeline
+- Status transitions in production
+
 ## Stage 3 — Library Catalog 🔲
 
 Not started.
 
 ## Stage 4 — Ingestion & Indexing Pipeline 🔲
-
-Not started.
-
-## Stage 5 — HTTP MCP Server 🔲
-
-Not started.
-
-## Stage 6 — Post-MVP Library Lifecycle 🔲
-
-Not started.
-
-## Stage 7 — Low-Priority Exploration 🔲
 
 Not started.

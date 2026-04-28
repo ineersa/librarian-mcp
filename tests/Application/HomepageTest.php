@@ -14,6 +14,6 @@ final class HomepageTest extends WebTestCase
         $client->request('GET', '/');
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorTextContains('h1', 'Symfony Web Template');
+        self::assertSelectorTextContains('h1', 'Librarian MCP');
     }
 }
