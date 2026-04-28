@@ -1,0 +1,6 @@
+{# templates/admin/library/field/status.html.twig #}
+{% extends '@EasyAdmin/crud/field/choice.html.twig' %}
+
+{% block field_value %}
+    <span data-status-badge>{{ parent() }}</span>
+{% endblock %}

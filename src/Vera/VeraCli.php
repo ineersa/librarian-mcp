@@ -36,16 +36,6 @@ class VeraCli
      */
     public function cloneRepository(string $absolutePath, string $gitUrl, string $branch): string
     {
-        if (is_dir($absolutePath.'/.git')) {
-            throw VeraCliException::alreadyCloned($absolutePath);
-        }
-
-        // Ensure parent directory exists
-        $parentDir = \dirname($absolutePath);
-        if (!is_dir($parentDir)) {
-            mkdir($parentDir, 0777, true);
-        }
-
         return $this->runCommand([
             $this->gitBinary, 'clone',
             '--branch', $branch,

@@ -11,4 +11,9 @@ enum LibraryStatus: string
     case Indexing = 'indexing';
     case Ready = 'ready';
     case Failed = 'failed';
+
+    public function isQueued(): bool
+    {
+        return self::Queued === $this;
+    }
 }

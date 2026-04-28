@@ -1,6 +1,7 @@
 twig:
     file_name_pattern: '*.twig'
     globals:
+        mercure_public_url: '%env(MERCURE_PUBLIC_URL)%'
         site_name: 'Librarian MCP'
         site_short_name: 'Librarian MCP'
         site_description: 'System for libraries and documentation management, ingestion pipeline and MCP server'

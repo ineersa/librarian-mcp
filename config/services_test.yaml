@@ -1,0 +1,7 @@
+services:
+    App\Tests\Mercure\NullPublisherFactory: ~
+
+    # Replace Mercure hub with MockHub in test environment
+    mercure.hub.default:
+        class: Symfony\Component\Mercure\MockHub
+        factory: ['@App\Tests\Mercure\NullPublisherFactory', 'createHub']

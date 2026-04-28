@@ -35,11 +35,6 @@ class VeraCliException extends \RuntimeException
             ->withCommand($command);
     }
 
-    public static function alreadyCloned(string $path): self
-    {
-        return new self(\sprintf('Repository at "%s" is already cloned.', $path));
-    }
-
     public static function notCloned(string $path): self
     {
         return new self(\sprintf('Repository at "%s" has not been cloned yet.', $path));

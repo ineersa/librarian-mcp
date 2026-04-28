@@ -52,7 +52,8 @@ class LibraryCrudController extends AbstractCrudController
             ->setPageTitle(Crud::PAGE_EDIT, static fn (Library $library) => \sprintf('Edit Library: %s', $library->getName()))
             ->setSearchFields(['name', 'slug', 'gitUrl', 'branch'])
             ->setDefaultSort(['createdAt' => 'DESC'])
-            ->setPaginatorPageSize(20);
+            ->setPaginatorPageSize(20)
+            ->overrideTemplate('crud/index', 'admin/library/index.html.twig');
     }
 
     public function configureFields(string $pageName): iterable
@@ -85,6 +86,7 @@ class LibraryCrudController extends AbstractCrudController
                 LibraryStatus::cases(),
             ))
             ->renderAsBadges()
+            ->setTemplatePath('admin/library/field/status.html.twig')
             ->hideOnForm();
 
         yield CodeEditorField::new('lastError')

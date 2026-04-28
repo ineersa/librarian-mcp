@@ -217,15 +217,114 @@ All 12 tests pass (`castor dev:test` → tests=12, assertions=30, errors=0, fail
 
 ### Next stage
 
-**Stage 4 — Ingestion & Indexing Pipeline** (`04-ingestion-indexing.md`)
-- SyncLibraryMessageHandler
-- Clone/index pipeline
-- Status transitions in production
+**Stage 5** — TBD
 
-## Stage 3 — Library Catalog 🔲
+## Stage 4 — Ingestion & Indexing Pipeline ✅
 
-Not started.
+**Status:** Complete
+**Date:** 2026-04-28
 
-## Stage 4 — Ingestion & Indexing Pipeline 🔲
+### What was done
 
-Not started.
+#### SyncLibraryMessageHandler
+- **`src/MessageHandler/SyncLibraryMessageHandler.php`** — `#[AsMessageHandler]` with linear pipeline:
+  1. Load Library by ID (throw `UnrecoverableMessageHandlingException` if not found)
+  2. Concurrent sync guard: skip if status !== Queued
+  3. `syncStarted()` → flush (Queued → Indexing)
+  4. Publish Mercure: `{libraryId, status: "indexing"}`
+  5. `prepareCloneDirectory()` (nuke + ensure parent dirs)
+  6. `cloneRepository()` via VeraCli
+  7. `indexLibrary()` via VeraCli
+  8. `syncSucceeded()` → flush (Indexing → Ready)
+  9. Publish Mercure: `{libraryId, status: "ready"}`
+  10. Catch: `syncFailed()` → flush → publish → throw `UnrecoverableMessageHandlingException`
+
+#### VeraCli simplified
+- **`src/Vera/VeraCli.php`** — Removed `alreadyCloned` guard and `mkdir` from `cloneRepository()`. Now a pure CLI wrapper — no filesystem awareness.
+- **`src/Vera/VeraCliException.php`** — Removed `alreadyCloned()` factory method.
+
+#### LibraryManager enhancements
+- **`src/Service/LibraryManager.php`** — Added `prepareCloneDirectory()` (nuke existing + ensure parent dirs). `create()` now auto-calls `markQueued()` after persist, so creating a library immediately dispatches `SyncLibraryMessage`.
+
+#### LibraryStatus enum
+- **`src/Entity/LibraryStatus.php`** — Added `isQueued()` helper for the concurrent sync guard.
+
+#### Messenger routing
+- **`config/packages/messenger.yaml`** — Added `App\Message\SyncLibraryMessage: async` routing.
+- **`config/packages/test/messenger.yaml`** — Override async transport with `test://` for test environment.
+
+#### Mercure real-time updates
+- **`src/MessageHandler/SyncLibraryMessageHandler.php`** — Publishes JSON to `libraries` topic after each status transition.
+- **`assets/controllers/library-status_controller.js`** — Lazy-loaded Stimulus controller that subscribes to Mercure `libraries` topic and updates status badges in-place on the EA index page.
+- **`templates/admin/library/index.html.twig`** — Custom EA index template wrapping the table with `data-controller="library-status"` + `data-library-id` on each row.
+- **`templates/admin/library/field/status.html.twig`** — Custom status field template with `data-status-badge` attribute for Stimulus targeting.
+- **`src/Controller/Admin/LibraryCrudController.php`** — Added custom template overrides for index page and status field.
+- **`config/packages/twig.yaml`** — Exposed `mercure_public_url` as Twig global.
+
+#### Test infrastructure
+- **`config/services_test.yaml`** — Replaces `mercure.hub.default` with `MockHub` in test environment via `NullPublisherFactory`.
+- **`tests/Mercure/NullPublisherFactory.php`** — Creates a `MockHub` that swallows all publishes.
+- **`zenstruck/messenger-test`** installed for `test://` transport and `InteractsWithMessenger` trait.
+
+### Tests added
+
+**E2E tests (4 tests, using `zenstruck/messenger-test` with real git clone + vera index):**
+- **`tests/Application/Admin/SyncLibraryTest.php`** — 4 tests covering:
+  - **Happy path** — create library → assert message dispatched → process transport → library reaches `Ready` → repo exists on disk → vera indexed
+  - **Failure path** — invalid git URL → process → library reaches `Failed` → `lastError` populated with git error
+  - **Auto-dispatch on create** — `LibraryManager::create()` → assert `SyncLibraryMessage` on queue
+  - **Concurrent guard** — library already in `Indexing` status → process message → handler returns silently → no status change
+
+**Unit test updates:**
+- **`tests/Unit/Service/LibraryManagerTest.php`** — Updated `testCreateSetsComputedFields` and `testCreatePreservesUserOverrides` to account for `create()` now calling `markQueued()` (2 flushes + dispatch).
+
+### Verified
+- `castor dev:console "lint:container"` → container lints clean (both dev and test env)
+- `castor dev:phpstan` → only pre-existing warnings (no new errors)
+- `castor dev:cs-fix` → 1 file auto-fixed
+- `castor dev:test` → **72 tests, 154 assertions, 0 errors, 0 failures** (11 pre-existing PHPUnit notices from deprecations)
+- E2E: real `git clone` of `zenstruck/messenger-test` (1.x branch) + `vera index` passes inside Docker
+- Mercure MockHub verified: no connection errors in test environment
+
+### Key decisions made
+
+| Decision | Choice | Why |
+|---|---|---|
+| Message transport | async (Doctrine) | Long-running git/vera must not block web process |
+| Re-sync strategy | Delete & re-clone | Simpler than git pull; avoids dirty state edge cases |
+| Cleanup location | `LibraryManager::prepareCloneDirectory()` | VeraCli stays a pure CLI wrapper |
+| Auto-dispatch on create | Yes — `create()` calls `markQueued()` after flush | Admin adds a library → sync starts immediately |
+| Handler structure | Single `__invoke()` method | Linear pipeline, no reuse case for extracted methods |
+| Flush strategy | Flush after every status transition | Accurate observability; admin sees `Indexing` while sync runs |
+| Failure handling | `UnrecoverableMessageHandlingException` | No retries; admin retries manually via "Sync now" |
+| Mercure in tests | `MockHub` via `NullPublisherFactory` in `services_test.yaml` | No real Mercure needed in tests; publish is infrastructure detail |
+| Test transport | `test://` via `zenstruck/messenger-test` | Allows `process()`, `queue()` assertions |
+| Test fixture repo | `zenstruck/messenger-test` (1.x branch) | Small, public GitHub repo; default branch is 1.x |
+| Concurrent sync guard | `isQueued()` check at handler start | Prevents double-click / stale message race conditions |
+| Frontend | Lazy-loaded Stimulus controller | Zero overhead on non-admin pages; only loads on library index |
+| Twig mercure URL | `mercure_public_url` as Twig global | Needed for Stimulus controller `hubUrl` value |
+
+### Files created/modified
+
+**New files (8):**
+1. `src/MessageHandler/SyncLibraryMessageHandler.php`
+2. `assets/controllers/library-status_controller.js`
+3. `config/packages/test/messenger.yaml`
+4. `config/services_test.yaml`
+5. `templates/admin/library/index.html.twig`
+6. `templates/admin/library/field/status.html.twig`
+7. `tests/Application/Admin/SyncLibraryTest.php`
+8. `tests/Mercure/NullPublisherFactory.php`
+
+**Modified files (7):**
+1. `src/Vera/VeraCli.php` — removed `alreadyCloned` guard + mkdir
+2. `src/Vera/VeraCliException.php` — removed `alreadyCloned()` factory
+3. `src/Service/LibraryManager.php` — added `prepareCloneDirectory()`, auto-dispatch in `create()`
+4. `src/Entity/LibraryStatus.php` — added `isQueued()`
+5. `src/Controller/Admin/LibraryCrudController.php` — custom templates for index + status field
+6. `config/packages/messenger.yaml` — added SyncLibraryMessage routing
+7. `config/packages/twig.yaml` — exposed `mercure_public_url` global
+
+### Next stage
+
+TBD

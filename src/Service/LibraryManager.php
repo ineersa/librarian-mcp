@@ -97,6 +97,9 @@ class LibraryManager
         $library->touch();
         $this->em->persist($library);
         $this->em->flush();
+
+        // Auto-dispatch sync after creation
+        $this->markQueued($library);
     }
 
     /**
@@ -136,6 +139,21 @@ class LibraryManager
         $this->em->flush();
 
         $this->messageBus->dispatch(new SyncLibraryMessage($library->getId()));
+    }
+
+    /**
+     * Prepare the clone directory: remove existing contents and ensure parent dirs exist.
+     */
+    public function prepareCloneDirectory(string $absolutePath): void
+    {
+        if (is_dir($absolutePath)) {
+            $this->removeDirectory($absolutePath);
+        }
+
+        $parentDir = \dirname($absolutePath);
+        if (!is_dir($parentDir)) {
+            mkdir($parentDir, 0755, true);
+        }
     }
 
     /**

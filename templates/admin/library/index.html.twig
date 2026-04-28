@@ -1,0 +1,12 @@
+{% extends '@EasyAdmin/crud/index.html.twig' %}
+
+{% block main %}
+    <div data-controller="library-status"
+         data-library-status-hub-url-value="{{ mercure_public_url }}">
+        {{ parent() }}
+    </div>
+{% endblock %}
+
+{% block entity_row_attributes %}
+    data-library-id="{{ entity.primaryKeyValue }}"
+{% endblock %}

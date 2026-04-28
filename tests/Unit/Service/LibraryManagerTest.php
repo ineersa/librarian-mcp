@@ -86,8 +86,17 @@ final class LibraryManagerTest extends TestCase
     {
         $this->repository->method('findOneByPath')->willReturn(null);
         $this->repository->method('findOneBySlug')->willReturn(null);
-        $this->em->expects($this->once())->method('persist');
-        $this->em->expects($this->once())->method('flush');
+        $this->em->expects($this->once())->method('persist')
+            ->willReturnCallback(static function (Library $lib) {
+                // Simulate Doctrine assigning the ID
+                $ref = new \ReflectionProperty($lib, 'id');
+                $ref->setValue($lib, 1);
+            });
+        // create() flushes once, then markQueued() flushes once = 2 flush calls
+        $this->em->expects($this->exactly(2))->method('flush');
+        $this->messageBus->expects($this->once())
+            ->method('dispatch')
+            ->willReturnCallback(static fn (SyncLibraryMessage $msg) => new Envelope($msg));
 
         $library = new Library();
         $library->setGitUrl('https://github.com/symfony/symfony-docs');
@@ -99,13 +108,18 @@ final class LibraryManagerTest extends TestCase
         $this->assertSame('symfony/symfony-docs', $library->getName());
         $this->assertSame('symfony-symfony-docs', $library->getSlug());
         $this->assertSame('symfony/symfony-docs/main', $library->getPath());
+        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testCreatePreservesUserOverrides(): void
     {
         $this->repository->method('findOneByPath')->willReturn(null);
         $this->repository->method('findOneBySlug')->willReturn(null);
-        $this->em->expects($this->once())->method('flush');
+        // create() flushes once, then markQueued() flushes once = 2 flush calls
+        $this->em->expects($this->exactly(2))->method('flush');
+        $this->messageBus->expects($this->once())
+            ->method('dispatch')
+            ->willReturnCallback(static fn (SyncLibraryMessage $msg) => new Envelope($msg));
 
         $library = new Library();
         $library->setName('My Custom Name');
@@ -113,6 +127,10 @@ final class LibraryManagerTest extends TestCase
         $library->setGitUrl('https://github.com/symfony/symfony-docs');
         $library->setBranch('main');
         $library->setDescription('Symfony docs');
+
+        // Simulate a persisted entity by setting the ID via reflection
+        $ref = new \ReflectionProperty($library, 'id');
+        $ref->setValue($library, 42);
 
         $this->manager->create($library);
 
