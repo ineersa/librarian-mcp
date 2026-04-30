@@ -6,12 +6,15 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\Library;
 use App\Entity\LibraryStatus;
+use App\Mcp\LibraryMetadataCorpus;
 use App\Message\SyncLibraryMessage;
 use App\Repository\LibraryRepository;
 use App\Service\LibraryManager;
+use App\Vera\VeraCli;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\String\Slugger\AsciiSlugger;
@@ -35,6 +38,7 @@ final class LibraryManagerTest extends TestCase
             new AsciiSlugger(),
             $this->messageBus,
             '/app',
+            new LibraryMetadataCorpus($this->createMock(VeraCli::class), '/app', new NullLogger()),
         );
     }
 

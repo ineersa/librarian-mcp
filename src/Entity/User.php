@@ -39,6 +39,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
      */
     public ?string $plainPassword = null;
 
+    #[ORM\Column(type: 'string', length: 64, unique: true, nullable: true)]
+    public private(set) ?string $mcpTokenHash = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    public private(set) ?\DateTimeImmutable $mcpTokenCreatedAt = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    public private(set) ?\DateTimeImmutable $mcpTokenLastUsedAt = null;
+
     #[ORM\Column]
     public private(set) \DateTimeImmutable $createdAt;
 
@@ -54,6 +63,31 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function touch(): void
     {
         $this->updatedAt = new \DateTimeImmutable();
+    }
+
+    public function setMcpTokenHash(?string $mcpTokenHash): void
+    {
+        $this->mcpTokenHash = $mcpTokenHash;
+    }
+
+    public function setMcpTokenCreatedAt(?\DateTimeImmutable $mcpTokenCreatedAt): void
+    {
+        $this->mcpTokenCreatedAt = $mcpTokenCreatedAt;
+    }
+
+    public function setMcpTokenLastUsedAt(?\DateTimeImmutable $mcpTokenLastUsedAt): void
+    {
+        $this->mcpTokenLastUsedAt = $mcpTokenLastUsedAt;
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return \in_array($role, $this->getRoles(), true);
+    }
+
+    public function getMaskedMcpToken(): string
+    {
+        return null === $this->mcpTokenHash ? 'not set' : '*****';
     }
 
     /**

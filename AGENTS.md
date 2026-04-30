@@ -127,3 +127,10 @@ Generated index files are managed via `vendor/bin/ai-index`.
 
 For curated description updates, use `.agents/index-maintainer.md`.
 <!-- ai-index:end -->
+
+<!-- BEGIN AI_MATE_INSTRUCTIONS -->
+AI Mate Summary:
+- Role: MCP-powered, project-aware coding guidance and tools.
+- Required action: Read and follow `mate/AGENT_INSTRUCTIONS.md` before taking any action in this project, and prefer MCP tools over raw CLI commands whenever possible.
+- Installed extensions: ineersa/database-extension, symfony/ai-mate, symfony/ai-monolog-mate-extension, symfony/ai-symfony-mate-extension.
+<!-- END AI_MATE_INSTRUCTIONS -->

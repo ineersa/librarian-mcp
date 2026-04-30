@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Entity\Library;
+use App\Mcp\LibraryMetadataCorpus;
 use App\Message\SyncLibraryMessage;
 use App\Repository\LibraryRepository;
 use App\Service\LibraryManager;
@@ -26,6 +27,7 @@ class SyncLibraryMessageHandler
         private readonly LibraryManager $libraryManager,
         private readonly VeraCli $veraCli,
         private readonly HubInterface $mercureHub,
+        private readonly LibraryMetadataCorpus $metadataCorpus,
     ) {
     }
 
@@ -58,14 +60,18 @@ class SyncLibraryMessageHandler
             $veraConfig = $library->getVeraConfig();
             $this->veraCli->indexLibrary($absolutePath, $veraConfig ?? new \App\Vera\VeraIndexingConfig());
 
+            $library->setReadableFiles($this->buildReadableFilesManifest($absolutePath));
+
             // Indexing → Ready
             $library->syncSucceeded();
             $this->em->flush();
+            $this->metadataCorpus->upsert($library);
             $this->publishStatus($library);
         } catch (\Throwable $e) {
             // Indexing → Failed
             $library->syncFailed($e->getMessage());
             $this->em->flush();
+            $this->metadataCorpus->upsert($library);
             $this->publishStatus($library, $e->getMessage());
 
             throw new UnrecoverableMessageHandlingException($e->getMessage(), 0, $e);
@@ -87,5 +93,53 @@ class SyncLibraryMessageHandler
             self::MERCURE_TOPIC,
             json_encode($payload, \JSON_THROW_ON_ERROR),
         ));
+    }
+
+    /** @return array<string, bool> */
+    private function buildReadableFilesManifest(string $absolutePath): array
+    {
+        $manifest = [];
+        $finfo = new \finfo(\FILEINFO_MIME_TYPE);
+
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($absolutePath, \RecursiveDirectoryIterator::SKIP_DOTS),
+        );
+
+        foreach ($files as $file) {
+            if (!$file->isFile()) {
+                continue;
+            }
+
+            $realPath = $file->getRealPath();
+            if (false === $realPath) {
+                continue;
+            }
+
+            if (!$this->isTextFile($realPath, $finfo)) {
+                continue;
+            }
+
+            $relativePath = ltrim(str_replace(rtrim($absolutePath, '/').'/', '', str_replace('\\', '/', $realPath)), '/');
+            $manifest[$relativePath] = true;
+        }
+
+        ksort($manifest);
+
+        return $manifest;
+    }
+
+    private function isTextFile(string $path, \finfo $finfo): bool
+    {
+        $mime = $finfo->file($path);
+        if (false === $mime) {
+            return false;
+        }
+
+        return str_starts_with($mime, 'text/')
+            || str_contains($mime, 'json')
+            || str_contains($mime, 'xml')
+            || str_contains($mime, 'javascript')
+            || str_contains($mime, 'x-php')
+            || 'inode/x-empty' === $mime;
     }
 }

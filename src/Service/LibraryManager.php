@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Library;
+use App\Mcp\LibraryMetadataCorpus;
 use App\Message\SyncLibraryMessage;
 use App\Repository\LibraryRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -23,6 +24,7 @@ class LibraryManager
         private readonly SluggerInterface $slugger,
         private readonly MessageBusInterface $messageBus,
         private readonly string $projectDir,
+        private readonly LibraryMetadataCorpus $metadataCorpus,
     ) {
     }
 
@@ -98,6 +100,8 @@ class LibraryManager
         $this->em->persist($library);
         $this->em->flush();
 
+        $this->metadataCorpus->upsert($library);
+
         // Auto-dispatch sync after creation
         $this->markQueued($library);
     }
@@ -112,6 +116,8 @@ class LibraryManager
 
         $library->touch();
         $this->em->flush();
+
+        $this->metadataCorpus->upsert($library);
     }
 
     /**
@@ -124,6 +130,8 @@ class LibraryManager
         if (is_dir($absolutePath)) {
             $this->removeDirectory($absolutePath);
         }
+
+        $this->metadataCorpus->remove($library);
 
         $this->em->remove($library);
         $this->em->flush();

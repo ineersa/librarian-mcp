@@ -55,8 +55,7 @@ final class SyncLibraryTest extends WebTestCase
     /**
      * Full E2E: create library → message dispatched → process → Ready.
      *
-     * This test clones a real GitHub repo (zenstruck/messenger-test — small, public)
-     * and runs vera index on it.
+     * In test env, VeraCli is replaced with FakeVeraCli, so clone/index are local and deterministic.
      */
     public function testHappyPathSync(): void
     {

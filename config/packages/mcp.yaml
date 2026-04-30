@@ -1,0 +1,13 @@
+mcp:
+    app: 'librarian-mcp'
+    version: '1.0.0'
+    description: 'Librarian MCP HTTP server'
+    instructions: 'Use librarian-search to find a library, then librarian-query/read/grep on one library.'
+    client_transports:
+        stdio: false
+        http: true
+    http:
+        path: '/_mcp'
+        session:
+            store: file
+            ttl: 3600

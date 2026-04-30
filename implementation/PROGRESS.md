@@ -327,4 +327,46 @@ All 12 tests pass (`castor dev:test` → tests=12, assertions=30, errors=0, fail
 
 ### Next stage
 
-TBD
+## Stage 5 — HTTP MCP Server ✅
+
+**Status:** Complete
+**Date:** 2026-04-28
+
+### What was done
+
+- Added MCP HTTP transport config (`config/packages/mcp.yaml`) and routes (`config/routes/mcp.yaml`) at `/_mcp` with STDIO disabled.
+- Implemented dedicated MCP token authentication firewall (`security.yaml`) using `App\Security\McpTokenAuthenticator`.
+- Added per-user token fields to `User` entity:
+  - `mcpTokenHash` (sha256 hash only)
+  - `mcpTokenCreatedAt`
+  - `mcpTokenLastUsedAt`
+- Added `McpTokenManager` service for one-shot token regeneration (`mcp_` prefix), hash storage, and last-used tracking.
+- Added EasyAdmin UX in `UserCrudController`:
+  - ROLE_MCP role option
+  - masked token display
+  - “Regenerate MCP token” action (plain token shown once via flash)
+- Added migration `Version20260428211726`:
+  - `users` MCP token columns + unique index
+  - `libraries.readable_files` JSON column
+  - backfill existing `ROLE_ADMIN` users with `ROLE_MCP`
+- Added stable MCP tool set in `App\Mcp\LibrarianTools`:
+  - `librarian-search` (hybrid DB + semantic metadata corpus)
+  - `librarian-query` (vera semantic query in one ready library)
+  - `librarian-read` (manifest + realpath sandboxed line-window reads)
+  - `librarian-grep` (vera regex search in one ready library)
+- Added TOON-only tool output using `helgesverre/toon` and MCP error responses via `CallToolResult::error()` with `{message,retryable,hint}`.
+- Added metadata corpus service `App\Mcp\LibraryMetadataCorpus` with incremental sync + indexing for semantic library discovery.
+- Extended sync pipeline:
+  - `SyncLibraryMessageHandler` now builds `readableFiles` manifest from text files only.
+  - Updates metadata corpus on ready/failed transitions.
+- Extended Vera CLI wrapper with query filters and grep support.
+- Added MCP application tests (`tests/Application/Mcp/McpHttpServerTest.php`) for auth + tool listing flow.
+- Added `nyholm/psr7` dependency required for MCP HTTP transport PSR-17 discovery.
+
+### Verified
+
+- `castor dev:console "lint:container"` ✅
+- `castor dev:console "doctrine:migrations:migrate --no-interaction"` ✅
+- `castor dev:test-db-prepare` ✅
+- `castor dev:test` → **74 tests, 162 assertions, 0 failures** ✅
+- `castor dev:cs-fix` ✅

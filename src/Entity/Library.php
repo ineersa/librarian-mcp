@@ -55,6 +55,10 @@ class Library
     #[ORM\Column(type: 'json', name: 'vera_config', nullable: true)]
     private ?array $veraConfigData = null;
 
+    /** @var array<string, bool>|null */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $readableFiles = null;
+
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $lastError = null;
 
@@ -149,6 +153,18 @@ class Library
     public function setVeraConfig(?VeraIndexingConfig $config): void
     {
         $this->veraConfigData = $config?->toArray();
+    }
+
+    /** @return array<string, bool> */
+    public function getReadableFiles(): array
+    {
+        return $this->readableFiles ?? [];
+    }
+
+    /** @param array<string, bool> $readableFiles */
+    public function setReadableFiles(array $readableFiles): void
+    {
+        $this->readableFiles = $readableFiles;
     }
 
     public function getLastError(): ?string

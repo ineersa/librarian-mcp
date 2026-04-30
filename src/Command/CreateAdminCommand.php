@@ -63,7 +63,7 @@ final class CreateAdminCommand extends Command
         // Create user
         $user = new User();
         $user->email = $email;
-        $user->roles = ['ROLE_ADMIN'];
+        $user->roles = ['ROLE_ADMIN', 'ROLE_MCP'];
         $user->password = $this->passwordHasher->hashPassword($user, $plainPassword);
 
         $this->entityManager->persist($user);

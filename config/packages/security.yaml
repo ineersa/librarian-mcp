@@ -15,6 +15,12 @@ security:
             # Ensure dev tools and static assets are always allowed
             pattern: ^/(_profiler|_wdt|assets|build)/
             security: false
+        mcp:
+            pattern: ^/_mcp
+            stateless: true
+            provider: app_user_provider
+            custom_authenticators:
+                - App\Security\McpTokenAuthenticator
         main:
             lazy: true
             provider: app_user_provider
@@ -30,6 +36,7 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
+        - { path: ^/_mcp, roles: ROLE_MCP }
         - { path: ^/admin, roles: ROLE_ADMIN }
         - { path: ^/login, roles: PUBLIC_ACCESS }
 

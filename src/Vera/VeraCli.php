@@ -90,6 +90,13 @@ class VeraCli
 
         $args = [$this->veraBinary, 'search', $query, '--json'];
 
+        foreach (['lang', 'path', 'type', 'scope'] as $filterName) {
+            if (isset($filters[$filterName]) && \is_string($filters[$filterName]) && '' !== trim($filters[$filterName])) {
+                $args[] = '--'.$filterName;
+                $args[] = trim($filters[$filterName]);
+            }
+        }
+
         if (isset($filters['limit']) && \is_int($filters['limit'])) {
             $args[] = '--limit';
             $args[] = (string) $filters['limit'];
@@ -100,6 +107,43 @@ class VeraCli
         $decoded = json_decode($stdout, true, 512, \JSON_THROW_ON_ERROR);
         if (!\is_array($decoded)) {
             throw new VeraCliException('vera search returned invalid JSON');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Run `vera grep` in an indexed repository and return decoded JSON.
+     *
+     * @param array<string, mixed> $filters Optional filters (limit, lang, path)
+     *
+     * @return array<string, mixed>
+     */
+    public function grepLibrary(string $absolutePath, string $pattern, array $filters = []): array
+    {
+        if (!is_dir($absolutePath)) {
+            throw VeraCliException::notCloned($absolutePath);
+        }
+
+        $args = [$this->veraBinary, 'grep', $pattern, '--json'];
+
+        foreach (['lang', 'path'] as $filterName) {
+            if (isset($filters[$filterName]) && \is_string($filters[$filterName]) && '' !== trim($filters[$filterName])) {
+                $args[] = '--'.$filterName;
+                $args[] = trim($filters[$filterName]);
+            }
+        }
+
+        if (isset($filters['limit']) && \is_int($filters['limit'])) {
+            $args[] = '--limit';
+            $args[] = (string) $filters['limit'];
+        }
+
+        $stdout = $this->runCommand($args, workingDirectory: $absolutePath);
+
+        $decoded = json_decode($stdout, true, 512, \JSON_THROW_ON_ERROR);
+        if (!\is_array($decoded)) {
+            throw new VeraCliException('vera grep returned invalid JSON');
         }
 
         return $decoded;
@@ -150,7 +194,8 @@ class VeraCli
         }
 
         if (!$process->isSuccessful()) {
-            throw VeraCliException::commandFailed($command, $process->getExitCode() ?? 1, $process->getErrorOutput() ?: $process->getOutput());
+            $errorOutput = '' !== $process->getErrorOutput() ? $process->getErrorOutput() : $process->getOutput();
+            throw VeraCliException::commandFailed($command, $process->getExitCode() ?? 1, $errorOutput);
         }
 
         return $process->getOutput();

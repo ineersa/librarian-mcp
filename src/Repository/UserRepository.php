@@ -26,6 +26,11 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         parent::__construct($registry, User::class);
     }
 
+    public function findOneByMcpTokenHash(string $hash): ?User
+    {
+        return $this->findOneBy(['mcpTokenHash' => $hash]);
+    }
+
     /**
      * Used to upgrade (rehash) the user's password automatically over time.
      */

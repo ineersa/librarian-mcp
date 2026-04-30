@@ -1,5 +1,9 @@
 services:
     App\Tests\Mercure\NullPublisherFactory: ~
+    App\Tests\Support\FakeVeraCli: ~
+
+    App\Vera\VeraCli:
+        alias: App\Tests\Support\FakeVeraCli
 
     # Replace Mercure hub with MockHub in test environment
     mercure.hub.default:
