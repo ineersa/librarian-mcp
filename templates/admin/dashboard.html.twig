@@ -1,0 +1,141 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% macro param_field(field) %}
+    {% set isCheckbox = 'checkbox' in field.vars.block_prefixes %}
+    {% set isChoice = 'choice' in field.vars.block_prefixes %}
+    {% set existingClass = field.vars.attr.class|default('') %}
+
+    <div class="field-text form-group mb-3">
+        {{ form_label(field, null, { label_attr: { class: 'form-control-label' } }) }}
+
+        <div class="form-widget">
+            {% if isCheckbox %}
+                {{ form_widget(field) }}
+            {% elseif isChoice %}
+                {{ form_widget(field, { attr: field.vars.attr|merge({ class: (existingClass ~ ' form-select')|trim }) }) }}
+            {% else %}
+                {{ form_widget(field, { attr: field.vars.attr|merge({ class: (existingClass ~ ' form-control')|trim }) }) }}
+            {% endif %}
+
+            {% if field.vars.help %}
+                <small class="form-text form-help">{{ field.vars.help }}</small>
+            {% endif %}
+
+            {{ form_errors(field) }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% import _self as ui %}
+
+{% block content_title %}MCP Tools Dashboard{% endblock %}
+
+{% block main %}
+    <div class="content-panel mcp-dashboard-widgets">
+        <div class="mb-4">
+            <p class="text-muted mb-1">
+                Run MCP tools directly from the dashboard with EasyAdmin/Symfony forms.
+            </p>
+            <p class="text-muted mb-0">
+                Ready libraries available for select fields: <strong>{{ readyLibrariesCount }}</strong>
+            </p>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-12 col-xl-6">
+                <div class="card mcp-widget-card">
+                    <div class="card-body mcp-widget-body">
+                        <h2 class="h5 card-title mb-2">search-libraries</h2>
+                        <p class="text-muted small">{{ toolDescriptions.search_libraries }}</p>
+
+                        {{ form_start(searchLibrariesForm) }}
+                            {{ ui.param_field(searchLibrariesForm.query) }}
+                            {{ ui.param_field(searchLibrariesForm.limit) }}
+                            <button class="btn btn-primary" type="submit">Run search-libraries</button>
+                        {{ form_end(searchLibrariesForm) }}
+
+                        {% if toolResults.search_libraries is defined %}
+                            <hr>
+                            <h3 class="h6">Result (TOON)</h3>
+                            <pre class="small mb-0 mcp-result {% if toolResults.search_libraries.isError %}mcp-result-error{% endif %}">{{ toolResults.search_libraries.raw }}</pre>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <div class="card mcp-widget-card">
+                    <div class="card-body mcp-widget-body">
+                        <h2 class="h5 card-title mb-2">semantic-search</h2>
+                        <p class="text-muted small">{{ toolDescriptions.semantic_search }}</p>
+
+                        {{ form_start(semanticSearchForm) }}
+                            {{ ui.param_field(semanticSearchForm.library) }}
+                            {{ ui.param_field(semanticSearchForm.query) }}
+                            {{ ui.param_field(semanticSearchForm.lang) }}
+                            {{ ui.param_field(semanticSearchForm.path) }}
+                            {{ ui.param_field(semanticSearchForm.type) }}
+                            {{ ui.param_field(semanticSearchForm.scope) }}
+                            {{ ui.param_field(semanticSearchForm.limit) }}
+                            <button class="btn btn-primary" type="submit">Run semantic-search</button>
+                        {{ form_end(semanticSearchForm) }}
+
+                        {% if toolResults.semantic_search is defined %}
+                            <hr>
+                            <h3 class="h6">Result (TOON)</h3>
+                            <pre class="small mb-0 mcp-result {% if toolResults.semantic_search.isError %}mcp-result-error{% endif %}">{{ toolResults.semantic_search.raw }}</pre>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <div class="card mcp-widget-card">
+                    <div class="card-body mcp-widget-body">
+                        <h2 class="h5 card-title mb-2">read</h2>
+                        <p class="text-muted small">{{ toolDescriptions.read }}</p>
+
+                        {{ form_start(readForm) }}
+                            {{ ui.param_field(readForm.library) }}
+                            {{ ui.param_field(readForm.file) }}
+                            {{ ui.param_field(readForm.offset) }}
+                            {{ ui.param_field(readForm.limit) }}
+                            <button class="btn btn-primary" type="submit">Run read</button>
+                        {{ form_end(readForm) }}
+
+                        {% if toolResults.read is defined %}
+                            <hr>
+                            <h3 class="h6">Result (TOON)</h3>
+                            <pre class="small mb-0 mcp-result {% if toolResults.read.isError %}mcp-result-error{% endif %}">{{ toolResults.read.raw }}</pre>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <div class="card mcp-widget-card">
+                    <div class="card-body mcp-widget-body">
+                        <h2 class="h5 card-title mb-2">grep</h2>
+                        <p class="text-muted small">{{ toolDescriptions.grep }}</p>
+
+                        {{ form_start(grepForm) }}
+                            {{ ui.param_field(grepForm.library) }}
+                            {{ ui.param_field(grepForm.pattern) }}
+                            {{ ui.param_field(grepForm.ignoreCase) }}
+                            {{ ui.param_field(grepForm.context) }}
+                            {{ ui.param_field(grepForm.scope) }}
+                            {{ ui.param_field(grepForm.limit) }}
+                            <button class="btn btn-primary" type="submit">Run grep</button>
+                        {{ form_end(grepForm) }}
+
+                        {% if toolResults.grep is defined %}
+                            <hr>
+                            <h3 class="h6">Result (TOON)</h3>
+                            <pre class="small mb-0 mcp-result {% if toolResults.grep.isError %}mcp-result-error{% endif %}">{{ toolResults.grep.raw }}</pre>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

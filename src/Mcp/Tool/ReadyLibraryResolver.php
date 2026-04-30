@@ -19,7 +19,7 @@ final readonly class ReadyLibraryResolver
     {
         $library = $this->libraryRepository->findOneBySlug($slug);
         if (null === $library) {
-            throw new ToolCallException('Library not found.', false, 'Use librarian-search to discover valid library slugs.');
+            throw new ToolCallException('Library not found.', false, 'Use search-libraries to discover valid library slugs.');
         }
 
         if (LibraryStatus::Ready !== $library->getStatus()) {

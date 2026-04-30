@@ -212,7 +212,7 @@ class Library
 
     public function markQueued(): void
     {
-        $this->assertTransition(LibraryStatus::Draft, LibraryStatus::Failed);
+        $this->assertTransition(LibraryStatus::Draft, LibraryStatus::Queued, LibraryStatus::Failed, LibraryStatus::Ready);
         $this->status = LibraryStatus::Queued;
         $this->touch();
     }
@@ -227,7 +227,7 @@ class Library
 
     public function syncFailed(string $error): void
     {
-        $this->assertTransition(LibraryStatus::Indexing);
+        $this->assertTransition(LibraryStatus::Queued, LibraryStatus::Indexing);
         $this->status = LibraryStatus::Failed;
         $this->lastError = mb_substr($error, 0, 2000);
         $this->touch();

@@ -18,7 +18,10 @@
     "indexing": {
       "max_chunk_lines": 80,
       "default_excludes": [
+        ".*",
+        "**/.*",
         ".git",
+        ".gitignore",
         ".vera",
         "node_modules",
         "target",

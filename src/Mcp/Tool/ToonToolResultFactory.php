@@ -12,8 +12,16 @@ final class ToonToolResultFactory
 {
     public function success(mixed $value): CallToolResult
     {
+        $encoded = Toon::encode($value);
+
+        // TOON encodes an empty list to an empty string. Return an explicit marker
+        // so clients can distinguish "no results" from transport/output glitches.
+        if ([] === $value && '' === $encoded) {
+            $encoded = '[]';
+        }
+
         return CallToolResult::success([
-            new TextContent(Toon::encode($value)),
+            new TextContent($encoded),
         ]);
     }
 

@@ -36,6 +36,7 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
+        - { path: ^/_mcp, roles: PUBLIC_ACCESS, methods: [OPTIONS] }
         - { path: ^/_mcp, roles: ROLE_MCP }
         - { path: ^/admin, roles: ROLE_ADMIN }
         - { path: ^/login, roles: PUBLIC_ACCESS }

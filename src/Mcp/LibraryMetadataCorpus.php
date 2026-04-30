@@ -15,6 +15,7 @@ final readonly class LibraryMetadataCorpus
     public function __construct(
         private readonly VeraCli $veraCli,
         private readonly string $projectDir,
+        private readonly string $libraryDataDir,
         private readonly LoggerInterface $logger,
     ) {
     }
@@ -93,7 +94,7 @@ TXT;
                 continue;
             }
 
-            $slug = pathinfo($path, \PATHINFO_FILENAME);
+            $slug = urldecode(pathinfo($path, \PATHINFO_FILENAME));
             if ('' === $slug) {
                 continue;
             }
@@ -110,7 +111,7 @@ TXT;
 
     public function rootPath(): string
     {
-        return rtrim($this->projectDir, '/').'/data/mcp-metadata-corpus';
+        return rtrim($this->projectDir, '/').'/'.$this->libraryDataDir.'/mcp-metadata-corpus';
     }
 
     private function ensureCorpusDirectory(): void
@@ -123,15 +124,31 @@ TXT;
 
     private function documentPath(string $slug): string
     {
-        return $this->rootPath().'/'.$slug.'.txt';
+        return $this->rootPath().'/'.rawurlencode($slug).'.txt';
     }
 
     private function reindex(): void
     {
+        $startedAt = microtime(true);
+        $rootPath = $this->rootPath();
+
+        $this->logger->info('Metadata corpus reindex started.', [
+            'rootPath' => $rootPath,
+        ]);
+
         try {
-            $this->veraCli->indexLibrary($this->rootPath(), new VeraIndexingConfig());
+            $this->veraCli->indexLibrary($rootPath, new VeraIndexingConfig());
+
+            $this->logger->info('Metadata corpus reindex finished.', [
+                'rootPath' => $rootPath,
+                'durationMs' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
         } catch (\Throwable $e) {
-            $this->logger->warning('Metadata corpus indexing failed', ['error' => $e->getMessage()]);
+            $this->logger->warning('Metadata corpus indexing failed', [
+                'rootPath' => $rootPath,
+                'durationMs' => (int) round((microtime(true) - $startedAt) * 1000),
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

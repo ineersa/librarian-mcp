@@ -2,7 +2,7 @@
 
 {% block main %}
     <div data-controller="library-status"
-         data-library-status-hub-url-value="{{ mercure_public_url }}">
+         data-library-status-hub-url-value="{{ mercure('https://librarian-mcp.local/topics/libraries') }}">
         {{ parent() }}
     </div>
 {% endblock %}

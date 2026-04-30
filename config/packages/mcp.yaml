@@ -2,7 +2,7 @@ mcp:
     app: 'librarian-mcp'
     version: '1.0.0'
     description: 'Librarian MCP HTTP server'
-    instructions: 'Use librarian-search to find a library, then librarian-query/read/grep on one library.'
+    instructions: 'Use search-libraries to find a library, then semantic-search/grep/read on one library.'
     client_transports:
         stdio: false
         http: true

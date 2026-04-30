@@ -185,6 +185,38 @@ final class LibraryCrudTest extends WebTestCase
         $this->assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
     }
 
+    public function testSyncNowOnReadyLibrarySetsStatusToQueued(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $admin = $em->getRepository(User::class)->findOneBy(['email' => self::ADMIN_EMAIL]);
+
+        $library = new Library();
+        $library->setName('test/ready-lib');
+        $library->setSlug('test-ready-lib');
+        $library->setGitUrl('https://github.com/test/ready-lib');
+        $library->setBranch('main');
+        $library->setDescription('A ready library');
+        $library->initializePath('test/ready-lib/main');
+        $em->persist($library);
+        $em->flush();
+
+        // Transition to ready
+        $library->markQueued();
+        $library->syncStarted();
+        $library->syncSucceeded();
+        $em->flush();
+        $em->clear();
+
+        $client->loginUser($admin);
+        $client->request('GET', '/admin/libraries/'.$library->getId().'/sync');
+
+        self::assertResponseRedirects();
+
+        $refreshed = $em->getRepository(Library::class)->find($library->getId());
+        $this->assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
+    }
+
     public function testLibrarySearchByName(): void
     {
         $client = static::createClient();

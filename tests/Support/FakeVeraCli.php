@@ -52,4 +52,29 @@ final class FakeVeraCli extends VeraCli
     {
         return ['results' => []];
     }
+
+    public function getConfig(): array
+    {
+        return [
+            'indexing' => [
+                'default_excludes' => [
+                    '.git',
+                    '.vera',
+                    'node_modules',
+                    'target',
+                    'build',
+                    'dist',
+                    '__pycache__',
+                    '.venv',
+                    '.github',
+                    'vendor',
+                ],
+            ],
+        ];
+    }
+
+    public function getIndexingDefaultExcludes(): array
+    {
+        return $this->getConfig()['indexing']['default_excludes'];
+    }
 }

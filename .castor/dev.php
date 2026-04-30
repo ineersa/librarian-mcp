@@ -132,6 +132,105 @@ function mate_generate_castor(): void
     run('php '.escapeshellarg($root.'/.castor/bin/generate-mate-castor-tasks.php'));
 }
 
+#[AsTask(description: 'Generate shared JetBrains .run configs for castor dev:*, prod:*, and mate-*:* commands')]
+function idea_run_configs(): void
+{
+    $process = run_quiet_command('castor list --format=json --short');
+
+    if (0 !== $process->getExitCode()) {
+        throw new \RuntimeException('Unable to list castor commands.');
+    }
+
+    $decoded = json_decode($process->getOutput(), true);
+    $commands = \is_array($decoded['commands'] ?? null) ? $decoded['commands'] : [];
+
+    $runDir = \dirname(__DIR__).'/.run';
+    if (!is_dir($runDir) && !mkdir($runDir, 0777, true) && !is_dir($runDir)) {
+        throw new \RuntimeException(\sprintf('Unable to create run config directory "%s".', $runDir));
+    }
+
+    $generated = 0;
+
+    foreach ($commands as $command) {
+        if (!\is_array($command)) {
+            continue;
+        }
+
+        $name = (string) ($command['name'] ?? '');
+        if ('' === $name || !should_generate_idea_run_config($name)) {
+            continue;
+        }
+
+        $description = (string) ($command['description'] ?? '');
+        $filePath = $runDir.'/'.idea_run_config_filename($name);
+
+        file_put_contents($filePath, build_idea_run_config_xml($name, $description));
+        ++$generated;
+    }
+
+    echo \sprintf('idea-run-configs: generated %d run configuration(s) in .run/', $generated).\PHP_EOL;
+}
+
+/**
+ * @internal
+ */
+function should_generate_idea_run_config(string $commandName): bool
+{
+    return str_starts_with($commandName, 'dev:')
+        || str_starts_with($commandName, 'prod:')
+        || str_starts_with($commandName, 'mate-');
+}
+
+/**
+ * @internal
+ */
+function idea_run_config_filename(string $commandName): string
+{
+    return 'castor_'.preg_replace('/[^a-zA-Z0-9._-]+/', '_', $commandName).'.run.xml';
+}
+
+/**
+ * @internal
+ */
+function build_idea_run_config_xml(string $commandName, string $description): string
+{
+    $configurationName = 'castor '.$commandName;
+    $command = 'castor '.$commandName;
+
+    $configurationNameXml = xml_escape($configurationName);
+    $commandXml = xml_escape($command);
+    $descriptionXml = xml_escape($description);
+
+    return <<<XML
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="{$configurationNameXml}" type="ShConfigurationType" factoryName="Shell Script" singleton="false">
+    <option name="SCRIPT_TEXT" value="{$commandXml}" />
+    <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+    <option name="SCRIPT_PATH" value="" />
+    <option name="SCRIPT_OPTIONS" value="" />
+    <option name="INDEPENDENT_INTERPRETER_PATH" value="true" />
+    <option name="INTERPRETER_PATH" value="/bin/bash" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="\$PROJECT_DIR\$" />
+    <option name="EXECUTE_IN_TERMINAL" value="false" />
+    <option name="EXECUTE_SCRIPT_FILE" value="false" />
+    <envs />
+    <method v="2" />
+  </configuration>
+  <!-- {$descriptionXml} -->
+</component>
+XML;
+}
+
+/**
+ * @internal
+ */
+function xml_escape(string $value): string
+{
+    return htmlspecialchars($value, \ENT_XML1 | \ENT_QUOTES, 'UTF-8');
+}
+
 #[AsTask(description: 'Run composer command in local container')]
 function composer(string $cmd): void
 {
@@ -165,6 +264,19 @@ function console(string $cmd): void
 #[AsTask(description: 'Run Messenger consumer for all non-failed transports')]
 function messenger_consume(): void
 {
+    // Stop previous workers before starting a new foreground consumer.
+    // This avoids hidden orphan processes when past exec sessions were interrupted.
+
+    // Try Symfony graceful stop signal first.
+    dev_php_exec('php bin/console messenger:stop-workers');
+
+    // Also kill any remaining orphaned messenger:consume PHP processes in the container
+    // (the stop-workers signal relies on the transport and may not reach all workers).
+    dev_compose(sprintf(
+        'exec php bash -c %s',
+        escapeshellarg('for pid in $(ls /proc/ | grep -E "^[0-9]+$"); do cmdline=$(cat /proc/$pid/cmdline 2>/dev/null | tr "\0" " "); if [ -n "$cmdline" ] && echo "$cmdline" | grep -q "messenger:consume" && ! echo "$cmdline" | grep -q "bash -c"; then kill $pid 2>/dev/null; fi; done'),
+    ));
+
     dev_php_exec('php bin/console messenger:consume --all --exclude-receivers=failed -vv');
 }
 

@@ -9,6 +9,7 @@
 parameters:
     app.vera.binary: '%env(VERA_BINARY)%'
     app.vera.timeout: '%env(int:VERA_TIMEOUT)%'
+    app.library_data_dir: '%env(LIBRARY_DATA_DIR)%'
 
 services:
     # default configuration for services in *this* file
@@ -29,10 +30,16 @@ services:
             $veraBinary: '%app.vera.binary%'
             $processTimeout: '%app.vera.timeout%'
 
+    App\Controller\Admin\LibraryCrudController:
+        arguments:
+            $veraCli: '@App\Vera\VeraCli'
+
     App\Service\LibraryManager:
         arguments:
             $projectDir: '%kernel.project_dir%'
+            $libraryDataDir: '%app.library_data_dir%'
 
     App\Mcp\LibraryMetadataCorpus:
         arguments:
             $projectDir: '%kernel.project_dir%'
+            $libraryDataDir: '%app.library_data_dir%'

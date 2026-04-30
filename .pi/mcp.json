@@ -11,6 +11,10 @@
       "headers": {},
       "directTools": true,
       "exposeResources": false
+    },
+    "librarian": {
+      "url": "http://localhost:8080/_mcp?token=mcp_b725757bacf01e1a23f08b0d240d6999b5279b4f6d1cd2f8",
+      "directTools": true
     }
   }
 }

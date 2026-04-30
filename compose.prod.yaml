@@ -8,12 +8,9 @@
 # Caddy `{env.MERCURE_*}` / `SERVER_NAME` and any runtime overrides; values override Symfony’s dump
 # for the same variable names. Copy `.env.prod.local.dist` → `.env.prod.local`.
 #
-# HTTP publish: default is 127.0.0.1:8080→container:80 so host nginx (or anything else) can keep
-# public 80/443. Caddy inside the container does not compete with nginx on the host. For a dedicated
-# VPS where Caddy should bind public 80/443 + ACME, set in the project `.env` used by Compose:
-#   APP_HTTP_BIND=0.0.0.0
-#   APP_HTTP_PORT=80
-# and add 443 mappings via a local compose override (see docs/server-deployment.md).
+# HTTP publish: default is 0.0.0.0:8093→container:80 so the app is reachable from the local network.
+# For dedicated hosts where Caddy should bind public 80/443 + ACME, override in `.env.prod.local`
+# (or project `.env`) and add 443 mappings via a local compose override (see docs/server-deployment.md).
 
 x-prod-env-file: &prod-env-file
   env_file:
@@ -42,17 +39,42 @@ x-caddy-inline-env: &caddy-inline-env
 services:
   php:
     image: ${APP_IMAGE:-symfony-web-template-app}
+    restart: unless-stopped
     <<: [*prod-env-file, *host-gateway, *json-logging]
     environment:
+      APP_ENV: prod
       <<: *caddy-inline-env
     volumes:
-      - ./data:/app/data
+      - ./data-prod:/app/data-prod
       - caddy_data:/data
       - caddy_config:/config
+      # Keep vera config available for both root and non-root execution.
+      - ./docker/vera:/root/.vera:delegated
+      - ./docker/vera:/app/.vera:delegated
     networks:
       - app_net
     ports:
-      - "${APP_HTTP_BIND:-127.0.0.1}:${APP_HTTP_PORT:-8080}:80"
+      - "${APP_HTTP_BIND:-0.0.0.0}:${APP_HTTP_PORT:-8093}:80"
+    dns:
+      - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
+      - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
+
+  messenger:
+    image: ${APP_IMAGE:-symfony-web-template-app}
+    restart: unless-stopped
+    <<: [*prod-env-file, *host-gateway, *json-logging]
+    environment:
+      APP_ENV: prod
+    command: ["php", "bin/console", "messenger:consume", "--all", "--exclude-receivers=failed"]
+    depends_on:
+      - php
+    volumes:
+      - ./data-prod:/app/data-prod
+      # Messenger may run as a non-root user (HOME=/app) depending on runtime.
+      - ./docker/vera:/root/.vera:delegated
+      - ./docker/vera:/app/.vera:delegated
+    networks:
+      - app_net
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"

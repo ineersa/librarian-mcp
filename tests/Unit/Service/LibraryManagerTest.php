@@ -17,7 +17,6 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\String\Slugger\AsciiSlugger;
 
 final class LibraryManagerTest extends TestCase
 {
@@ -35,10 +34,10 @@ final class LibraryManagerTest extends TestCase
         $this->manager = new LibraryManager(
             $this->em,
             $this->repository,
-            new AsciiSlugger(),
             $this->messageBus,
             '/app',
-            new LibraryMetadataCorpus($this->createMock(VeraCli::class), '/app', new NullLogger()),
+            'data',
+            new LibraryMetadataCorpus($this->createMock(VeraCli::class), '/app', 'data', new NullLogger()),
         );
     }
 
@@ -53,7 +52,7 @@ final class LibraryManagerTest extends TestCase
     public function testDeriveNameNonMainBranch(): void
     {
         $name = $this->manager->deriveName('https://github.com/symfony/symfony-docs', '6.4');
-        $this->assertSame('symfony/symfony-docs (6.4)', $name);
+        $this->assertSame('symfony/symfony-docs@6.4', $name);
     }
 
     public function testDeriveNameWithGitSuffix(): void
@@ -66,8 +65,8 @@ final class LibraryManagerTest extends TestCase
 
     public function testGenerateSlug(): void
     {
-        $slug = $this->manager->generateSlug('symfony/symfony-docs');
-        $this->assertSame('symfony-symfony-docs', $slug);
+        $slug = $this->manager->generateSlug('symfony/symfony-docs@6.4');
+        $this->assertSame('symfony/symfony-docs@6.4', $slug);
     }
 
     // --- computePath ---
@@ -110,7 +109,7 @@ final class LibraryManagerTest extends TestCase
         $this->manager->create($library);
 
         $this->assertSame('symfony/symfony-docs', $library->getName());
-        $this->assertSame('symfony-symfony-docs', $library->getSlug());
+        $this->assertSame('symfony/symfony-docs', $library->getSlug());
         $this->assertSame('symfony/symfony-docs/main', $library->getPath());
         $this->assertSame(LibraryStatus::Queued, $library->getStatus());
     }

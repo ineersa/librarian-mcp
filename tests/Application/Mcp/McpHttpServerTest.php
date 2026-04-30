@@ -86,9 +86,9 @@ final class McpHttpServerTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseIsSuccessful();
-        $this->assertStringContainsString('librarian-search', $client->getResponse()->getContent());
-        $this->assertStringContainsString('librarian-query', $client->getResponse()->getContent());
-        $this->assertStringContainsString('librarian-read', $client->getResponse()->getContent());
-        $this->assertStringContainsString('librarian-grep', $client->getResponse()->getContent());
+        $this->assertStringContainsString('search-libraries', $client->getResponse()->getContent());
+        $this->assertStringContainsString('semantic-search', $client->getResponse()->getContent());
+        $this->assertStringContainsString('read', $client->getResponse()->getContent());
+        $this->assertStringContainsString('grep', $client->getResponse()->getContent());
     }
 }

@@ -95,19 +95,28 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->syncSucceeded();
     }
 
-    public function testQueuedCannotSyncFail(): void
+    public function testQueuedCanSyncFail(): void
     {
         $library = new Library();
         $library->markQueued();
-        $this->expectException(\LogicException::class);
         $library->syncFailed('error');
+        $this->assertSame(LibraryStatus::Failed, $library->getStatus());
+        $this->assertSame('error', $library->getLastError());
     }
 
-    public function testReadyCannotMarkQueued(): void
+    public function testReadyCanBeMarkedQueuedForResync(): void
     {
         $library = $this->createReadyLibrary();
-        $this->expectException(\LogicException::class);
         $library->markQueued();
+        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+    }
+
+    public function testQueuedCanBeRequeued(): void
+    {
+        $library = new Library();
+        $library->markQueued();
+        $library->markQueued(); // re-queue stuck library
+        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testReadyCannotSyncStart(): void

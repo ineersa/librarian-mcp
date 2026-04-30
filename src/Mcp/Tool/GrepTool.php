@@ -10,7 +10,7 @@ use Mcp\Capability\Attribute\McpTool;
 use Mcp\Schema\Result\CallToolResult;
 use Psr\Log\LoggerInterface;
 
-final readonly class LibrarianGrepTool
+final readonly class GrepTool
 {
     public function __construct(
         private ReadyLibraryResolver $readyLibraryResolver,
@@ -21,12 +21,28 @@ final readonly class LibrarianGrepTool
     ) {
     }
 
-    #[McpTool(name: 'librarian-grep', description: 'Run regex grep in one ready library')]
+    /**
+     * Run regex grep over indexed files in a single ready library.
+     *
+     * @param string           $library    Ready library slug, e.g. "easycorp/easyadminbundle@5.x"
+     * @param string           $pattern    Regex pattern (vera/Rust regex syntax), e.g. "AbstractCrudController" or "TODO|FIXME"
+     * @param bool             $ignoreCase True for case-insensitive matching
+     * @param int              $context    Context lines before/after each match (0..20)
+     * @param SearchScope|null $scope      Corpus scope filter: source, docs, runtime, or all
+     * @param int              $limit      Max number of results to return (1..100)
+     */
+    #[McpTool(name: 'grep', description: <<<'DESC'
+        Run a regex pattern search inside one ready library.
+        Searches indexed file contents with surrounding context lines.
+        Searches only files included in the current index state/exclusions.
+        Returns matches with file path, line range, and content.
+        DESC)]
     public function grep(
         string $library,
         string $pattern,
-        ?string $path = null,
-        ?string $lang = null,
+        bool $ignoreCase = false,
+        int $context = 2,
+        ?SearchScope $scope = null,
         int $limit = 20,
     ): CallToolResult {
         $startedAt = microtime(true);
@@ -34,19 +50,21 @@ final readonly class LibrarianGrepTool
         try {
             $target = $this->readyLibraryResolver->resolve($library);
             $limit = max(1, min(100, $limit));
+            $context = max(0, min(20, $context));
 
             $result = $this->veraCli->grepLibrary(
                 $this->libraryManager->getAbsolutePath($target),
                 $pattern,
                 [
-                    'path' => $path,
-                    'lang' => $lang,
+                    'ignoreCase' => $ignoreCase,
+                    'context' => $context,
+                    'scope' => $scope?->value,
                     'limit' => $limit,
                 ],
             );
 
             $this->logger->info('MCP tool call', [
-                'tool' => 'librarian-grep',
+                'tool' => 'grep',
                 'library' => $library,
                 'latency_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
@@ -56,7 +74,7 @@ final readonly class LibrarianGrepTool
             return $this->resultFactory->error($e->getMessage(), $e->retryable, $e->hint);
         } catch (\Throwable $e) {
             $this->logger->error('MCP tool failure', [
-                'tool' => 'librarian-grep',
+                'tool' => 'grep',
                 'library' => $library,
                 'error' => $e->getMessage(),
                 'retryable' => true,

@@ -10,7 +10,6 @@ use App\Message\SyncLibraryMessage;
 use App\Repository\LibraryRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\String\Slugger\SluggerInterface;
 
 /**
  * All business logic for Library entities.
@@ -21,21 +20,21 @@ class LibraryManager
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly LibraryRepository $repository,
-        private readonly SluggerInterface $slugger,
         private readonly MessageBusInterface $messageBus,
         private readonly string $projectDir,
+        private readonly string $libraryDataDir,
         private readonly LibraryMetadataCorpus $metadataCorpus,
     ) {
     }
 
     /**
-     * Derive a human-readable name from gitUrl + branch.
+     * Derive a library identifier (and default name) from gitUrl + branch.
      */
     public function deriveName(string $gitUrl, string $branch): string
     {
         $ownerRepo = $this->parseOwnerRepo($gitUrl);
 
-        return 'main' === $branch ? $ownerRepo : \sprintf('%s (%s)', $ownerRepo, $branch);
+        return 'main' === mb_strtolower($branch) ? $ownerRepo : \sprintf('%s@%s', $ownerRepo, $branch);
     }
 
     /**
@@ -43,7 +42,9 @@ class LibraryManager
      */
     public function generateSlug(string $name): string
     {
-        return $this->slugger->slug($name)->lower()->toString();
+        $normalized = mb_strtolower(trim($name));
+
+        return $normalized;
     }
 
     /**
@@ -61,7 +62,10 @@ class LibraryManager
      */
     public function getAbsolutePath(Library $library): string
     {
-        return rtrim($this->projectDir, '/').'/data/libraries/'.$library->getPath();
+        if (empty($this->projectDir)) {
+            throw new \LogicException('Project dir is empty, abort!');
+        }
+        return rtrim($this->projectDir, '/').'/'.$this->libraryDataDir.'/libraries/'.$library->getPath();
     }
 
     /**
@@ -175,7 +179,7 @@ class LibraryManager
             throw new \InvalidArgumentException(\sprintf('Cannot parse owner/repo from URL: "%s".', $gitUrl));
         }
 
-        return $matches[1];
+        return mb_strtolower($matches[1]);
     }
 
     /**

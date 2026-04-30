@@ -11,7 +11,7 @@ use Mcp\Capability\Attribute\McpTool;
 use Mcp\Schema\Result\CallToolResult;
 use Psr\Log\LoggerInterface;
 
-final readonly class LibrarianSearchTool
+final readonly class SearchLibrariesTool
 {
     public function __construct(
         private LibraryRepository $libraryRepository,
@@ -21,15 +21,36 @@ final readonly class LibrarianSearchTool
     ) {
     }
 
-    #[McpTool(name: 'librarian-search', description: 'Find relevant ready libraries')]
-    public function search(string $query, int $topn = 10): CallToolResult
+    /**
+     * Find ready libraries by metadata/semantic relevance.
+     *
+     * @param string $query Natural-language query (e.g. "symfony docs", "easyadmin", "react router")
+     * @param int    $limit Max number of libraries to return (1..50)
+     */
+    #[McpTool(name: 'search-libraries', description: <<<'DESC'
+        Find libraries in the catalog that match a query.
+        Returns ready libraries ranked by relevance (DB metadata + semantic match).
+        Each result includes slug, description, git URL, last indexed time, and match reason.
+        Use the returned slug as the `library` parameter for semantic-search, grep, and read.
+        Returns [] when no libraries match.
+        DESC)]
+    public function search(string $query, int $limit = 10): CallToolResult
     {
         $startedAt = microtime(true);
-        $topn = max(1, min(50, $topn));
+
+        if ('' === trim($query)) {
+            return $this->resultFactory->error(
+                'Query must not be empty.',
+                false,
+                'Provide a search term describing the library you need (e.g. "symfony", "react component", "orm").',
+            );
+        }
+
+        $limit = max(1, min(50, $limit));
 
         try {
-            $databaseMatches = $this->libraryRepository->findReadyByMetadataLike($query, $topn);
-            $semanticSlugMatches = $this->metadataCorpus->search($query, $topn);
+            $databaseMatches = $this->libraryRepository->findReadyByMetadataLike($query, $limit);
+            $semanticSlugMatches = $this->metadataCorpus->search($query, $limit);
             $semanticLibraries = $this->libraryRepository->findReadyBySlugs(array_keys($semanticSlugMatches));
 
             /** @var array<string, array{library: Library, score: int, matchReason: string}> $ranked */
@@ -70,7 +91,7 @@ final readonly class LibrarianSearchTool
             });
 
             $result = [];
-            foreach (\array_slice($ranked, 0, $topn, true) as $entry) {
+            foreach (\array_slice($ranked, 0, $limit, true) as $entry) {
                 $library = $entry['library'];
                 $result[] = [
                     'slug' => $library->getSlug(),
@@ -82,7 +103,7 @@ final readonly class LibrarianSearchTool
             }
 
             $this->logger->info('MCP tool call', [
-                'tool' => 'librarian-search',
+                'tool' => 'search-libraries',
                 'query' => $query,
                 'latency_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
@@ -90,7 +111,7 @@ final readonly class LibrarianSearchTool
             return $this->resultFactory->success($result);
         } catch (\Throwable $e) {
             $this->logger->error('MCP tool failure', [
-                'tool' => 'librarian-search',
+                'tool' => 'search-libraries',
                 'error' => $e->getMessage(),
                 'retryable' => true,
             ]);

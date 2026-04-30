@@ -16,4 +16,9 @@ enum LibraryStatus: string
     {
         return self::Queued === $this;
     }
+
+    public function isIndexing(): bool
+    {
+        return self::Indexing === $this;
+    }
 }

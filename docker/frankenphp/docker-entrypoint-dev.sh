@@ -12,6 +12,14 @@ if [[ -d /app ]]; then
         fi
         echo "symfony-dev:x:${APP_UID}:${APP_GID}:Dev shell:/app:/bin/bash" >>/etc/passwd
     fi
+
+    # Keep mutable project directories owned by the host-mapped user.
+    # FrankenPHP runs as root in this container and may create root-owned files
+    # (for example in var/cache/dev), which then breaks non-root CLI tasks.
+    if [[ "${APP_UID}" != "0" ]]; then
+        mkdir -p /app/var/cache /app/var/log /app/data
+        chown -R "${APP_UID}:${APP_GID}" /app/var /app/data 2>/dev/null || true
+    fi
 fi
 
 # Start FrankenPHP in the background without --watch flag

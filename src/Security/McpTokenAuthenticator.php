@@ -23,6 +23,10 @@ final class McpTokenAuthenticator extends AbstractAuthenticator
 
     public function supports(Request $request): bool
     {
+        if ('OPTIONS' === $request->getMethod()) {
+            return false;
+        }
+
         return str_starts_with($request->getPathInfo(), '/_mcp');
     }
 
@@ -76,13 +80,28 @@ final class McpTokenAuthenticator extends AbstractAuthenticator
     private function extractToken(Request $request): ?string
     {
         $auth = $request->headers->get('Authorization');
-        if (\is_string($auth) && preg_match('/^Bearer\s+(.+)$/i', $auth, $matches)) {
-            return trim($matches[1]);
+        if (\is_string($auth) && '' !== trim($auth)) {
+            if (preg_match('/^Bearer\s+(.+)$/i', $auth, $matches)) {
+                return trim($matches[1]);
+            }
+
+            // Inspector UIs sometimes send the raw token in Authorization without the Bearer prefix.
+            // Accept it when it looks like an MCP token.
+            if (str_starts_with(trim($auth), 'mcp_')) {
+                return trim($auth);
+            }
         }
 
         $xToken = $request->headers->get('X-MCP-Token');
         if (\is_string($xToken) && '' !== trim($xToken)) {
             return trim($xToken);
+        }
+
+        // Some browser-based Inspector flows open GET streams where custom headers are not reliably forwarded.
+        // Accept token query params as a compatibility fallback for local/dev use.
+        $queryToken = $request->query->get('token') ?? $request->query->get('access_token');
+        if (\is_string($queryToken) && '' !== trim($queryToken)) {
+            return trim($queryToken);
         }
 
         return null;

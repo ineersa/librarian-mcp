@@ -13,7 +13,6 @@ final class VeraIndexingConfigTest extends TestCase
     {
         $config = new VeraIndexingConfig();
         $this->assertSame([], $config->excludePatterns);
-        $this->assertFalse($config->noIgnore);
         $this->assertFalse($config->noDefaultExcludes);
     }
 
@@ -21,23 +20,20 @@ final class VeraIndexingConfigTest extends TestCase
     {
         $data = [
             'excludePatterns' => ['_build/**', '**/*.rst.inc'],
-            'noIgnore' => true,
             'noDefaultExcludes' => true,
         ];
         $config = VeraIndexingConfig::fromArray($data);
 
         $this->assertSame(['_build/**', '**/*.rst.inc'], $config->excludePatterns);
-        $this->assertTrue($config->noIgnore);
         $this->assertTrue($config->noDefaultExcludes);
     }
 
     public function testFromArrayPartial(): void
     {
-        $config = VeraIndexingConfig::fromArray(['noIgnore' => true]);
+        $config = VeraIndexingConfig::fromArray(['noDefaultExcludes' => true]);
 
         $this->assertSame([], $config->excludePatterns);
-        $this->assertTrue($config->noIgnore);
-        $this->assertFalse($config->noDefaultExcludes);
+        $this->assertTrue($config->noDefaultExcludes);
     }
 
     public function testFromArrayEmpty(): void
@@ -45,7 +41,14 @@ final class VeraIndexingConfigTest extends TestCase
         $config = VeraIndexingConfig::fromArray([]);
 
         $this->assertSame([], $config->excludePatterns);
-        $this->assertFalse($config->noIgnore);
+        $this->assertFalse($config->noDefaultExcludes);
+    }
+
+    public function testFromArrayIgnoresLegacyNoIgnore(): void
+    {
+        $config = VeraIndexingConfig::fromArray(['noIgnore' => true]);
+
+        $this->assertSame([], $config->excludePatterns);
         $this->assertFalse($config->noDefaultExcludes);
     }
 
@@ -53,14 +56,12 @@ final class VeraIndexingConfigTest extends TestCase
     {
         $original = new VeraIndexingConfig(
             excludePatterns: ['_build/**'],
-            noIgnore: true,
             noDefaultExcludes: false,
         );
 
         $restored = VeraIndexingConfig::fromArray($original->toArray());
 
         $this->assertSame($original->excludePatterns, $restored->excludePatterns);
-        $this->assertSame($original->noIgnore, $restored->noIgnore);
         $this->assertSame($original->noDefaultExcludes, $restored->noDefaultExcludes);
     }
 

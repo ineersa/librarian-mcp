@@ -2,5 +2,17 @@
 {% extends '@EasyAdmin/crud/field/choice.html.twig' %}
 
 {% block field_value %}
-    <span data-status-badge>{{ parent() }}</span>
+    {% set enumValueExists = field.value is not null and attribute(field.value, 'value', [], 'any', true, true) %}
+    {% set rawStatus = enumValueExists ? attribute(field.value, 'value') : (field.value ?? '') %}
+    {% set status = (rawStatus ~ '')|lower %}
+
+    {% set badgeClasses = {
+        'draft': 'badge badge-secondary',
+        'queued': 'badge badge-warning',
+        'indexing': 'badge badge-info',
+        'ready': 'badge badge-success',
+        'failed': 'badge badge-danger'
+    } %}
+
+    <span data-status-badge class="{{ badgeClasses[status] ?? badgeClasses['draft'] }}">{{ status|title }}</span>
 {% endblock %}

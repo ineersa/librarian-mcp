@@ -7,6 +7,7 @@ services:
       target: frankenphp_dev
     environment:
       APP_ENV: dev
+      APP_DEBUG: '0'
       XDEBUG_MODE: ${XDEBUG_MODE:-off}
       SERVER_NAME: localhost, http://localhost
       MERCURE_URL: http://localhost/.well-known/mercure
@@ -42,8 +43,11 @@ services:
       # The extension creates temp files in /tmp/pcf-tmp*/ which need to be accessible
       # inside the container when running fixer via Docker.
       - /tmp:/tmp:delegated
-      # Vera config (API endpoints overridden by env vars above)
+      # Vera config for both root and non-root users.
+      # - root uses HOME=/root
+      # - dev/messenger tasks run as symfony-dev with HOME=/app
       - ./docker/vera:/root/.vera:delegated
+      - ./docker/vera:/app/.vera:delegated
     ports:
       - "${HTTP_PORT:-8080}:80"
       - "${HTTPS_PORT:-8443}:443"

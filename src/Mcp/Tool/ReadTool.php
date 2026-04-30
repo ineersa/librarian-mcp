@@ -9,7 +9,7 @@ use Mcp\Capability\Attribute\McpTool;
 use Mcp\Schema\Result\CallToolResult;
 use Psr\Log\LoggerInterface;
 
-final readonly class LibrarianReadTool
+final readonly class ReadTool
 {
     public function __construct(
         private ReadyLibraryResolver $readyLibraryResolver,
@@ -19,7 +19,21 @@ final readonly class LibrarianReadTool
     ) {
     }
 
-    #[McpTool(name: 'librarian-read', description: 'Read safe text window from one ready library')]
+    /**
+     * Read a line window from an indexed text file in one ready library.
+     *
+     * @param string $library Ready library slug, e.g. "easycorp/easyadminbundle@5.x"
+     * @param string $file    Relative file path discovered via semantic-search or grep
+     * @param int    $offset  1-based start line (min 1)
+     * @param int    $limit   Number of lines to return (1..2000)
+     */
+    #[McpTool(name: 'read', description: <<<'DESC'
+        Read a text file window from one ready library.
+        Best used after semantic-search or grep to inspect exact matched lines.
+        Returns a line-based slice with line numbers, similar to `sed -n`.
+        Access is sandboxed: only files previously discovered via semantic-search or grep
+        are readable, and the path must stay inside the library repository root.
+        DESC)]
     public function read(string $library, string $file, int $offset = 1, int $limit = 200): CallToolResult
     {
         try {
@@ -31,7 +45,7 @@ final readonly class LibrarianReadTool
             $relativePath = ltrim(str_replace('\\', '/', $file), '/');
 
             if (!isset($target->getReadableFiles()[$relativePath])) {
-                throw new ToolCallException('Requested path is not readable.', false, 'Use librarian-query/librarian-grep first, then request an indexed text file path.');
+                throw new ToolCallException('Requested path is not readable.', false, 'Use semantic-search or grep first, then request an indexed text file path.');
             }
 
             $realPath = realpath($absoluteRoot.'/'.$relativePath);
@@ -68,7 +82,7 @@ final readonly class LibrarianReadTool
             return $this->resultFactory->error($e->getMessage(), $e->retryable, $e->hint);
         } catch (\Throwable $e) {
             $this->logger->error('MCP tool failure', [
-                'tool' => 'librarian-read',
+                'tool' => 'read',
                 'library' => $library,
                 'error' => $e->getMessage(),
                 'retryable' => false,
