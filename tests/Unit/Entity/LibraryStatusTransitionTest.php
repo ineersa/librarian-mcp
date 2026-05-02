@@ -126,13 +126,13 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->syncStarted();
     }
 
-    public function testIndexingCannotMarkQueued(): void
+    public function testIndexingCanBeMarkedQueued(): void
     {
         $library = new Library();
         $library->markQueued();
         $library->syncStarted();
-        $this->expectException(\LogicException::class);
         $library->markQueued();
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testFailedCannotSyncStart(): void

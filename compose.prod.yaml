@@ -31,6 +31,7 @@ x-json-logging: &json-logging
 # Multiline Caddy config; keep in Compose (dotenv is awkward for this block).
 x-caddy-inline-env: &caddy-inline-env
   FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
+  MERCURE_CORS_ORIGINS: ${MERCURE_CORS_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:8093,http://127.0.0.1:8093,http://192.168.2.38,http://192.168.2.38:8093,http://server,http://server:8093}
   MERCURE_EXTRA_DIRECTIVES: |-
     transport bolt {
       path /data/mercure.db

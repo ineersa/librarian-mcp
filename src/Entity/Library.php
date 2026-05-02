@@ -212,7 +212,7 @@ class Library
 
     public function markQueued(): void
     {
-        $this->assertTransition(LibraryStatus::Draft, LibraryStatus::Queued, LibraryStatus::Failed, LibraryStatus::Ready);
+        $this->assertTransition(LibraryStatus::Draft, LibraryStatus::Queued, LibraryStatus::Indexing, LibraryStatus::Failed, LibraryStatus::Ready);
         $this->status = LibraryStatus::Queued;
         $this->touch();
     }
