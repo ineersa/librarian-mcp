@@ -29,6 +29,7 @@ final readonly class SearchLibrariesTool
      */
     #[McpTool(name: 'search-libraries', description: <<<'DESC'
         Find libraries in the catalog that match a query.
+        ALWAYS Include library name in query.
         Returns ready libraries ranked by relevance (DB metadata + semantic match).
         Each result includes slug, description, git URL, last indexed time, and match reason.
         Use the returned slug as the `library` parameter for semantic-search, grep, and read.
