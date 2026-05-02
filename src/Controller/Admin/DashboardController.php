@@ -173,7 +173,10 @@ class DashboardController extends AbstractDashboardController
 
     private function createSearchLibrariesForm(): FormInterface
     {
-        return $this->formFactory->createNamedBuilder('search_libraries')
+        return $this->formFactory->createNamedBuilder('search_libraries', options: [
+            'method' => Request::METHOD_GET,
+            'csrf_protection' => false,
+        ])
             ->add('query', TextareaType::class, [
                 'label' => 'query',
                 'help' => 'Natural-language query (e.g. "symfony docs", "easyadmin", "react router")',
@@ -196,7 +199,10 @@ class DashboardController extends AbstractDashboardController
     /** @param array<string, string> $readyLibraryChoices */
     private function createSemanticSearchForm(array $readyLibraryChoices): FormInterface
     {
-        return $this->formFactory->createNamedBuilder('semantic_search')
+        return $this->formFactory->createNamedBuilder('semantic_search', options: [
+            'method' => Request::METHOD_GET,
+            'csrf_protection' => false,
+        ])
             ->add('library', ChoiceType::class, [
                 'label' => 'library',
                 'help' => 'Ready library slug, e.g. "symfony/symfony-docs@8.0"',
@@ -250,7 +256,10 @@ class DashboardController extends AbstractDashboardController
     /** @param array<string, string> $readyLibraryChoices */
     private function createReadForm(array $readyLibraryChoices): FormInterface
     {
-        return $this->formFactory->createNamedBuilder('read')
+        return $this->formFactory->createNamedBuilder('read', options: [
+            'method' => Request::METHOD_GET,
+            'csrf_protection' => false,
+        ])
             ->add('library', ChoiceType::class, [
                 'label' => 'library',
                 'help' => 'Ready library slug, e.g. "easycorp/easyadminbundle@5.x"',
@@ -283,7 +292,10 @@ class DashboardController extends AbstractDashboardController
     /** @param array<string, string> $readyLibraryChoices */
     private function createGrepForm(array $readyLibraryChoices): FormInterface
     {
-        return $this->formFactory->createNamedBuilder('grep')
+        return $this->formFactory->createNamedBuilder('grep', options: [
+            'method' => Request::METHOD_GET,
+            'csrf_protection' => false,
+        ])
             ->add('library', ChoiceType::class, [
                 'label' => 'library',
                 'help' => 'Ready library slug, e.g. "easycorp/easyadminbundle@5.x"',
