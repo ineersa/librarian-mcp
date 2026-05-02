@@ -10,7 +10,7 @@ use function Castor\run;
 
 const DEV_COMPOSE = 'docker compose';
 const REPORTS_DIR = __DIR__.'/../var/reports';
-const PROD_COMPOSE = 'docker compose -f compose.yaml -f compose.prod.yaml';
+const PROD_COMPOSE = 'docker compose --env-file .env --env-file .env.prod -f compose.yaml -f compose.prod.yaml';
 const PHP_SERVICE = 'php';
 
 function ensure_data_dir(): void
