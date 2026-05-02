@@ -70,3 +70,25 @@
     /* ── User ──────────────────────────────────────────────────────── */
     --user-name-color: #9ca3af;
 }
+
+.ea-dark-scheme .mcp-dashboard-widgets .row > [class*='col-'] {
+    min-width: 0;
+}
+
+.ea-dark-scheme .mcp-widget-card,
+.ea-dark-scheme .mcp-widget-body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ea-dark-scheme .mcp-result {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
