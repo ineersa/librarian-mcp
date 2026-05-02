@@ -14,6 +14,7 @@
         "nyholm/psr7": "^1.8",
         "phpdocumentor/reflection-docblock": "^5.6.7 || ^6.0",
         "phpstan/phpdoc-parser": "^2.3.2",
+        "helgesverre/toon": "^3.1",
         "stof/doctrine-extensions-bundle": "^1.15.3",
         "symfony/asset": "8.0.*",
         "symfony/asset-mapper": "8.0.*",
@@ -116,7 +117,6 @@
     "require-dev": {
         "dama/doctrine-test-bundle": "^8.6",
         "friendsofphp/php-cs-fixer": "^3.95.1",
-        "helgesverre/toon": "^3.1",
         "ineersa/ai-index": "^0.1.2",
         "ineersa/call-graph": "^0.1.5",
         "ineersa/database-extension": "^0.8",
