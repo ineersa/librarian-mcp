@@ -12,12 +12,14 @@ use App\Repository\LibraryRepository;
 use App\Service\LibraryManager;
 use App\Vera\VeraCli;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 final class LibraryManagerTest extends TestCase
 {
     private EntityManagerInterface&MockObject $em;
@@ -46,19 +48,19 @@ final class LibraryManagerTest extends TestCase
     public function testDeriveNameMainBranch(): void
     {
         $name = $this->manager->deriveName('https://github.com/symfony/symfony-docs', 'main');
-        $this->assertSame('symfony/symfony-docs', $name);
+        self::assertSame('symfony/symfony-docs', $name);
     }
 
     public function testDeriveNameNonMainBranch(): void
     {
         $name = $this->manager->deriveName('https://github.com/symfony/symfony-docs', '6.4');
-        $this->assertSame('symfony/symfony-docs@6.4', $name);
+        self::assertSame('symfony/symfony-docs@6.4', $name);
     }
 
     public function testDeriveNameWithGitSuffix(): void
     {
         $name = $this->manager->deriveName('https://github.com/symfony/symfony-docs.git', 'main');
-        $this->assertSame('symfony/symfony-docs', $name);
+        self::assertSame('symfony/symfony-docs', $name);
     }
 
     // --- generateSlug ---
@@ -66,7 +68,7 @@ final class LibraryManagerTest extends TestCase
     public function testGenerateSlug(): void
     {
         $slug = $this->manager->generateSlug('symfony/symfony-docs@6.4');
-        $this->assertSame('symfony/symfony-docs@6.4', $slug);
+        self::assertSame('symfony/symfony-docs@6.4', $slug);
     }
 
     // --- computePath ---
@@ -74,13 +76,13 @@ final class LibraryManagerTest extends TestCase
     public function testComputePath(): void
     {
         $path = $this->manager->computePath('https://github.com/symfony/symfony-docs', 'main');
-        $this->assertSame('symfony/symfony-docs/main', $path);
+        self::assertSame('symfony/symfony-docs/main', $path);
     }
 
     public function testComputePathWithGitSuffix(): void
     {
         $path = $this->manager->computePath('https://github.com/symfony/symfony-docs.git', '6.4');
-        $this->assertSame('symfony/symfony-docs/6.4', $path);
+        self::assertSame('symfony/symfony-docs/6.4', $path);
     }
 
     // --- create ---
@@ -89,15 +91,15 @@ final class LibraryManagerTest extends TestCase
     {
         $this->repository->method('findOneByPath')->willReturn(null);
         $this->repository->method('findOneBySlug')->willReturn(null);
-        $this->em->expects($this->once())->method('persist')
+        $this->em->expects(self::once())->method('persist')
             ->willReturnCallback(static function (Library $lib) {
                 // Simulate Doctrine assigning the ID
                 $ref = new \ReflectionProperty($lib, 'id');
                 $ref->setValue($lib, 1);
             });
         // create() flushes once, then markQueued() flushes once = 2 flush calls
-        $this->em->expects($this->exactly(2))->method('flush');
-        $this->messageBus->expects($this->once())
+        $this->em->expects(self::exactly(2))->method('flush');
+        $this->messageBus->expects(self::once())
             ->method('dispatch')
             ->willReturnCallback(static fn (SyncLibraryMessage $msg) => new Envelope($msg));
 
@@ -108,10 +110,10 @@ final class LibraryManagerTest extends TestCase
 
         $this->manager->create($library);
 
-        $this->assertSame('symfony/symfony-docs', $library->getName());
-        $this->assertSame('symfony/symfony-docs', $library->getSlug());
-        $this->assertSame('symfony/symfony-docs/main', $library->getPath());
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame('symfony/symfony-docs', $library->getName());
+        self::assertSame('symfony/symfony-docs', $library->getSlug());
+        self::assertSame('symfony/symfony-docs/main', $library->getPath());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testCreatePreservesUserOverrides(): void
@@ -119,8 +121,8 @@ final class LibraryManagerTest extends TestCase
         $this->repository->method('findOneByPath')->willReturn(null);
         $this->repository->method('findOneBySlug')->willReturn(null);
         // create() flushes once, then markQueued() flushes once = 2 flush calls
-        $this->em->expects($this->exactly(2))->method('flush');
-        $this->messageBus->expects($this->once())
+        $this->em->expects(self::exactly(2))->method('flush');
+        $this->messageBus->expects(self::once())
             ->method('dispatch')
             ->willReturnCallback(static fn (SyncLibraryMessage $msg) => new Envelope($msg));
 
@@ -137,8 +139,8 @@ final class LibraryManagerTest extends TestCase
 
         $this->manager->create($library);
 
-        $this->assertSame('My Custom Name', $library->getName());
-        $this->assertSame('custom-slug', $library->getSlug());
+        self::assertSame('My Custom Name', $library->getName());
+        self::assertSame('custom-slug', $library->getSlug());
     }
 
     public function testCreateRejectsDuplicatePath(): void
@@ -175,14 +177,14 @@ final class LibraryManagerTest extends TestCase
         $ref = new \ReflectionProperty($library, 'id');
         $ref->setValue($library, 42);
 
-        $this->em->expects($this->once())->method('flush');
-        $this->messageBus->expects($this->once())
+        $this->em->expects(self::once())->method('flush');
+        $this->messageBus->expects(self::once())
             ->method('dispatch')
-            ->with($this->isInstanceOf(SyncLibraryMessage::class))
+            ->with(self::isInstanceOf(SyncLibraryMessage::class))
             ->willReturnCallback(static fn (SyncLibraryMessage $msg) => new Envelope($msg));
 
         $this->manager->markQueued($library);
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     // --- getAbsolutePath ---
@@ -192,6 +194,6 @@ final class LibraryManagerTest extends TestCase
         $library = new Library();
         $library->initializePath('symfony/symfony-docs/main');
 
-        $this->assertSame('/app/data/libraries/symfony/symfony-docs/main', $this->manager->getAbsolutePath($library));
+        self::assertSame('/app/data/libraries/symfony/symfony-docs/main', $this->manager->getAbsolutePath($library));
     }
 }

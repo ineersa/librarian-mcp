@@ -18,7 +18,7 @@ class Library
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    private ?int $id = null;
+    public private(set) ?int $id = null;
 
     #[Assert\Length(max: 255)]
     #[ORM\Column(type: 'string', length: 255)]

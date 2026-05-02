@@ -10,4 +10,5 @@ mcp:
         path: '/_mcp'
         session:
             store: file
+            directory: '%kernel.project_dir%/var/mcp-sessions'
             ttl: 3600

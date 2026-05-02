@@ -73,7 +73,7 @@ final class McpHttpServerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         $sessionId = $client->getResponse()->headers->get('Mcp-Session-Id');
-        $this->assertNotNull($sessionId);
+        self::assertNotNull($sessionId);
 
         $client->request('POST', '/_mcp', server: [
             'CONTENT_TYPE' => 'application/json',
@@ -86,9 +86,9 @@ final class McpHttpServerTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseIsSuccessful();
-        $this->assertStringContainsString('search-libraries', $client->getResponse()->getContent());
-        $this->assertStringContainsString('semantic-search', $client->getResponse()->getContent());
-        $this->assertStringContainsString('read', $client->getResponse()->getContent());
-        $this->assertStringContainsString('grep', $client->getResponse()->getContent());
+        self::assertStringContainsString('search-libraries', $client->getResponse()->getContent());
+        self::assertStringContainsString('semantic-search', $client->getResponse()->getContent());
+        self::assertStringContainsString('read', $client->getResponse()->getContent());
+        self::assertStringContainsString('grep', $client->getResponse()->getContent());
     }
 }

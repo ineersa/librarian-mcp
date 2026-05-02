@@ -66,7 +66,7 @@ final class UserCrudTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         // The admin user should appear in the table
-        $this->assertStringContainsString(self::ADMIN_EMAIL, $crawler->filter('table')->text());
+        self::assertStringContainsString(self::ADMIN_EMAIL, $crawler->filter('table')->text());
     }
 
     public function testUserCreatePageLoads(): void
@@ -93,6 +93,6 @@ final class UserCrudTest extends WebTestCase
         $client->request('GET', '/admin/users/'.$admin->id);
 
         self::assertResponseIsSuccessful();
-        $this->assertStringContainsString(self::ADMIN_EMAIL, $client->getResponse()->getContent());
+        self::assertStringContainsString(self::ADMIN_EMAIL, $client->getResponse()->getContent());
     }
 }

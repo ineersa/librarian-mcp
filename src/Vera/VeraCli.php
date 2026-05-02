@@ -127,7 +127,7 @@ class VeraCli
 
         $args = [$this->veraBinary, 'grep', $pattern, '--json'];
 
-        if (!empty($filters['ignoreCase'])) {
+        if (true === ($filters['ignoreCase'] ?? false)) {
             $args[] = '--ignore-case';
         }
 
@@ -273,7 +273,7 @@ class VeraCli
             // Some vera operations discover .gitignore/.vera from CWD,
             // and must literally be cd'd into before execution.
             $shellCmd = implode(' ', array_map('escapeshellarg', $command));
-            $command = ['bash', '-c', sprintf(
+            $command = ['bash', '-c', \sprintf(
                 'cd %s && %s',
                 escapeshellarg($workingDirectory),
                 $shellCmd,

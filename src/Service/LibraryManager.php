@@ -62,9 +62,10 @@ class LibraryManager
      */
     public function getAbsolutePath(Library $library): string
     {
-        if (empty($this->projectDir)) {
+        if ('' === trim($this->projectDir)) {
             throw new \LogicException('Project dir is empty, abort!');
         }
+
         return rtrim($this->projectDir, '/').'/'.$this->libraryDataDir.'/libraries/'.$library->getPath();
     }
 

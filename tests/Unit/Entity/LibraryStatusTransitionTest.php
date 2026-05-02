@@ -13,7 +13,7 @@ final class LibraryStatusTransitionTest extends TestCase
     public function testInitialStateIsDraft(): void
     {
         $library = new Library();
-        $this->assertSame(LibraryStatus::Draft, $library->getStatus());
+        self::assertSame(LibraryStatus::Draft, $library->getStatus());
     }
 
     // --- Allowed transitions ---
@@ -22,7 +22,7 @@ final class LibraryStatusTransitionTest extends TestCase
     {
         $library = new Library();
         $library->markQueued();
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testQueuedToIndexing(): void
@@ -30,7 +30,7 @@ final class LibraryStatusTransitionTest extends TestCase
         $library = new Library();
         $library->markQueued();
         $library->syncStarted();
-        $this->assertSame(LibraryStatus::Indexing, $library->getStatus());
+        self::assertSame(LibraryStatus::Indexing, $library->getStatus());
     }
 
     public function testIndexingToReady(): void
@@ -39,9 +39,9 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->markQueued();
         $library->syncStarted();
         $library->syncSucceeded();
-        $this->assertSame(LibraryStatus::Ready, $library->getStatus());
-        $this->assertNotNull($library->getLastSyncedAt());
-        $this->assertNotNull($library->getLastIndexedAt());
+        self::assertSame(LibraryStatus::Ready, $library->getStatus());
+        self::assertNotNull($library->getLastSyncedAt());
+        self::assertNotNull($library->getLastIndexedAt());
     }
 
     public function testIndexingToFailed(): void
@@ -50,8 +50,8 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->markQueued();
         $library->syncStarted();
         $library->syncFailed('out of disk');
-        $this->assertSame(LibraryStatus::Failed, $library->getStatus());
-        $this->assertSame('out of disk', $library->getLastError());
+        self::assertSame(LibraryStatus::Failed, $library->getStatus());
+        self::assertSame('out of disk', $library->getLastError());
     }
 
     public function testFailedToQueued(): void
@@ -61,7 +61,7 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->syncStarted();
         $library->syncFailed('timeout');
         $library->markQueued();
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     // --- Disallowed transitions ---
@@ -100,15 +100,15 @@ final class LibraryStatusTransitionTest extends TestCase
         $library = new Library();
         $library->markQueued();
         $library->syncFailed('error');
-        $this->assertSame(LibraryStatus::Failed, $library->getStatus());
-        $this->assertSame('error', $library->getLastError());
+        self::assertSame(LibraryStatus::Failed, $library->getStatus());
+        self::assertSame('error', $library->getLastError());
     }
 
     public function testReadyCanBeMarkedQueuedForResync(): void
     {
         $library = $this->createReadyLibrary();
         $library->markQueued();
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testQueuedCanBeRequeued(): void
@@ -116,7 +116,7 @@ final class LibraryStatusTransitionTest extends TestCase
         $library = new Library();
         $library->markQueued();
         $library->markQueued(); // re-queue stuck library
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
     }
 
     public function testReadyCannotSyncStart(): void
@@ -153,12 +153,12 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->markQueued();
         $library->syncStarted();
         $library->syncFailed('some error');
-        $this->assertSame('some error', $library->getLastError());
+        self::assertSame('some error', $library->getLastError());
 
         $library->markQueued();
         $library->syncStarted();
         $library->syncSucceeded();
-        $this->assertNull($library->getLastError());
+        self::assertNull($library->getLastError());
     }
 
     public function testSyncFailedTruncatesErrorTo2000Chars(): void
@@ -169,7 +169,7 @@ final class LibraryStatusTransitionTest extends TestCase
 
         $longError = str_repeat('x', 3000);
         $library->syncFailed($longError);
-        $this->assertSame(2000, \strlen($library->getLastError() ?? ''));
+        self::assertSame(2000, \strlen($library->getLastError() ?? ''));
     }
 
     public function testSyncStartedClearsLastError(): void
@@ -181,7 +181,7 @@ final class LibraryStatusTransitionTest extends TestCase
         $library->markQueued();
 
         $library->syncStarted();
-        $this->assertNull($library->getLastError());
+        self::assertNull($library->getLastError());
     }
 
     public function testTouchUpdatesUpdatedAt(): void
@@ -190,7 +190,7 @@ final class LibraryStatusTransitionTest extends TestCase
         $before = $library->getUpdatedAt();
         usleep(1000); // 1ms
         $library->touch();
-        $this->assertGreaterThan($before, $library->getUpdatedAt());
+        self::assertGreaterThan($before, $library->getUpdatedAt());
     }
 
     public function testInitializePathIsImmutable(): void

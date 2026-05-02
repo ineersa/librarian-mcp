@@ -1,4 +1,4 @@
 framework:
     messenger:
         transports:
-            async: 'test://'
+            async: 'test://?support_delay_stamp=true'

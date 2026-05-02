@@ -10,7 +10,7 @@ return (new PhpCsFixer\Config())
         '@Symfony:risky' => true,
         'protected_to_private' => false,
         'declare_strict_types' => true,
-        'php_unit_test_case_static_method_calls' => ['call_type' => 'this'],
+        'php_unit_test_case_static_method_calls' => ['call_type' => 'self'],
         'ordered_class_elements' => [
             'order' => [
                 'use_trait',

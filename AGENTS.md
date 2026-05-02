@@ -52,6 +52,7 @@ Examples:
 - Prefer Tailwind utility classes over adding custom CSS rules.
 - Add custom CSS only when utilities are not enough, and keep it in `assets/styles/app.css`.
 - Keep tests deterministic: prefer static assertions and fixed inputs (avoid time/random/network dependent assertions).
+- In PHPUnit tests, call assertion helpers statically (`self::assertSame()`, `self::assertTrue()`, etc.) — never via `$this->assert*()`.
 - Prefer **application tests** (`WebTestCase`) over unit tests. Use unit tests only when needed (e.g., validation rules, pure domain logic).
 - Use `WebTestCase` for HTTP behavior and assert response status + key page content.
 - For infrastructure operations, use Castor tasks (`castor ...`); when adding or changing those tasks, follow the `castor` skill.
@@ -59,6 +60,8 @@ Examples:
 - For Mate operations not covered by a generated Castor task, fall back to `mate/mate-tool-call.sh <tool-name> '<json-input>'`.
 - Never call `docker compose exec ... vendor/bin/mate` directly.
 - Never run Composer or PHP on the host for project operations.
+- **Never run `asset-map:compile` in dev.** It is a production-only command that writes stale static files to `public/assets/`, which shadow AssetMapper's dynamic serving and hide all CSS/JS changes until you delete them. In dev, AssetMapper serves assets live — no compile step needed.
+- **Never `rm -rf public/` subdirectories blindly.** Only `public/assets/` is safe to delete (it's gitignored compiled output from `asset-map:compile`). `public/bundles/` (symlinked by `assets:install`), `public/css/` (may contain committed source files like EasyAdmin overrides), and other `public/` entries are source files — deleting them breaks the app. When in doubt, check git status before deleting.
 
 ## Docker setup
 

@@ -73,8 +73,8 @@ final class SyncLibraryTest extends WebTestCase
 
         // Verify the dispatched message has the correct libraryId
         $messages = $transport->queue()->messages(SyncLibraryMessage::class);
-        $this->assertCount(1, $messages);
-        $this->assertSame($library->getId(), $messages[0]->libraryId);
+        self::assertCount(1, $messages);
+        self::assertSame($library->getId(), $messages[0]->libraryId);
 
         // Process the message — this runs the handler (clone + vera index)
         $transport->process();
@@ -86,15 +86,15 @@ final class SyncLibraryTest extends WebTestCase
         $this->em->clear();
         $refreshed = $this->em->getRepository(Library::class)->find($library->getId());
 
-        $this->assertNotNull($refreshed);
-        $this->assertSame(LibraryStatus::Ready, $refreshed->getStatus());
-        $this->assertNotNull($refreshed->getLastSyncedAt());
-        $this->assertNotNull($refreshed->getLastIndexedAt());
-        $this->assertNull($refreshed->getLastError());
+        self::assertNotNull($refreshed);
+        self::assertSame(LibraryStatus::Ready, $refreshed->getStatus());
+        self::assertNotNull($refreshed->getLastSyncedAt());
+        self::assertNotNull($refreshed->getLastIndexedAt());
+        self::assertNull($refreshed->getLastError());
 
         // Assert repo exists on disk
         $absPath = self::getContainer()->getParameter('kernel.project_dir').'/data/libraries/zenstruck/messenger-test/1.x';
-        $this->assertDirectoryExists($absPath.'/.git');
+        self::assertDirectoryExists($absPath.'/.git');
     }
 
     /**
@@ -122,10 +122,10 @@ final class SyncLibraryTest extends WebTestCase
         $this->em->clear();
         $refreshed = $this->em->getRepository(Library::class)->find($library->getId());
 
-        $this->assertNotNull($refreshed);
-        $this->assertSame(LibraryStatus::Failed, $refreshed->getStatus());
-        $this->assertNotNull($refreshed->getLastError());
-        $this->assertStringContainsString('git', $refreshed->getLastError());
+        self::assertNotNull($refreshed);
+        self::assertSame(LibraryStatus::Failed, $refreshed->getStatus());
+        self::assertNotNull($refreshed->getLastError());
+        self::assertStringContainsString('git', $refreshed->getLastError());
     }
 
     /**
@@ -141,7 +141,7 @@ final class SyncLibraryTest extends WebTestCase
         );
 
         // Library should be in Queued status (set by markQueued in create())
-        $this->assertSame(LibraryStatus::Queued, $library->getStatus());
+        self::assertSame(LibraryStatus::Queued, $library->getStatus());
 
         // Message should be on the transport
         $transport = $this->transport('async');
@@ -183,7 +183,7 @@ final class SyncLibraryTest extends WebTestCase
         $this->em->clear();
         $refreshed = $this->em->getRepository(Library::class)->find($library->getId());
 
-        $this->assertSame(LibraryStatus::Indexing, $refreshed->getStatus());
+        self::assertSame(LibraryStatus::Indexing, $refreshed->getStatus());
     }
 
     private function createLibrary(

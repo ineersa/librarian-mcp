@@ -22,8 +22,8 @@ use Mcp\Schema\Result\CallToolResult;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
-use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -166,7 +166,7 @@ class DashboardController extends AbstractDashboardController
         $choices = [];
 
         foreach ($readyLibraries as $library) {
-            $choices[sprintf('%s (%s)', $library->getName(), $library->getSlug())] = $library->getSlug();
+            $choices[\sprintf('%s (%s)', $library->getName(), $library->getSlug())] = $library->getSlug();
         }
 
         return $choices;

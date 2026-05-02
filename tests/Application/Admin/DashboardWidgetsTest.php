@@ -67,21 +67,22 @@ final class DashboardWidgetsTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
 
-        $content = $client->getResponse()->getContent() ?: '';
-        $this->assertStringContainsString('search-libraries', $content);
-        $this->assertStringContainsString('semantic-search', $content);
-        $this->assertStringContainsString('read', $content);
-        $this->assertStringContainsString('grep', $content);
+        $content = $client->getResponse()->getContent();
+        $content = false !== $content ? $content : '';
+        self::assertStringContainsString('search-libraries', $content);
+        self::assertStringContainsString('semantic-search', $content);
+        self::assertStringContainsString('read', $content);
+        self::assertStringContainsString('grep', $content);
 
-        $this->assertStringContainsString('Natural-language query', $content);
-        $this->assertStringContainsString('Optional symbol-type filter', $content);
-        $this->assertStringContainsString('Context lines before/after each match', $content);
+        self::assertStringContainsString('Natural-language query', $content);
+        self::assertStringContainsString('Optional symbol-type filter', $content);
+        self::assertStringContainsString('Context lines before/after each match', $content);
 
-        $this->assertGreaterThan(0, $crawler->filter('select[name="semantic_search[type]"]')->count());
-        $this->assertGreaterThan(0, $crawler->filter('select[name="semantic_search[scope]"]')->count());
-        $this->assertGreaterThan(0, $crawler->filter('select[name="grep[scope]"]')->count());
+        self::assertGreaterThan(0, $crawler->filter('select[name="semantic_search[type]"]')->count());
+        self::assertGreaterThan(0, $crawler->filter('select[name="semantic_search[scope]"]')->count());
+        self::assertGreaterThan(0, $crawler->filter('select[name="grep[scope]"]')->count());
 
         // Ready library should be available in select widgets.
-        $this->assertStringContainsString('symfony/symfony-docs@8.0', $content);
+        self::assertStringContainsString('symfony/symfony-docs@8.0', $content);
     }
 }

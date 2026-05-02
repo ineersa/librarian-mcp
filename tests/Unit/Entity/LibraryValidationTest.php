@@ -28,7 +28,7 @@ final class LibraryValidationTest extends TestCase
         $library->setGitUrl('https://github.com/symfony/symfony-docs');
 
         $violations = $this->validator->validateProperty($library, 'gitUrl');
-        $this->assertCount(0, $violations);
+        self::assertCount(0, $violations);
     }
 
     public function testGitUrlValidWithGitSuffix(): void
@@ -37,7 +37,7 @@ final class LibraryValidationTest extends TestCase
         $library->setGitUrl('https://github.com/symfony/symfony-docs.git');
 
         $violations = $this->validator->validateProperty($library, 'gitUrl');
-        $this->assertCount(0, $violations);
+        self::assertCount(0, $violations);
     }
 
     public function testGitUrlRejectsEmpty(): void
@@ -46,7 +46,7 @@ final class LibraryValidationTest extends TestCase
         $library->setGitUrl('');
 
         $violations = $this->validator->validateProperty($library, 'gitUrl');
-        $this->assertGreaterThanOrEqual(1, $violations->count());
+        self::assertGreaterThanOrEqual(1, $violations->count());
     }
 
     public function testGitUrlRejectsHttp(): void
@@ -55,7 +55,7 @@ final class LibraryValidationTest extends TestCase
         $library->setGitUrl('http://github.com/symfony/symfony-docs');
 
         $violations = $this->validator->validateProperty($library, 'gitUrl');
-        $this->assertGreaterThanOrEqual(1, $violations->count());
+        self::assertGreaterThanOrEqual(1, $violations->count());
     }
 
     public function testGitUrlRejectsSsh(): void
@@ -64,7 +64,7 @@ final class LibraryValidationTest extends TestCase
         $library->setGitUrl('git@github.com:symfony/symfony-docs.git');
 
         $violations = $this->validator->validateProperty($library, 'gitUrl');
-        $this->assertGreaterThanOrEqual(1, $violations->count());
+        self::assertGreaterThanOrEqual(1, $violations->count());
     }
 
     public function testGitUrlRejectsNonGithub(): void
@@ -73,7 +73,7 @@ final class LibraryValidationTest extends TestCase
         $library->setGitUrl('https://gitlab.com/symfony/symfony-docs');
 
         $violations = $this->validator->validateProperty($library, 'gitUrl');
-        $this->assertGreaterThanOrEqual(1, $violations->count());
+        self::assertGreaterThanOrEqual(1, $violations->count());
     }
 
     // --- branch validation ---
@@ -84,7 +84,7 @@ final class LibraryValidationTest extends TestCase
         $library->setBranch('');
 
         $violations = $this->validator->validateProperty($library, 'branch');
-        $this->assertGreaterThanOrEqual(1, $violations->count());
+        self::assertGreaterThanOrEqual(1, $violations->count());
     }
 
     public function testBranchAcceptsMain(): void
@@ -93,7 +93,7 @@ final class LibraryValidationTest extends TestCase
         $library->setBranch('main');
 
         $violations = $this->validator->validateProperty($library, 'branch');
-        $this->assertCount(0, $violations);
+        self::assertCount(0, $violations);
     }
 
     // --- name validation ---
@@ -104,7 +104,7 @@ final class LibraryValidationTest extends TestCase
         $library->setName('');
 
         $violations = $this->validator->validateProperty($library, 'name');
-        $this->assertCount(0, $violations);
+        self::assertCount(0, $violations);
     }
 
     // --- slug validation ---
@@ -115,7 +115,7 @@ final class LibraryValidationTest extends TestCase
         $library->setSlug('');
 
         $violations = $this->validator->validateProperty($library, 'slug');
-        $this->assertCount(0, $violations);
+        self::assertCount(0, $violations);
     }
 
     // --- description validation ---
@@ -126,7 +126,7 @@ final class LibraryValidationTest extends TestCase
         $library->setDescription('');
 
         $violations = $this->validator->validateProperty($library, 'description');
-        $this->assertGreaterThanOrEqual(1, $violations->count());
+        self::assertGreaterThanOrEqual(1, $violations->count());
     }
 
     private function createValidLibrary(): Library

@@ -24,13 +24,6 @@ class MessengerFailedSubscriber implements EventSubscriberInterface
 {
     private const MERCURE_TOPIC = 'https://librarian-mcp.local/topics/libraries';
 
-    public static function getSubscribedEvents(): array
-    {
-        return [
-            WorkerMessageFailedEvent::class => 'onMessageFailed',
-        ];
-    }
-
     public function __construct(
         private readonly LibraryRepository $repository,
         private readonly EntityManagerInterface $em,
@@ -38,6 +31,13 @@ class MessengerFailedSubscriber implements EventSubscriberInterface
         private readonly LibraryMetadataCorpus $metadataCorpus,
         private readonly LoggerInterface $logger,
     ) {
+    }
+
+    public static function getSubscribedEvents(): array
+    {
+        return [
+            WorkerMessageFailedEvent::class => 'onMessageFailed',
+        ];
     }
 
     public function onMessageFailed(WorkerMessageFailedEvent $event): void

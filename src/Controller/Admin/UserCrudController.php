@@ -119,6 +119,9 @@ class UserCrudController extends AbstractCrudController
         parent::updateEntity($entityManager, $entityInstance);
     }
 
+    /**
+     * @param \EasyCorp\Bundle\EasyAdminBundle\Context\AdminContext<User> $context
+     */
     #[AdminRoute(path: '/{entityId}/regenerate-mcp-token', name: 'regenerate-mcp-token')]
     public function regenerateMcpToken(\EasyCorp\Bundle\EasyAdminBundle\Context\AdminContext $context, \EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator $urlGenerator): \Symfony\Component\HttpFoundation\RedirectResponse
     {

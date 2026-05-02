@@ -327,8 +327,8 @@ function test(): void
 
     $junitPath = report_path('phpunit.junit.xml');
     $command = \sprintf(
-        'vendor/bin/phpunit --colors=never --no-progress --no-results --log-junit %s',
-        escapeshellarg($junitPath)
+        'docker compose exec -u $(id -u):$(id -g) php sh -lc %s',
+        escapeshellarg('vendor/bin/phpunit --colors=never --no-progress --no-results --log-junit /app/var/reports/phpunit.junit.xml')
     );
 
     $process = run_quiet_command($command);

@@ -1,2 +1,18 @@
 parameters:
-    ignoreErrors: []
+    ignoreErrors:
+        - message: '#^Unused App\\Command\\CreateAdminCommand::(configure|execute)$#'
+          path: src/Command/CreateAdminCommand.php
+        - message: '#^Unused App\\Controller\\Admin\\LibraryCrudController::(syncLibrary|overviewLibrary)$#'
+          path: src/Controller/Admin/LibraryCrudController.php
+        - message: '#^Unused App\\Controller\\Admin\\UserCrudController::regenerateMcpToken$#'
+          path: src/Controller/Admin/UserCrudController.php
+        - message: '#^Unused App\\Entity\\Library::(setGitUrl|setDescription|getLastError|getLastSyncedAt|getCreatedAt|getUpdatedAt)(?: \(all usages excluded by tests excluder\))?$#'
+          path: src/Entity/Library.php
+        - message: '#^Unused App\\Entity\\User::getMaskedMcpToken$#'
+          path: src/Entity/User.php
+        - message: '#^Unused App\\EventSubscriber\\MessengerFailedSubscriber::getSubscribedEvents$#'
+          path: src/EventSubscriber/MessengerFailedSubscriber.php
+        - message: '#^Unused App\\Security\\McpTokenAuthenticator::start$#'
+          path: src/Security/McpTokenAuthenticator.php
+        - message: '#^Unused App\\Vera\\Command\\VeraCheckCommand::execute$#'
+          path: src/Vera/Command/VeraCheckCommand.php

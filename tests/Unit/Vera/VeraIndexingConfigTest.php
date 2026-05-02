@@ -12,8 +12,8 @@ final class VeraIndexingConfigTest extends TestCase
     public function testDefaults(): void
     {
         $config = new VeraIndexingConfig();
-        $this->assertSame([], $config->excludePatterns);
-        $this->assertFalse($config->noDefaultExcludes);
+        self::assertSame([], $config->excludePatterns);
+        self::assertFalse($config->noDefaultExcludes);
     }
 
     public function testFromArrayFull(): void
@@ -24,32 +24,32 @@ final class VeraIndexingConfigTest extends TestCase
         ];
         $config = VeraIndexingConfig::fromArray($data);
 
-        $this->assertSame(['_build/**', '**/*.rst.inc'], $config->excludePatterns);
-        $this->assertTrue($config->noDefaultExcludes);
+        self::assertSame(['_build/**', '**/*.rst.inc'], $config->excludePatterns);
+        self::assertTrue($config->noDefaultExcludes);
     }
 
     public function testFromArrayPartial(): void
     {
         $config = VeraIndexingConfig::fromArray(['noDefaultExcludes' => true]);
 
-        $this->assertSame([], $config->excludePatterns);
-        $this->assertTrue($config->noDefaultExcludes);
+        self::assertSame([], $config->excludePatterns);
+        self::assertTrue($config->noDefaultExcludes);
     }
 
     public function testFromArrayEmpty(): void
     {
         $config = VeraIndexingConfig::fromArray([]);
 
-        $this->assertSame([], $config->excludePatterns);
-        $this->assertFalse($config->noDefaultExcludes);
+        self::assertSame([], $config->excludePatterns);
+        self::assertFalse($config->noDefaultExcludes);
     }
 
     public function testFromArrayIgnoresLegacyNoIgnore(): void
     {
         $config = VeraIndexingConfig::fromArray(['noIgnore' => true]);
 
-        $this->assertSame([], $config->excludePatterns);
-        $this->assertFalse($config->noDefaultExcludes);
+        self::assertSame([], $config->excludePatterns);
+        self::assertFalse($config->noDefaultExcludes);
     }
 
     public function testToArrayRoundTrip(): void
@@ -61,8 +61,8 @@ final class VeraIndexingConfigTest extends TestCase
 
         $restored = VeraIndexingConfig::fromArray($original->toArray());
 
-        $this->assertSame($original->excludePatterns, $restored->excludePatterns);
-        $this->assertSame($original->noDefaultExcludes, $restored->noDefaultExcludes);
+        self::assertSame($original->excludePatterns, $restored->excludePatterns);
+        self::assertSame($original->noDefaultExcludes, $restored->noDefaultExcludes);
     }
 
     public function testIsReadonly(): void
@@ -70,6 +70,6 @@ final class VeraIndexingConfigTest extends TestCase
         $config = new VeraIndexingConfig();
         // readonly class — all properties are immutable
         $reflection = new \ReflectionClass($config);
-        $this->assertTrue($reflection->isReadOnly());
+        self::assertTrue($reflection->isReadOnly());
     }
 }

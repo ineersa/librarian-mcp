@@ -90,7 +90,7 @@ final class LibraryCrudTest extends WebTestCase
         $client->request('GET', '/admin/libraries/'.$library->getId());
 
         self::assertResponseIsSuccessful();
-        $this->assertStringContainsString('test/library', $client->getResponse()->getContent());
+        self::assertStringContainsString('test/library', $client->getResponse()->getContent());
     }
 
     public function testLibraryIndexListsExistingLibrary(): void
@@ -114,7 +114,7 @@ final class LibraryCrudTest extends WebTestCase
         $crawler = $client->request('GET', '/admin/libraries');
 
         self::assertResponseIsSuccessful();
-        $this->assertStringContainsString('symfony/symfony-docs', $crawler->filter('table')->text());
+        self::assertStringContainsString('symfony/symfony-docs', $crawler->filter('table')->text());
     }
 
     public function testLibraryCrudRequiresAdminAuth(): void
@@ -150,7 +150,7 @@ final class LibraryCrudTest extends WebTestCase
 
         // Reload and check status
         $refreshed = $em->getRepository(Library::class)->find($library->getId());
-        $this->assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
+        self::assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
     }
 
     public function testSyncNowOnFailedLibrarySetsStatusToQueued(): void
@@ -182,7 +182,7 @@ final class LibraryCrudTest extends WebTestCase
         self::assertResponseRedirects();
 
         $refreshed = $em->getRepository(Library::class)->find($library->getId());
-        $this->assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
+        self::assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
     }
 
     public function testSyncNowOnReadyLibrarySetsStatusToQueued(): void
@@ -214,7 +214,7 @@ final class LibraryCrudTest extends WebTestCase
         self::assertResponseRedirects();
 
         $refreshed = $em->getRepository(Library::class)->find($library->getId());
-        $this->assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
+        self::assertSame(\App\Entity\LibraryStatus::Queued, $refreshed->getStatus());
     }
 
     public function testLibrarySearchByName(): void
@@ -248,7 +248,7 @@ final class LibraryCrudTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         $tableText = $crawler->filter('table')->text();
-        $this->assertStringContainsString('symfony/symfony-docs', $tableText);
-        $this->assertStringNotContainsString('laravel/docs', $tableText);
+        self::assertStringContainsString('symfony/symfony-docs', $tableText);
+        self::assertStringNotContainsString('laravel/docs', $tableText);
     }
 }

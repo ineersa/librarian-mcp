@@ -123,7 +123,7 @@ class LibraryCrudController extends AbstractCrudController
         yield BooleanField::new('noDefaultExcludes', 'No Default Excludes')
             ->onlyOnForms()
             ->setFormTypeOption('mapped', false)
-            ->setFormTypeOption('data', $formVeraConfig?->noDefaultExcludes ?? false)
+            ->setFormTypeOption('data', null !== $formVeraConfig ? $formVeraConfig->noDefaultExcludes : false)
             ->setFormTypeOption('help_html', true)
             ->setHelp($this->buildNoDefaultExcludesHelp($pageName));
 
@@ -157,7 +157,7 @@ class LibraryCrudController extends AbstractCrudController
                     return 'Run the "Overview" action to fetch vera overview JSON for this library.';
                 }
 
-                $key = $this->buildOverviewSessionKey((int) $library->getId());
+                $key = $this->buildOverviewSessionKey($library->getId());
                 $overview = $session->get($key);
 
                 return \is_string($overview) && '' !== $overview
@@ -228,6 +228,8 @@ class LibraryCrudController extends AbstractCrudController
 
     /**
      * Custom action: dispatch sync message and set status to queued.
+     *
+     * @param AdminContext<Library> $context
      */
     #[AdminRoute(path: '/{entityId}/sync', name: 'sync')]
     public function syncLibrary(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
@@ -252,6 +254,8 @@ class LibraryCrudController extends AbstractCrudController
 
     /**
      * Custom action: run `vera overview --json` for this library and show result on detail page.
+     *
+     * @param AdminContext<Library> $context
      */
     #[AdminRoute(path: '/{entityId}/overview', name: 'overview')]
     public function overviewLibrary(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
@@ -265,7 +269,7 @@ class LibraryCrudController extends AbstractCrudController
 
             $libraryId = $library->getId();
             if (null !== $libraryId) {
-                $context->getRequest()->getSession()->set($this->buildOverviewSessionKey((int) $libraryId), $json);
+                $context->getRequest()->getSession()->set($this->buildOverviewSessionKey($libraryId), $json);
             }
 
             $this->addFlash('success', 'Vera overview fetched successfully.');
@@ -351,6 +355,6 @@ class LibraryCrudController extends AbstractCrudController
 
     private function buildOverviewSessionKey(int $libraryId): string
     {
-        return sprintf('admin.library.vera_overview.%d', $libraryId);
+        return \sprintf('admin.library.vera_overview.%d', $libraryId);
     }
 }
