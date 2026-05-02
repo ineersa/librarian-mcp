@@ -19,7 +19,7 @@
         subscriber_jwt {env.MERCURE_SUBSCRIBER_JWT_KEY} {env.MERCURE_SUBSCRIBER_JWT_ALG}
         anonymous
         subscriptions
-        cors_origins {$MERCURE_CORS_ORIGINS:http://localhost,http://127.0.0.1,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8093,http://127.0.0.1:8093,http://192.168.2.38,http://192.168.2.38:8093,http://server,http://server:8093}
+        cors_origins {$MERCURE_CORS_ORIGINS}
         {$MERCURE_EXTRA_DIRECTIVES}
     }
 

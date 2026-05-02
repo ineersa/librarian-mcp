@@ -12,7 +12,7 @@ services:
       SERVER_NAME: localhost, http://localhost
       MERCURE_URL: http://localhost/.well-known/mercure
       MERCURE_PUBLIC_URL: http://localhost:${HTTP_PORT:-8080}/.well-known/mercure
-      MERCURE_CORS_ORIGINS: ${MERCURE_CORS_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:8080,http://127.0.0.1:8080,http://192.168.2.38,http://192.168.2.38:8080,http://server,http://server:8080}
+      MERCURE_CORS_ORIGINS: "${MERCURE_CORS_ORIGINS:-http://localhost http://127.0.0.1 http://localhost:8080 http://127.0.0.1:8080 http://192.168.2.38 http://192.168.2.38:8080 http://server http://server:8080}"
       MERCURE_JWT_SECRET: ${MERCURE_PUBLISHER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
       MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_PUBLISHER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
       MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_SUBSCRIBER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
