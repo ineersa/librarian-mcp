@@ -33,3 +33,65 @@ body {
 code, pre, kbd, samp, tt, .font-mono {
     font-family: var(--font-mono);
 }
+
+/* EasyAdmin theme overrides */
+.ea-dark-scheme {
+    --font-family-sans-serif: 'Space Grotesk', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    --font-family-base: var(--font-family-sans-serif);
+    --blue-400: #60a5fa;
+    --blue-500: #60a5fa;
+    --blue-800: #1e3a5f;
+    --color-primary: #60a5fa;
+    --body-bg: #0a0a0a;
+    --sidebar-bg: #101010;
+    --sidebar-border-color: #222;
+    --sidebar-logo-color: #e8edf7;
+    --sidebar-menu-color: #9ca3af;
+    --sidebar-menu-header-color: #6b7280;
+    --sidebar-menu-icon-color: #9ca3af;
+    --sidebar-menu-active-item-bg: #1a1a1a;
+    --sidebar-menu-active-item-color: #60a5fa;
+    --content-bg: #0a0a0a;
+    --content-top-border-color: #222;
+    --table-thead-color: #9ca3af;
+    --table-cell-color: #e8edf7;
+    --table-cell-border-color: #222;
+    --table-hover-cell-bg: #1a1a1a;
+    --border-primary-color: #333;
+    --border-secondary-color: #222;
+    --border-tertiary-color: #1a1a1a;
+    --text-color: #e8edf7;
+    --dropdown-bg: #101010;
+    --dropdown-border-color: #222;
+    --dropdown-link-color: #e8edf7;
+    --dropdown-link-hover-bg: #1a1a1a;
+    --form-bg: #1a1a1a;
+    --form-border-color: #222;
+    --form-color: #e8edf7;
+    --pagination-active-bg: #60a5fa;
+    --responsive-header-bg: #101010;
+    --responsive-header-border-color: #222;
+    --user-name-color: #9ca3af;
+}
+
+.ea-dark-scheme .mcp-dashboard-widgets .row > [class*='col-'] {
+    min-width: 0;
+}
+
+.ea-dark-scheme .mcp-widget-card,
+.ea-dark-scheme .mcp-widget-body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ea-dark-scheme .mcp-result {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
