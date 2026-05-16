@@ -64,7 +64,9 @@ class VeraCli
             $args[] = $pattern;
         }
 
-        $args[] = '--no-ignore';
+        if ($config->noIgnore) {
+            $args[] = '--no-ignore';
+        }
 
         if ($config->noDefaultExcludes) {
             $args[] = '--no-default-excludes';

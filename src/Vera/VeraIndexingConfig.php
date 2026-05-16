@@ -15,6 +15,7 @@ readonly class VeraIndexingConfig
     public function __construct(
         public array $excludePatterns = [],
         public bool $noDefaultExcludes = false,
+        public bool $noIgnore = true,
     ) {
     }
 
@@ -26,15 +27,17 @@ readonly class VeraIndexingConfig
         return new self(
             excludePatterns: $data['excludePatterns'] ?? [],
             noDefaultExcludes: $data['noDefaultExcludes'] ?? false,
+            noIgnore: $data['noIgnore'] ?? true,
         );
     }
 
-    /** @return array{excludePatterns: array<string>, noDefaultExcludes: bool} */
+    /** @return array{excludePatterns: array<string>, noDefaultExcludes: bool, noIgnore: bool} */
     public function toArray(): array
     {
         return [
             'excludePatterns' => $this->excludePatterns,
             'noDefaultExcludes' => $this->noDefaultExcludes,
+            'noIgnore' => $this->noIgnore,
         ];
     }
 }

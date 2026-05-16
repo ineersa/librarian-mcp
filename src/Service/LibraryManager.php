@@ -205,10 +205,15 @@ class LibraryManager
         );
 
         foreach ($files as $file) {
+            $realPath = $file->getRealPath();
+            if (false === $realPath) {
+                // Broken symlink or race – delete by iterator path instead
+                $realPath = $file->getPathname();
+            }
             if ($file->isDir()) {
-                rmdir($file->getRealPath());
+                rmdir($realPath);
             } else {
-                unlink($file->getRealPath());
+                unlink($realPath);
             }
         }
 

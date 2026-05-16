@@ -18,10 +18,7 @@
     "indexing": {
       "max_chunk_lines": 80,
       "default_excludes": [
-        ".*",
-        "**/.*",
         ".git",
-        ".gitignore",
         ".vera",
         "node_modules",
         "target",
@@ -30,17 +27,14 @@
         "__pycache__",
         ".venv",
         ".github",
-        "deptrac.yaml",
-        "UPGRADE.md",
-        "reference.php",
         "vendor"
       ],
       "max_file_size_bytes": 1000000,
       "extra_excludes": [],
       "no_ignore": false,
       "no_default_excludes": false,
-      "max_chunk_bytes": 1000,
-      "max_chunk_overlap_bytes": 250
+      "max_chunk_bytes": 1200,
+      "max_chunk_overlap_bytes": 192
     },
     "retrieval": {
       "default_limit": 10,
@@ -50,7 +44,7 @@
       "max_vector_candidates": 60,
       "reranking_enabled": true,
       "max_rerank_batch": 8,
-      "max_rerank_doc_chars": 1000,
+      "max_rerank_doc_chars": 768,
       "rerank_metadata_mode": "none",
       "max_output_chars": 12000,
       "adaptive_exact_query_tuning": true,

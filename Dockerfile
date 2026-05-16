@@ -24,7 +24,7 @@ RUN set -eux; \
         zip
 
 # Vera CLI — download prebuilt binary from GitHub releases
-ARG VERA_VERSION=v0.11.8
+ARG VERA_VERSION=v0.11.9
 # musl build is statically linked (no glibc dependency), works on any Linux
 ARG VERA_ARCH=x86_64-unknown-linux-musl
 RUN set -eux; \
@@ -86,4 +86,4 @@ RUN set -eux; \
     php bin/console tailwind:build --env=prod --no-debug; \
     php bin/console asset-map:compile --env=prod --no-debug
 
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+CMD ["frankenphp", "run", "--configd ", "/etc/caddy/Caddyfile"]
