@@ -12,7 +12,7 @@ use function CastorTasks\prod_php_exec;
 #[AsTask(description: 'Build production images')]
 function build(): void
 {
-    prod_compose('build');
+    prod_compose('build --no-cache');
 }
 
 #[AsTask(description: 'Start production stack locally')]
