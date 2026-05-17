@@ -1,5 +1,24 @@
 # syntax=docker/dockerfile:1.7
 
+# ── Vera CLI: build from source ──────────────────────────────────────────────
+FROM rust:1-bookworm AS vera_builder
+
+ARG VERA_REPO=https://github.com/ineersa/Vera.git
+ARG VERA_BRANCH=localhost
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch ${VERA_BRANCH} --depth 1 ${VERA_REPO} /vera-src
+
+WORKDIR /vera-src
+
+RUN --mount=type=cache,target=/vera-src/target \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    CARGO_BUILD_JOBS=$(nproc) cargo build --release -p vera-cli \
+    && cp target/release/vera /usr/local/bin/vera \
+    && vera --version
+
+# ── PHP app ──────────────────────────────────────────────────────────────────
 FROM dunglas/frankenphp:1-php8.5-bookworm AS frankenphp_upstream
 
 FROM frankenphp_upstream AS frankenphp_base
@@ -23,15 +42,9 @@ RUN set -eux; \
         opcache \
         zip
 
-# Vera CLI — download prebuilt binary from GitHub releases
-ARG VERA_VERSION=v0.11.9
-# musl build is statically linked (no glibc dependency), works on any Linux
-ARG VERA_ARCH=x86_64-unknown-linux-musl
-RUN set -eux; \
-    curl -fsSL "https://github.com/ineersa/Vera/releases/download/${VERA_VERSION}/vera-${VERA_ARCH}.tar.gz" \
-      | tar xzf - -C /usr/local/bin --strip-components=1 "vera-${VERA_ARCH}/vera"; \
-    chmod +x /usr/local/bin/vera; \
-    vera --version
+# Vera CLI — copy the binary built from source
+COPY --from=vera_builder /usr/local/bin/vera /usr/local/bin/vera
+RUN vera --version
 
 COPY docker/frankenphp/Caddyfile /etc/caddy/Caddyfile
 COPY docker/frankenphp/worker.Caddyfile /etc/caddy/worker.Caddyfile
