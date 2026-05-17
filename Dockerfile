@@ -86,4 +86,4 @@ RUN set -eux; \
     php bin/console tailwind:build --env=prod --no-debug; \
     php bin/console asset-map:compile --env=prod --no-debug
 
-CMD ["frankenphp", "run", "--configd ", "/etc/caddy/Caddyfile"]
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
