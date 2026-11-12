@@ -45,6 +45,12 @@ vendor/bin/castor browser:stack:stop
 
 Use the printed loopback URL for host exploration. Saved tests receive `LIBRARIAN_BROWSER_URL=http://php:8080` inside the private browser network. Do not invent ports or Compose project names.
 
+`test` recreates only the verified checkout-owned browser SQLite database before applying migrations. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture in the PHPUnit browser base; SQLite IDs therefore restart on each saved run. `browser:live:test` reuses current storage and does not provide that reset. To watch the single Projects journey rather than the whole suite:
+
+```bash
+vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
+```
+
 ### Mate diagnostics
 
 ```bash

@@ -27,9 +27,19 @@ services:
         resource: '../src/'
         exclude:
             - '../src/Entity/'
+            - '../src/DataFixtures/'
             - '../src/Project/ProjectDiscoveryResult.php'
             - '../src/Project/ProjectSourceException.php'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+
+when@dev: &fixtures
+    services:
+        App\DataFixtures\:
+            resource: '../src/DataFixtures/'
+            autowire: true
+            autoconfigure: true
+
+when@test: *fixtures
 

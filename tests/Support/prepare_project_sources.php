@@ -23,23 +23,7 @@ const OM_SCHEMA_VERSIONS = [
     '20261021_006_semantic_source_revisions' => 'Transactional canonical source revisions and incremental semantic reconciliation progress',
 ];
 
-const PROJECT_SOURCE_SLUGS = [
-    'default-om',
-    'custom-relative',
-    'custom-absolute',
-    'missing-hatfield',
-    'missing-om-db',
-    'inactive-extension',
-    'malformed-settings',
-    'unsupported-schema',
-    'unreadable-journal',
-    'unavailable-mount',
-    'symlink-resolved',
-    'isolation-alpha',
-    'isolation-beta',
-    'duplicate-name-source',
-    'duplicate-origin-source',
-];
+const PROJECT_SOURCE_SLUGS = ['default-om', 'custom-relative'];
 
 $projectDir = dirname(__DIR__, 2);
 $targetRoot = $projectDir.'/var/browser-live/project-sources';
@@ -71,19 +55,6 @@ if (!mkdir($projectsRoot, 0775, true) && !is_dir($projectsRoot)) {
 
 buildDefaultOmProject($projectsRoot.'/default-om');
 buildCustomRelativeProject($projectsRoot.'/custom-relative');
-buildCustomAbsoluteProject($projectsRoot.'/custom-absolute');
-buildMissingHatfieldProject($projectsRoot.'/missing-hatfield');
-buildMissingOmDatabaseProject($projectsRoot.'/missing-om-db');
-buildInactiveExtensionProject($projectsRoot.'/inactive-extension');
-buildMalformedSettingsProject($projectsRoot.'/malformed-settings');
-buildUnsupportedSchemaProject($projectsRoot.'/unsupported-schema');
-buildUnreadableJournalProject($projectsRoot.'/unreadable-journal');
-buildUnavailableMountProject($projectsRoot.'/unavailable-mount');
-buildSymlinkResolvedProject($projectsRoot.'/symlink-resolved', $targetRoot);
-buildIsolationProject($projectsRoot.'/isolation-alpha', 'isolation-alpha', 'git://librarian-fixtures/isolation-alpha.git', 2, 1);
-buildIsolationProject($projectsRoot.'/isolation-beta', 'isolation-beta', 'git://librarian-fixtures/isolation-beta.git', 3, 2);
-buildDuplicateNameSource($projectsRoot.'/duplicate-name-source');
-buildDuplicateOriginSource($projectsRoot.'/duplicate-origin-source');
 
 writeFile($targetRoot.'/'.PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME, PROJECT_SOURCES_OWNERSHIP_MARKER);
 assertPreparedProjectSources($targetRoot);
@@ -161,168 +132,6 @@ observational_memory:
 YAML);
     createSupportedOmDatabase($path.'/.hatfield/custom-om/memory.sqlite', observationCount: 1, reflectionCount: 1, sourceRevision: 2, sourceChangeCount: 2);
     writeSessionJournal($path.'/.hatfield/custom-sessions/7/events.jsonl', '7', 1);
-}
-
-function buildCustomAbsoluteProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/custom-absolute.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '/synthetic-home/absolute-sessions/custom-absolute'
-observational_memory:
-    storage:
-        database: '/synthetic-home/absolute-om/custom-absolute.sqlite'
-YAML);
-    $home = dirname($path, 2).'/context-home';
-    createSupportedOmDatabase($home.'/absolute-om/custom-absolute.sqlite', observationCount: 4, reflectionCount: 1, sourceRevision: 5, sourceChangeCount: 4);
-    writeSessionJournal($home.'/absolute-sessions/custom-absolute/42/events.jsonl', '42', 2);
-}
-
-function buildMissingHatfieldProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/missing-hatfield.git');
-    writeFile($path.'/README.md', "Synthetic project without .hatfield.\n");
-}
-
-function buildMissingOmDatabaseProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/missing-om-db.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-observational_memory:
-    storage:
-        database: '.hatfield/extensions-data/observational-memory/om.sqlite'
-YAML);
-    writeSessionJournal($path.'/.hatfield/sessions/3/events.jsonl', '3', 1);
-    // Intentionally no OM database file.
-}
-
-function buildInactiveExtensionProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/inactive-extension.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-extensions:
-    enabled: []
-sessions:
-    path: '.hatfield/sessions'
-observational_memory:
-    storage:
-        database: '.hatfield/extensions-data/observational-memory/om.sqlite'
-YAML);
-    createSupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite', observationCount: 1, reflectionCount: 0, sourceRevision: 1, sourceChangeCount: 1);
-    writeSessionJournal($path.'/.hatfield/sessions/9/events.jsonl', '9', 1);
-}
-
-function buildMalformedSettingsProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/malformed-settings.git');
-    writeFile($path.'/.hatfield/settings.yaml', "observational_memory: [\n  - broken: yaml: [\n");
-}
-
-function buildUnsupportedSchemaProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/unsupported-schema.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createUnsupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite');
-    writeSessionJournal($path.'/.hatfield/sessions/11/events.jsonl', '11', 1);
-}
-
-function buildUnreadableJournalProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/unreadable-journal.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createSupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite', observationCount: 1, reflectionCount: 0, sourceRevision: 1, sourceChangeCount: 1);
-    $journal = $path.'/.hatfield/sessions/15/events.jsonl';
-    writeFile($journal, '');
-    chmod($journal, 0000);
-}
-
-function buildUnavailableMountProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/unavailable-mount.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-observational_memory:
-    storage:
-        database: '/synthetic-home/missing-mounts/does-not-exist.sqlite'
-YAML);
-    writeSessionJournal($path.'/.hatfield/sessions/21/events.jsonl', '21', 1);
-}
-
-function buildSymlinkResolvedProject(string $path, string $targetRoot): void
-{
-    initGitProject($path, 'git://librarian-fixtures/symlink-resolved.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-observational_memory:
-    storage:
-        database: '.hatfield/extensions-data/observational-memory/om.sqlite'
-YAML);
-    $externalDbDir = $targetRoot.'/shared-om-store/symlink-resolved';
-    createSupportedOmDatabase($externalDbDir.'/om.sqlite', observationCount: 2, reflectionCount: 1, sourceRevision: 3, sourceChangeCount: 2);
-    $linkDir = $path.'/.hatfield/extensions-data/observational-memory';
-    if (!is_dir(dirname($linkDir)) && !mkdir(dirname($linkDir), 0775, true) && !is_dir(dirname($linkDir))) {
-        throw new RuntimeException('Unable to create symlink parent.');
-    }
-    if (!is_link($linkDir) && !is_dir($linkDir)) {
-        // Relative target so the same tree resolves under host builder path and /project-sources mount.
-        $relativeTarget = '../../../../shared-om-store/symlink-resolved';
-        if (!symlink($relativeTarget, $linkDir)) {
-            throw new RuntimeException('Unable to create OM symlink fixture.');
-        }
-    }
-    writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 1);
-}
-
-function buildIsolationProject(string $path, string $slug, string $origin, int $observations, int $reflections): void
-{
-    initGitProject($path, $origin);
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createSupportedOmDatabase(
-        $path.'/.hatfield/extensions-data/observational-memory/om.sqlite',
-        observationCount: $observations,
-        reflectionCount: $reflections,
-        sourceRevision: $observations + $reflections,
-        sourceChangeCount: $observations + $reflections,
-        runId: '108',
-        idPrefix: $slug,
-    );
-    writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 1);
-}
-
-function buildDuplicateNameSource(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/duplicate-name-source.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createSupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite', observationCount: 1, reflectionCount: 0, sourceRevision: 1, sourceChangeCount: 1);
-    writeSessionJournal($path.'/.hatfield/sessions/1/events.jsonl', '1', 1);
-}
-
-function buildDuplicateOriginSource(string $path): void
-{
-    // Same origin as default-om; different checkout path.
-    initGitProject($path, 'git://librarian-fixtures/default-om.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createSupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite', observationCount: 1, reflectionCount: 0, sourceRevision: 1, sourceChangeCount: 1);
-    writeSessionJournal($path.'/.hatfield/sessions/2/events.jsonl', '2', 1);
 }
 
 function initGitProject(string $path, string $origin): void
@@ -471,35 +280,6 @@ SQL);
         $insertChange->execute(['reflection', sprintf('%s-ref-%d', $idPrefix, $i), $observationCount + $i]);
         ++$written;
     }
-}
-
-function createUnsupportedOmDatabase(string $dbPath): void
-{
-    if (!is_dir(dirname($dbPath)) && !mkdir(dirname($dbPath), 0775, true) && !is_dir(dirname($dbPath))) {
-        throw new RuntimeException(sprintf('Unable to create unsupported OM directory for %s', $dbPath));
-    }
-    if (is_file($dbPath)) {
-        unlink($dbPath);
-    }
-    $pdo = new PDO('sqlite:'.$dbPath);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->exec(<<<'SQL'
-CREATE TABLE om_schema_version (
-    version TEXT PRIMARY KEY NOT NULL,
-    description TEXT NOT NULL,
-    checksum TEXT NOT NULL,
-    applied_at TEXT NOT NULL
-)
-SQL);
-    $pdo->exec(<<<'SQL'
-CREATE TABLE om_observation (
-    observation_id TEXT PRIMARY KEY NOT NULL,
-    run_id TEXT NOT NULL,
-    content TEXT NOT NULL
-)
-SQL);
-    $pdo->exec("INSERT INTO om_schema_version (version, description, checksum, applied_at) VALUES ('20990101_999_future', 'unsupported future schema', 'deadbeef', '2026-01-01T00:00:00+00:00')");
-    $pdo->exec("INSERT INTO om_observation (observation_id, run_id, content) VALUES ('future-1', '1', 'unsupported')");
 }
 
 function writeSessionJournal(string $path, string $runId, int $eventCount): void

@@ -2,7 +2,7 @@
 
 ## Scope and approval policy
 
-Keep the suite small: **one happy-path scenario per implemented view or action**. A single CRUD journey may cover its related list, create, detail, edit, and delete operations. Do not duplicate those operations in separate scenarios or hide extra cases in loops and data providers.
+Keep the suite small: **one happy-path journey per feature**. A single CRUD journey covers its related list, create, detail, edit, and delete operations. **Projects has exactly one journey**, including registration, source discovery, edit/rescan, and removal. Do not add separate discovery, error, or uniqueness scenarios, or hide extra cases in loops and data providers.
 
 **Ask the owner for explicit permission before adding or running special-case tests.** This includes negative paths, boundary values, security matrices, fault injection, concurrency, recovery, and layout permutations. Fixing a bug does not automatically authorize another regression scenario. Database-reset / purge tests remain excluded.
 
@@ -10,7 +10,7 @@ This policy does not remove application authorization, validation, admin auth, o
 
 Application behavior is verified through **real Playwright browsers**. PHPUnit is the browser harness, not a separate unit, kernel, service, or API-only testing layer. Keep the generic Castor tasks; do not add scenario-specific runners, orchestration, cross-run manifests, or supplementary datasets.
 
-Baseline happy-path coverage for current admin/MCP surfaces is authorized. Plan 03 also **explicitly authorizes** isolated fixture scenarios for source discovery edge cases (default/custom paths, malformed/missing settings, unavailable mounts, unsupported schema, symlink/external path reporting, duplicate uniqueness, and registration removal leaving sources unchanged). Expanding into unrelated special-case matrices still requires owner permission.
+Baseline happy-path coverage for current admin/MCP surfaces is authorized. The owner's one-journey rule supersedes the earlier plan 03 source-case matrix; do not restore it.
 
 This document does **not** claim that validation has already passed.
 
@@ -30,7 +30,7 @@ Saved journeys in `tests/E2E/` (product path after plan 03):
 | Projects | Register via directory picker, wait for async discovery/health, edit/rescan, detail, remove only its registration |
 | MCP HTTP | Optional token path: regenerate the isolated admin's token through the UI when used, then initialize / initialized / tools-list over real HTTP (`tools/list` empty until plan 05) |
 
-Plan 03-authorized fixture journeys exercise synthetic `/project-sources` trees for discovery/uniqueness/removal contracts. They never import operator `compose.sources.yaml` overlays or private owner projects.
+The Projects journey uses only the two synthetic source trees needed for registration and path rebinding during edit. It never imports operator `compose.sources.yaml` overlays or private owner projects.
 
 CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. Source fixture trees/databases must remain unchanged after registration removal and failed discovery.
 
@@ -62,11 +62,12 @@ See [framework upgrade notes](docs/framework-upgrade.md) for dependency decision
 
 ## Running tests
 
-`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, applies migrations, ensures the verified isolated admin seed exists, then runs Playwright scenarios headlessly by default. Native PHPUnit arguments go after `--`:
+`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, recreates only `var/browser-live/application.db` through Doctrine commands, applies migrations, then runs Playwright scenarios headlessly by default. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture before the first journey. Native PHPUnit arguments go after `--`:
 
 ```sh
 vendor/bin/castor test -- tests/E2E/AuthenticationTest.php
 vendor/bin/castor test -- --list-tests
+vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
 ```
 
 Castor must not hardcode test filenames, method filters, or scenario selection. PHPUnit owns discovery and selection. There is no per-scenario Castor task or custom test coordinator.
@@ -79,9 +80,11 @@ Report actual elapsed time, results, and any gaps. Do not inflate assertion coun
 
 ## Fixtures and isolation
 
-Use a **verified isolated admin seed** for browser journeys (canonical demo operator such as `admin@test.com` / `admin` once seeded into isolated storage). Do not create a supplementary dataset that mutates development data for verification. Do not copy credentials from another checkout into reports.
+Use the canonical Alice fixture `fixtures/user.yaml` for development and test (`admin@test.com` / `admin`); its password is hashed by `UserPasswordProcessor`. Do not create a supplementary dataset or mutate development data for verification. Do not copy credentials from another checkout into reports.
 
-Native-network SQLite, cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). Doctrine migrations prepare the schema without purging it. `tests/Support/prepare_browser.php` accepts only the exact isolated database path with `APP_ENV=test`, verifies Doctrine's resolved path, and prepares only the synthetic admin identity. Cross-process isolation is filesystem/network isolation, not transaction rollback.
+Native-network SQLite, cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). The owner has authorized resetting this checkout's isolated browser database before saved runs. Castor rejects symlinked storage, stops the owned worker, recreates the test SQLite database with Doctrine commands, migrates it, and restarts the application/worker. This resets rows and SQLite auto-increment sequences. It does not reset development/production databases or delete source trees, uploads, volumes, or unrelated storage.
+
+`LibrarianNetworkBrowserTest` extends `KernelTestCase` and uses Alice's `RefreshDatabaseTrait`. It verifies the exact test database URL and storage before loading fixtures. DAMA's bundle and PHPUnit extension are enabled. Network browser journeys use DAMA's supported `SkipDatabaseRollback` attribute: web and worker writes happen in separate processes and cannot be rolled back by PHPUnit's connection. The trait's initial transaction is committed before Chromium starts so those processes can see Alice's fixture data. Do not claim cross-process transactional rollback. Fresh storage is provided once per saved `test` run, not between each HTTP request.
 
 Each journey deletes only its own UI-created registrations. Filesystem cleanup is through the application's owned deletion actions, never broad directory cleanup of `data/` or `public/`, and never deletion of source fixture trees.
 
@@ -94,7 +97,7 @@ vendor/bin/castor browser:stack:up
 vendor/bin/castor browser:stack:status
 ```
 
-Use `vendor/bin/castor test` for initial migrations and admin preparation. Subsequent targeted runs can use `vendor/bin/castor browser:live:test -- tests/E2E/AuthenticationTest.php`. Do not purge data to make seeding pass.
+Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture preparation. `browser:live:test` intentionally reuses current storage and therefore does not promise restarted IDs; use it only for deliberate live-stack diagnosis. To watch only Projects with fresh IDs, use `vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php`.
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
@@ -114,4 +117,4 @@ Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, 
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
 - Speculative Symfony AI backends beyond what main installs for the approved upgrade
-- Production cutover, data backup, Hatfield semantic removal, and later indexing/MCP-tool plans beyond the authorized plan 03 fixture cases
+- Production cutover, data backup, Hatfield semantic removal, and later indexing/MCP-tool plans

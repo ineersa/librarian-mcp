@@ -4,18 +4,23 @@ declare(strict_types=1);
 
 namespace App\Tests\Support;
 
+use DAMA\DoctrineTestBundle\PHPUnit\SkipDatabaseRollback;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
-use PHPUnit\Framework\TestCase;
+use Hautelook\AliceBundle\PhpUnit\RefreshDatabaseTrait;
 use Playwright\Browser\BrowserContextBuilder;
 use Playwright\Browser\BrowserContextInterface;
 use Playwright\Browser\BrowserInterface;
 use Playwright\Page\PageInterface;
 use Playwright\PlaywrightClient;
 use Playwright\PlaywrightFactory;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
-/** Real HTTP browser journeys; the runner owns the isolated stack and fixtures. */
-abstract class LibrarianNetworkBrowserTest extends TestCase
+/** Real HTTP journeys: fixtures must be committed for the separate web/worker processes. */
+#[SkipDatabaseRollback]
+abstract class LibrarianNetworkBrowserTest extends KernelTestCase
 {
+    use RefreshDatabaseTrait;
+
     protected PageInterface $page;
     protected string $url;
     private ?PlaywrightClient $client = null;
@@ -25,6 +30,20 @@ abstract class LibrarianNetworkBrowserTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $root = \dirname(__DIR__, 2);
+        $database = $root.'/var/browser-live/application.db';
+        if ('test' !== ($_SERVER['APP_ENV'] ?? getenv('APP_ENV')) || 'sqlite:///'.$database !== getenv('DATABASE_URL')) {
+            throw new \LogicException('Browser fixtures require the exact isolated test database.');
+        }
+        foreach ([$root.'/var', \dirname($database), $database] as $path) {
+            if (is_link($path)) {
+                throw new \LogicException('Refusing symlinked browser fixture storage.');
+            }
+        }
+        self::bootKernel();
+        // RefreshDatabaseTrait loads Alice fixtures, then opens a transaction.
+        // Commit it before real HTTP so fixture data is visible outside PHPUnit.
+        self::getContainer()->get('doctrine')->getConnection()->commit();
         $this->url = rtrim((string) getenv('LIBRARIAN_BROWSER_URL'), '/');
         self::assertMatchesRegularExpression('~^https?://.+~D', $this->url);
         $headed = 'false' === getenv('PLAYWRIGHT_HEADLESS');

@@ -1,0 +1,6 @@
+# Canonical synthetic dev/test identity; password is hashed by the Alice processor.
+App\Entity\User:
+    administrator:
+        email: admin@test.com
+        password: admin
+        roles: [ROLE_ADMIN, ROLE_MCP]

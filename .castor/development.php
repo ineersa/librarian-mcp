@@ -238,7 +238,7 @@ function browserLiveTest(#[AsArgsAfterOptionEnd] array $arguments = [], bool $he
         throw new \InvalidArgumentException('Pass the PHPUnit test selection after --.');
     }
 
-    return report('browser:live:test', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
+    return report('browser:live:test', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
 }
 
 #[AsTask(namespace: 'browser', name: 'stack:up', description: 'Build and start only the isolated browser-test application.')]

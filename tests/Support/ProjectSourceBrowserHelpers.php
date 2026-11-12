@@ -117,13 +117,6 @@ trait ProjectSourceBrowserHelpers
         }
     }
 
-    protected function assertFormValidationVisible(): void
-    {
-        $page = $this->page;
-        $feedback = $page->locator('.invalid-feedback, .form-error-message, .alert-danger, .ea-form-error');
-        Expect::locator($feedback->first())->toBeVisible(new AssertionOptions(timeoutMs: 10_000));
-    }
-
     protected function assertSourceCount(string $label, int $expected): void
     {
         $value = $this->page->locator('.field-group:has(.field-label > :text-is("'.$label.'")) .field-value')->textContent();

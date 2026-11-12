@@ -146,7 +146,9 @@
         }
     },
     "require-dev": {
+        "dama/doctrine-test-bundle": "^8.7",
         "friendsofphp/php-cs-fixer": "^3.95.1",
+        "hautelook/alice-bundle": "^2.17",
         "jolicode/castor": "^1.9",
         "phpstan/phpstan": "^2.1.51",
         "phpstan/phpstan-doctrine": "^2.0",

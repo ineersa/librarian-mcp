@@ -74,10 +74,11 @@ Resolved dependency selections (runtime validation is recorded separately):
 ## Testing and browser verification
 
 - Follow [TESTING.md](TESTING.md). Application behavior is verified through real Playwright browsers against an isolated checkout-owned stack.
-- Keep the suite small: one happy-path scenario per implemented view or action. A single CRUD journey may cover related views and actions; do not duplicate that coverage.
+- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one CRUD journey**, including registration, discovery, edit/rescan, and removal. Do not add separate project discovery, error, or uniqueness scenarios.
 - Obtain explicit owner permission before adding or running special-case tests (negative paths, security matrices, fault injection, concurrency, recovery, layout permutations). A bug fix does not automatically authorize a new regression scenario.
 - Do not add unit, kernel-only, service-only, or API-only suites as the primary coverage model. PHPUnit may harness Playwright; its presence does not authorize non-browser application suites.
 - Use the isolated browser stack and printed `LIBRARIAN_BROWSER_URL`. Do not invent ports or Compose project names. Seed only the verified isolated admin identity for journeys; never purge owner/production data.
+- Use canonical Alice fixtures and `RefreshDatabaseTrait`, with DAMA installed and its PHPUnit extension enabled. Saved `test` runs reset only the verified checkout-owned browser SQLite database, as authorized by the owner, including auto-increment sequences. Native-network journeys use DAMA's supported rollback opt-out because web/worker transactions are in separate processes; never claim PHPUnit rolls those writes back.
 - Launch the browser subagent only when actual browser interaction through system-installed `playwright-cli` is needed. Do not use it for suite execution, QA orchestration, or environment setup.
 - Run saved tests and exploratory sessions headlessly by default. Show a browser only when the owner explicitly asks (`test --headed` / `check --headed`, or CLI `--headed`). Missing display access blocks requested visible runs.
 - Agents must verify affected behavior themselves using the relevant happy-path scenarios. Main runs saved tests and QA through Castor and reads reports.
@@ -101,7 +102,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Start with Twig + Stimulus/Turbo before adding extra JS tooling.
 - Keep pages server-rendered by default and prefer Turbo/Hotwire for navigation and partial updates.
 - Do not add Live Components, TwigComponent packages, UX Icons, or UX Map unless a later plan installs and selects them.
-- Add at least one happy-path Playwright journey for each new user-facing route or admin action.
+- Cover new user-facing routes and admin actions within the feature's single happy-path Playwright journey; do not create a separate scenario per route or action.
 
 # Symfony UX Frontend Stack
 
