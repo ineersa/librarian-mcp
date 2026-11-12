@@ -13,6 +13,10 @@ Current mode:
 - **STDIO transport disabled**
 - Endpoint path: **`/_mcp`**
 
+MCP bundle **0.15** (with `mcp/sdk` **0.9**) configures the application server as `mcp.servers.librarian` and requires an **explicit tool registry**. The previous TraceableRegistry reset compiler-pass workaround is obsolete and removed with this upgrade.
+
+Allowed HTTP hosts are controlled by `MCP_ALLOWED_HOSTS` (CSV). Default includes `localhost,127.0.0.1,php,server,192.168.2.38`; production must override with external hostnames as needed.
+
 ---
 
 ## 2) Authentication model
