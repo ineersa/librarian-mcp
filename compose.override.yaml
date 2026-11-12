@@ -1,29 +1,30 @@
+# Castor supplies checkout identity and the private compose network.
+name: "${LIBRARIAN_PROJECT:?Run vendor/bin/castor dev:stack:up}"
+
 services:
   php:
-    restart: "no"
+    image: "librarian-${LIBRARIAN_CHECKOUT_ID:?Run vendor/bin/castor dev:stack:up}-php:dev"
     build:
-      context: .
-      dockerfile: Dockerfile
       target: frankenphp_dev
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    restart: "no"
     environment:
       APP_ENV: dev
-      APP_DEBUG: '1'
-      XDEBUG_MODE: ${XDEBUG_MODE:-off}
-      SERVER_NAME: localhost, http://localhost
-      MERCURE_URL: http://localhost/.well-known/mercure
-      MERCURE_PUBLIC_URL: http://localhost:${HTTP_PORT:-8080}/.well-known/mercure
-      MERCURE_CORS_ORIGINS: "${MERCURE_CORS_ORIGINS:-http://localhost http://127.0.0.1 http://localhost:8080 http://127.0.0.1:8080 http://192.168.2.38 http://192.168.2.38:8080 http://server http://server:8080}"
-      MERCURE_JWT_SECRET: ${MERCURE_PUBLISHER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
-      MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_PUBLISHER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
-      MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_SUBSCRIBER_JWT_KEY:-!ChangeThisMercureHubJWTSecretKey!}
-      MERCURE_PUBLISHER_JWT_ALG: ${MERCURE_PUBLISHER_JWT_ALG:-HS256}
-      MERCURE_SUBSCRIBER_JWT_ALG: ${MERCURE_SUBSCRIBER_JWT_ALG:-HS256}
+      APP_DEBUG: "1"
+      SERVER_NAME: ":8080"
+      MERCURE_URL: http://127.0.0.1:8080/.well-known/mercure
+      MERCURE_PUBLIC_URL: /.well-known/mercure
+      MERCURE_CORS_ORIGINS: '${MERCURE_CORS_ORIGINS}'
+      MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
+      MERCURE_PUBLISHER_JWT_KEY: '${MERCURE_PUBLISHER_JWT_KEY}'
+      MERCURE_SUBSCRIBER_JWT_KEY: '${MERCURE_SUBSCRIBER_JWT_KEY}'
+      MERCURE_PUBLISHER_JWT_ALG: HS256
+      MERCURE_SUBSCRIBER_JWT_ALG: HS256
       MERCURE_EXTRA_DIRECTIVES: |-
         transport bolt {
-          path /data/mercure.db
+          path /app/var/mercure-dev.db
         }
       FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
-
       # Vera CLI — container-reachable API endpoints
       EMBEDDING_MODEL_BASE_URL: http://host.docker.internal:${VERA_EMBED_PORT:-8059}/v1
       EMBEDDING_MODEL_ID: ${VERA_EMBED_MODEL:-coderankembed-q8_0.gguf}
@@ -35,28 +36,67 @@ services:
       VERA_COMPLETION_BASE_URL: http://host.docker.internal:${VERA_COMPLETION_PORT:-8052}/v1
       VERA_COMPLETION_MODEL_ID: ${VERA_COMPLETION_MODEL:-flash}
       VERA_COMPLETION_API_KEY: not-needed
-    volumes:
-      - ./:/app:delegated
+    volumes: !override
+      - ./:/app
       - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
       - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
-      # Mount /tmp to allow PHP CS Fixer extension (junstyle.php-cs-fixer) to work.
-      # The extension creates temp files in /tmp/pcf-tmp*/ which need to be accessible
-      # inside the container when running fixer via Docker.
-      - /tmp:/tmp:delegated
-      # Vera config for both root and non-root users.
-      # - root uses HOME=/root
-      # - dev/messenger tasks run as symfony-dev with HOME=/app
-      - ./docker/vera:/root/.vera:delegated
-      - ./docker/vera:/app/.vera:delegated
-    ports:
-      - "${HTTP_PORT:-8080}:80"
-      - "${HTTPS_PORT:-8443}:443"
-      - "${HTTP3_PORT:-8443}:443/udp"
+      - ./docker/vera:/root/.vera
+      - ./docker/vera:/app/.vera
+    ports: !override
+      - "127.0.0.1:${HTTP_PORT}:8080"
+    networks:
+      default: {}
+      librarian:
+        aliases:
+          - php
+    extra_hosts:
+      - host.docker.internal:host-gateway
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
-    tty: true
+
+  worker:
+    image: "librarian-${LIBRARIAN_CHECKOUT_ID:?Run vendor/bin/castor dev:stack:up}-php:dev"
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    init: true
+    restart: unless-stopped
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: "1"
+      MERCURE_URL: http://php:8080/.well-known/mercure
+      MERCURE_PUBLIC_URL: /.well-known/mercure
+      MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
+      EMBEDDING_MODEL_BASE_URL: http://host.docker.internal:${VERA_EMBED_PORT:-8059}/v1
+      EMBEDDING_MODEL_ID: ${VERA_EMBED_MODEL:-coderankembed-q8_0.gguf}
+      EMBEDDING_MODEL_API_KEY: not-needed
+      EMBEDDING_MODEL_QUERY_PREFIX: "Represent this query for searching relevant code:"
+      RERANKER_MODEL_BASE_URL: http://host.docker.internal:${VERA_RERANK_PORT:-8060}/v1
+      RERANKER_MODEL_ID: ${VERA_RERANK_MODEL:-bge-reranker-base-q8_0.gguf}
+      RERANKER_MODEL_API_KEY: not-needed
+      VERA_COMPLETION_BASE_URL: http://host.docker.internal:${VERA_COMPLETION_PORT:-8052}/v1
+      VERA_COMPLETION_MODEL_ID: ${VERA_COMPLETION_MODEL:-flash}
+      VERA_COMPLETION_API_KEY: not-needed
+    volumes:
+      - ./:/app
+      - ./docker/vera:/root/.vera
+      - ./docker/vera:/app/.vera
+    command: ['php', 'bin/console', 'messenger:consume', '--all', '--exclude-receivers=failed', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
+    healthcheck:
+      disable: true
+    depends_on:
+      php:
+        condition: service_healthy
+    networks:
+      default: {}
+      librarian: {}
     extra_hosts:
       - host.docker.internal:host-gateway
+    dns:
+      - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
+      - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
+networks:
+  librarian:
+    external: true
+    name: "${LIBRARIAN_NETWORK:?Run vendor/bin/castor dev:stack:up}"

@@ -1,6 +1,6 @@
 # Development setup
 
-This template runs on FrankenPHP with Symfony worker mode, built-in Mercure, and SQLite.
+Librarian runs on FrankenPHP with Symfony worker mode, built-in Mercure, and SQLite.
 
 ## Stack overview
 
@@ -11,79 +11,69 @@ This template runs on FrankenPHP with Symfony worker mode, built-in Mercure, and
 - Compose files:
   - Base: `compose.yaml`
   - Dev overrides: `compose.override.yaml`
+  - Browser overrides: `compose.browser.yaml` (isolated Playwright stack)
   - Production-like overrides: `compose.prod.yaml`
+
+## Framework note
+
+Owner-approved on 2026-11-12: proceed with **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) using package-scoped stability allowances. See [framework upgrade notes](framework-upgrade.md) for locked dependencies and validation.
+
+Selected packages: MCP 0.15 / sdk 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, UX Stimulus/Turbo 3.7. The tooling runtime is pinned FrankenPHP 1.13.5 / PHP 8.5; development and browsers use private networks with loopback-published URLs, not a shared proxy.
 
 ## First-time local setup
 
-1. Build images, start containers, and install dependencies:
+1. Bootstrap Castor tooling (see [TESTING.md](../TESTING.md) if `vendor/bin/castor` is missing):
 
    ```bash
-   castor dev:setup
+   vendor/bin/castor tooling:prepare
    ```
 
-2. Run frontend build bootstrap:
+2. Migrate the development database:
 
    ```bash
-   castor dev:bootstrap
+   vendor/bin/castor app:console -- doctrine:migrations:migrate --no-interaction
    ```
 
-3. If your project uses Doctrine migrations, run:
+3. Create a local admin user when needed (confirm command via console list):
 
    ```bash
-   castor dev:console "doctrine:migrations:migrate --no-interaction"
+   vendor/bin/castor app:console -- app:user:create-admin admin@example.com --password='change-me-now'
    ```
 
-4. Run Messenger in another terminal:
-
-   ```bash
-   castor dev:messenger-consume
-   ```
+4. Start the development stack and Messenger consumer with `vendor/bin/castor dev:stack:up` and read its loopback URL. Use `dev:stack:status` to rediscover it later.
 
 5. Optional while editing CSS/templates:
 
    ```bash
-   castor dev:console "tailwind:build --watch"
+   vendor/bin/castor app:console -- tailwind:build --watch
    ```
 
-6. Open the app:
+6. Open the printed development / browser URL from the stack status task (`LIBRARIAN_BROWSER_URL` for Playwright). The upgraded runtime uses a private network and loopback-published checkout URL — not a shared multi-checkout proxy.
 
-   - HTTP: `http://localhost:${HTTP_PORT:-8080}`
-   - HTTPS: `https://localhost:${HTTPS_PORT:-8443}`
+Development/browser ports are allocated and persisted per checkout by Castor. Production retains its existing `APP_HTTP_BIND` / `APP_HTTP_PORT` configuration. Prefer stack status output over inventing ports.
 
-Port overrides can be set in `.env.local`:
-
-```bash
-HTTP_PORT=8081
-HTTPS_PORT=8444
-```
-
-If `castor dev:bootstrap` fails resolving `github.com` during Tailwind binary download, set Docker DNS overrides in `.env.local`:
+If Tailwind binary download fails resolving `github.com`, set Docker DNS overrides in `.env.local`:
 
 ```bash
 DOCKER_DNS_PRIMARY=1.1.1.1
 DOCKER_DNS_SECONDARY=8.8.8.8
 ```
 
-## Common local workflow
+## Isolated browser stack
 
-- Start: `castor dev:up`
-- Stop: `castor dev:down`
-- Restart: `castor dev:restart`
-- Status: `castor dev:ps`
-- Logs: `castor dev:logs`
+For Playwright verification:
 
-`castor dev:up`, `castor dev:setup`, and `castor dev:bootstrap` automatically stop running containers from other compose projects that already use one of these configured dev ports.
+```bash
+vendor/bin/castor browser:stack:up
+vendor/bin/castor browser:stack:status
+```
+
+Use the printed loopback URL for host exploration. Tests receive `LIBRARIAN_BROWSER_URL=http://php:8080` inside the private network. Details: [TESTING.md](../TESTING.md).
 
 ## Production-like local run
 
 ```bash
-castor prod:up
+vendor/bin/castor list prod
 ```
 
-Useful commands:
-
-- `castor prod:down`
-- `castor prod:restart`
-- `castor prod:ps`
-- `castor prod:logs`
-- `castor prod:console "doctrine:migrations:migrate --no-interaction"`
+Follow [server-deployment.md](server-deployment.md) for env files, migrations, and reverse-proxy notes. Existing production project names, ports, and data mounts are preserved.

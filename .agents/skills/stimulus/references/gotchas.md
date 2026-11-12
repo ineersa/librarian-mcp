@@ -276,11 +276,8 @@ app.debug = true;  // Logs lifecycle events to console
 ### Check Controller Registration
 
 ```javascript
-// In browser console
+// In browser console -- enables lifecycle logging
 Stimulus.debug = true;
-
-// List registered controllers
-Array.from(Stimulus.router.modules).map(m => m.identifier);
 ```
 
 ### Verify Controller is Connected

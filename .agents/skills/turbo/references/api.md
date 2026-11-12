@@ -147,8 +147,9 @@ Response must contain a `<turbo-frame>` with matching `id`:
 | `remove` | Remove target element |
 | `before` | Insert content before target |
 | `after` | Insert content after target |
-| `morph` | Morph target to new content (smooth) |
-| `refresh` | Trigger page refresh |
+| `refresh` | Trigger page refresh (with morphing) |
+
+`replace` and `update` also accept an optional `method="morph"` attribute for smooth DOM morphing instead of full swap.
 
 ### Syntax
 
@@ -195,12 +196,15 @@ Response must contain a `<turbo-frame>` with matching `id`:
     </template>
 </turbo-stream>
 
-<!-- Morph for smooth transitions -->
-<turbo-stream action="morph" target="dashboard">
+<!-- Replace with morphing for smooth transitions -->
+<turbo-stream action="replace" method="morph" target="dashboard">
     <template>
         <div id="dashboard">Updated stats...</div>
     </template>
 </turbo-stream>
+
+<!-- Refresh page (uses morphing) -->
+<turbo-stream action="refresh"></turbo-stream>
 ```
 
 ### Delivery Methods

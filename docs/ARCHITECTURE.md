@@ -154,3 +154,11 @@ Under configured `libraryDataDir` (default `data`):
 - Long-running work is async (Messenger worker required)
 - Failures are terminal for a message (no automatic retry); admin can re-queue
 - MCP surface is stable and data-driven (adding libraries does not add/remove MCP tool definitions)
+
+## 9) Framework / MCP upgrade notes (plan 01)
+
+- Owner-approved Symfony **8.2.0-BETA1** (2026-11-12); stable 8.2 was unavailable.
+- MCP HTTP remains on `/_mcp` with token auth; bundle 0.15 uses `mcp.servers.librarian` + explicit registry.
+- Compatibility compiler pass for TraceableRegistry reset is removed (service no longer present).
+- Dependency decisions and validation evidence are recorded in [framework upgrade notes](framework-upgrade.md); [TESTING.md](../TESTING.md) lists the intentionally limited saved browser coverage.
+- Domain rewrite (ingestion, embedding model changes, reranking removal, backups, Hatfield, production cutover) remains out of scope for plan 01.

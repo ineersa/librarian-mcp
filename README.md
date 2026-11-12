@@ -1,6 +1,6 @@
 # Librarian MCP
 
-Librarian MCP is a Symfony 8 application that turns Git repositories into searchable MCP libraries.
+Librarian MCP is a Symfony 8.2.0-BETA1 application that turns Git repositories into searchable MCP libraries. This prerelease was explicitly owner-approved; see [upgrade notes](docs/framework-upgrade.md).
 
 It provides:
 
@@ -21,6 +21,7 @@ Under the hood it clones repositories, indexes them with Vera, and exposes ready
 - [Vera and our workflow tuning](#vera-and-our-workflow-tuning)
 - [Key settings and what they mean](#key-settings-and-what-they-mean)
 - [Development notes](#development-notes)
+- [Testing](#testing)
 - [Extra docs](#extra-docs)
 
 ---
@@ -57,6 +58,7 @@ Edit `.env.prod.local` and set at least:
 
 - `APP_SECRET`
 - `DEFAULT_URI`
+- `MCP_ALLOWED_HOSTS` (CSV; include the external hostname without scheme or port)
 - `MERCURE_JWT_SECRET`
 - `MERCURE_PUBLISHER_JWT_KEY`
 - `MERCURE_SUBSCRIBER_JWT_KEY`
@@ -88,28 +90,28 @@ Then put them in `.env.prod.local` and set:
 > This uses Castor tasks (project standard) and keeps restart behavior from compose (`restart: unless-stopped`).
 
 ```bash
-castor prod:up \
-  && castor prod:console "doctrine:migrations:migrate --no-interaction" \
-  && castor prod:console "app:user:create-admin admin@example.com --password='change-me-now'"
+vendor/bin/castor prod:up \
+  && vendor/bin/castor prod:console -- doctrine:migrations:migrate --no-interaction \
+  && vendor/bin/castor prod:console -- app:user:create-admin admin@example.com --password='change-me-now'
 ```
 
 ### 3) Restart/update flow
 
 ```bash
-castor prod:restart
+vendor/bin/castor prod:restart
 ```
 
 If you changed Dockerfiles/deps/env and want a rebuild:
 
 ```bash
-castor prod:down && castor prod:up
+vendor/bin/castor prod:down && vendor/bin/castor prod:up
 ```
 
 ### 4) Check services/logs
 
 ```bash
-castor prod:ps
-castor prod:logs
+vendor/bin/castor prod:ps
+vendor/bin/castor prod:logs
 ```
 
 ---
@@ -181,6 +183,8 @@ These are applied when running `vera index` for that library.
   - `X-MCP-Token: <token>`
 - User must have `ROLE_MCP`
 - Tokens are stored hashed (SHA-256)
+- `MCP_ALLOWED_HOSTS` — CSV allow-list for MCP HTTP hosts (default `localhost,127.0.0.1,php,server,192.168.2.38`); override with production external hostnames
+- Bundle config: `mcp.servers.librarian` with an explicit tool registry (MCP bundle 0.15)
 
 ### Storage
 
@@ -191,46 +195,53 @@ These are applied when running `vera index` for that library.
 
 ## Development notes
 
-- Setup:
+Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover tasks with `vendor/bin/castor list`: `tooling:prepare`, `app:composer`, `app:console`, `cs:fix`, `qa:static`, `test`, `check`, and private browser/development stack tasks replace the legacy `dev:*` wrappers.
+
+- Bootstrap tooling:
 
   ```bash
-  castor dev:setup
-  castor dev:bootstrap
+  vendor/bin/castor tooling:prepare
   ```
 
-- Run app stack:
+- Migrate / console:
 
   ```bash
-  castor dev:up
+  vendor/bin/castor app:console -- doctrine:migrations:migrate --no-interaction
   ```
 
-- Run messenger consumer in another terminal:
+- Quality and tests:
 
   ```bash
-  castor dev:messenger-consume
+  vendor/bin/castor cs:fix
+  vendor/bin/castor qa:static
+  vendor/bin/castor test
   ```
 
-- Useful tasks:
-
-  - `castor dev:test`
-  - `castor dev:phpstan`
-  - `castor dev:cs-fix`
-  - `castor dev:quality`
-
-- For task catalog/details:
+- Task catalog/details:
 
   - [Castor command guide](docs/castor.md)
-  - `castor list dev`
-  - `castor list prod`
+  - [Development setup](docs/setup.md)
+  - `vendor/bin/castor list`
 
-- Do not run host PHP/Composer directly for project operations; use Castor tasks.
+- Do not run host PHP/Composer directly for project operations once the tooling runtime exists.
+
+### Framework upgrade gate
+
+On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions, recorded checks, and remaining coverage gaps.
 
 ---
 
+## Testing
+
+See [TESTING.md](TESTING.md) for Playwright policy, isolated browser stack (`LIBRARIAN_BROWSER_URL`), and Castor QA commands.
+
 ## Extra docs
 
+- [Agent / operations guidance](AGENTS.md)
+- [Testing](TESTING.md)
 - [Development setup](docs/setup.md)
 - [Server deployment](docs/server-deployment.md)
+- [Castor command guide](docs/castor.md)
 - [Mercure notes](docs/mercure.md)
 - [Architecture overview](docs/ARCHITECTURE.md)
 - [MCP contract](docs/MCP.md)

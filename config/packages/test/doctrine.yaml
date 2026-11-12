@@ -1,0 +1,4 @@
+doctrine:
+    dbal:
+        # SQLite ignores dbname_suffix. Never resolve this path from ambient URLs.
+        url: 'sqlite:///%kernel.project_dir%/var/browser-live/application.db'

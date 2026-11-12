@@ -1,16 +1,25 @@
-
 services:
   php:
+    image: "${COMPOSE_PROJECT_NAME:-librarian-mcp}-php:prod"
     build:
       context: .
       dockerfile: Dockerfile
       target: frankenphp_prod
     restart: unless-stopped
-    # Symfony env: mounted .env files (dev) or .env.local.php from the image (prod). Do not inject
-    # host DATABASE_URL / APP_SECRET here — that bypasses .env layering and breaks %kernel.project_dir%.
+    environment:
+      COMPOSER_HOME: /tmp/composer
+      COMPOSER_CACHE_DIR: /tmp/composer/cache
+      XDG_CONFIG_HOME: /tmp/caddy-config
+      XDG_DATA_HOME: /tmp/caddy-data
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:2019/metrics"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
 volumes:
   caddy_data:
