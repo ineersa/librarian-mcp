@@ -50,10 +50,24 @@ final class HatfieldSourceDiscovery
             'requiredSchemaVersions' => OmExtensionIds::REQUIRED_SCHEMA_VERSIONS,
         ];
 
-        if ('' === trim($this->hatfieldUserHome)) {
+        $logicalUserHome = trim($this->hatfieldUserHome);
+        if ('' === $logicalUserHome) {
             return ProjectDiscoveryResult::error(
                 'HATFIELD_USER_HOME is required to resolve Hatfield user settings.',
                 issues: [$this->issue(ProjectSourceIssueCode::UserHomeUnavailable, 'HATFIELD_USER_HOME is empty or unavailable.')],
+                details: $details,
+            );
+        }
+
+        $mappedUserHome = $this->pathMapper->map($logicalUserHome);
+        $details['logicalUserHome'] = $logicalUserHome;
+        $mappedUserHome = $this->canonicalizeExistingPath($mappedUserHome);
+        $details['userHome'] = $mappedUserHome;
+
+        if (!is_dir($mappedUserHome) || !is_readable($mappedUserHome)) {
+            return ProjectDiscoveryResult::error(
+                'Configured Hatfield user home is unavailable in the service filesystem.',
+                issues: [$this->issue(ProjectSourceIssueCode::UserHomeUnavailable, 'HATFIELD_USER_HOME is configured but unavailable after path mapping.')],
                 details: $details,
             );
         }
@@ -76,7 +90,7 @@ final class HatfieldSourceDiscovery
         }
 
         try {
-            $effective = $this->loadEffectiveSettings($projectRoot, $details);
+            $effective = $this->loadEffectiveSettings($projectRoot, $mappedUserHome, $details);
         } catch (ProjectSourceException $exception) {
             return ProjectDiscoveryResult::error(
                 $exception->getMessage(),
@@ -107,8 +121,8 @@ final class HatfieldSourceDiscovery
             );
         }
 
-        $sessionsPath = $this->pathMapper->map($logicalSessionsPath);
-        $databasePath = $this->pathMapper->map($logicalDatabasePath);
+        $sessionsPath = $this->canonicalizeExistingPath($this->pathMapper->map($logicalSessionsPath));
+        $databasePath = $this->canonicalizeExistingPath($this->pathMapper->map($logicalDatabasePath));
 
         $details['logicalSessionsPath'] = $logicalSessionsPath;
         $details['logicalDatabasePath'] = $logicalDatabasePath;
@@ -149,10 +163,19 @@ final class HatfieldSourceDiscovery
      *
      * @return array<string, mixed>
      */
-    private function loadEffectiveSettings(string $projectRoot, array &$details): array
+    private function loadEffectiveSettings(string $projectRoot, string $mappedUserHome, array &$details): array
     {
-        $userSettingsPath = rtrim($this->hatfieldUserHome, '/').'/.hatfield/settings.yaml';
-        $projectSettingsPath = rtrim($projectRoot, '/').'/.hatfield/settings.yaml';
+        $logicalUserSettingsPath = rtrim($this->hatfieldUserHome, '/').'/.hatfield/settings.yaml';
+        // Always resolve the service-visible settings path from the mapped home so
+        // host-prefix mappings are honored before availability checks/reads.
+        $userSettingsPath = $this->canonicalizeExistingPath(
+            rtrim($mappedUserHome, '/').'/.hatfield/settings.yaml',
+        );
+        $projectSettingsPath = $this->canonicalizeExistingPath(
+            rtrim($projectRoot, '/').'/.hatfield/settings.yaml',
+        );
+
+        $details['logicalUserSettingsPath'] = $logicalUserSettingsPath;
         $details['userSettingsPath'] = $userSettingsPath;
         $details['projectSettingsPath'] = $projectSettingsPath;
         $details['userSettingsPresent'] = is_file($userSettingsPath);
@@ -349,6 +372,21 @@ final class HatfieldSourceDiscovery
         }
 
         return $count;
+    }
+
+    /**
+     * Prefer realpath for existing filesystem entries so symlink destinations are reported.
+     * Non-existent paths remain as mapped logical/service paths for actionable errors.
+     */
+    private function canonicalizeExistingPath(string $path): string
+    {
+        if ('' === $path) {
+            return $path;
+        }
+
+        $resolved = realpath($path);
+
+        return false === $resolved ? $path : $resolved;
     }
 
     /**

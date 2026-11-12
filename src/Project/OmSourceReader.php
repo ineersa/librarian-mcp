@@ -41,14 +41,36 @@ final class OmSourceReader
         $pdo = $this->openReadonly($databasePath);
 
         try {
-            $applied = $this->readAppliedVersions($pdo);
-            $this->assertSupportedSchema($applied);
-            $this->assertRequiredTables($pdo);
+            $pdo->beginTransaction();
 
-            $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
-            $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
-            $sourceRevision = $this->fetchSourceRevision($pdo);
-            $sourceChangeCount = (int) $pdo->query('SELECT COUNT(*) FROM om_source_change')->fetchColumn();
+            try {
+                $applied = $this->readAppliedVersions($pdo);
+                $this->assertSupportedSchema($applied);
+                $this->assertRequiredTables($pdo);
+
+                $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
+                $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
+                $sourceRevision = $this->fetchSourceRevision($pdo);
+                $sourceChangeCount = (int) $pdo->query('SELECT COUNT(*) FROM om_source_change')->fetchColumn();
+
+                $pdo->commit();
+            } catch (ProjectSourceException $exception) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+
+                throw $exception;
+            } catch (\PDOException $exception) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+
+                throw new ProjectSourceException(
+                    ProjectSourceIssueCode::OmDatabaseUnreadable,
+                    'Unable to read observational memory database snapshot.',
+                    previous: $exception,
+                );
+            }
 
             return [
                 'schemaVersion' => OmExtensionIds::LATEST_SCHEMA_VERSION,
@@ -65,7 +87,9 @@ final class OmSourceReader
 
     private function openReadonly(string $databasePath): \PDO
     {
-        $uri = 'file:'.$databasePath.'?mode=ro';
+        // PDO requires the sqlite: driver prefix. Keep mode=ro and avoid immutable
+        // so associated WAL/SHM state remains visible.
+        $uri = 'sqlite:file:'.$this->encodeSqliteUriPath($databasePath).'?mode=ro';
 
         try {
             $pdo = new \PDO($uri, null, null, [
@@ -81,6 +105,17 @@ final class OmSourceReader
         }
 
         return $pdo;
+    }
+
+    private function encodeSqliteUriPath(string $databasePath): string
+    {
+        $segments = explode('/', str_replace('\\', '/', $databasePath));
+        $encoded = [];
+        foreach ($segments as $segment) {
+            $encoded[] = rawurlencode($segment);
+        }
+
+        return implode('/', $encoded);
     }
 
     /**
@@ -165,14 +200,14 @@ final class OmSourceReader
      */
     private function tableColumns(\PDO $pdo, string $table): array
     {
-        try {
-            if (1 !== preg_match('/^[a-z0-9_]+$/', $table)) {
-                throw new ProjectSourceException(
-                    ProjectSourceIssueCode::OmSchemaIncomplete,
-                    'Invalid observational memory table name.',
-                );
-            }
+        if (1 !== preg_match('/^[a-z0-9_]+$/', $table)) {
+            throw new ProjectSourceException(
+                ProjectSourceIssueCode::OmSchemaIncomplete,
+                'Invalid observational memory table name.',
+            );
+        }
 
+        try {
             $statement = $pdo->query('PRAGMA table_info('.$table.')');
         } catch (\PDOException $exception) {
             throw new ProjectSourceException(

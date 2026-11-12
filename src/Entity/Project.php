@@ -99,9 +99,8 @@ class Project
     #[ORM\Column]
     public private(set) \DateTimeImmutable $updatedAt;
 
-    public function __construct()
+    public function __construct(\DateTimeImmutable $now)
     {
-        $now = new \DateTimeImmutable();
         $this->createdAt = $now;
         $this->updatedAt = $now;
     }
