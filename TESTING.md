@@ -6,11 +6,13 @@ Keep the suite small: **one happy-path scenario per implemented view or action**
 
 **Ask the owner for explicit permission before adding or running special-case tests.** This includes negative paths, boundary values, security matrices, fault injection, concurrency, recovery, and layout permutations. Fixing a bug does not automatically authorize another regression scenario. Database-reset / purge tests remain excluded.
 
-This policy does not remove application authorization, validation, MCP auth, or read-sandbox requirements. Do not claim that happy-path coverage proves those boundaries.
+This policy does not remove application authorization, validation, admin auth, or source read-only requirements. Do not claim that happy-path coverage proves those boundaries.
 
 Application behavior is verified through **real Playwright browsers**. PHPUnit is the browser harness, not a separate unit, kernel, service, or API-only testing layer. Keep the generic Castor tasks; do not add scenario-specific runners, orchestration, cross-run manifests, or supplementary datasets.
 
-Baseline happy-path coverage for current admin/MCP surfaces is authorized by the framework-upgrade task. Expanding into special-case matrices still requires owner permission.
+Baseline happy-path coverage for current admin/MCP surfaces is authorized. Plan 03 also **explicitly authorizes** isolated fixture scenarios for source discovery edge cases (default/custom paths, malformed/missing settings, unavailable mounts, unsupported schema, symlink/external path reporting, duplicate uniqueness, and registration removal leaving sources unchanged). Expanding into unrelated special-case matrices still requires owner permission.
+
+This document does **not** claim that validation has already passed.
 
 ## Native-network suite
 
@@ -18,19 +20,21 @@ Browser journeys use Playwright against the isolated stack URL supplied as `LIBR
 
 Each scenario opens and closes its own browser/context and signs in through the real login form. Headed launches request a 2560×1440 window with native 1000ms slow motion and `viewport: null`. Headless launches use a 1920×1080 viewport without slow motion.
 
-Saved journeys in `tests/E2E/`:
+Saved journeys in `tests/E2E/` (product path after plan 03):
 
 | Scenario | Happy path |
 |---|---|
 | Homepage | Public landing / login entry |
-| Authentication | Login and logout |
+| Authentication | Login and logout (dashboard title: Projects dashboard) |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
-| Libraries | List and registration form; no sync submission or external model calls |
-| MCP HTTP | Regenerate the isolated admin's token through the UI, then authenticated initialize / initialized / tools-list over real HTTP |
+| Projects | Register via directory picker, wait for async discovery/health, edit/rescan, detail, remove only its registration |
+| MCP HTTP | Optional token path: regenerate the isolated admin's token through the UI when used, then initialize / initialized / tools-list over real HTTP (`tools/list` empty until plan 05) |
 
-CRUD creates uniquely named records and deletes only those records through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass.
+Plan 03-authorized fixture journeys exercise synthetic `/project-sources` trees for discovery/uniqueness/removal contracts. They never import operator `compose.sources.yaml` overlays or private owner projects.
 
-The former kernel/unit suite and FakeVera / MockHub / `test://` substitutions have been removed. The new suite does **not** claim equivalent coverage for library create/edit/delete, search, sync/indexing, dashboard tool execution, negative authentication/authorization, concurrency, recovery, or entity validation. Those gaps are explicit: the routine upgrade suite does not contact embedding/reranking providers or clone repositories.
+CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. Source fixture trees/databases must remain unchanged after registration removal and failed discovery.
+
+The former kernel/unit suite and FakeVera / MockHub / library TOON tool harnesses have been removed. Do not add unit/API-only suites as the primary coverage model. Indexing, hybrid retrieval, and memory tools remain out of scope until later plans.
 
 ## Prepare the tooling runtime
 
@@ -54,7 +58,7 @@ vendor/bin/castor qa:static
 
 `tooling:prepare` builds the development tooling image, installs locked dependencies, and prepares Chromium. Private browser/tooling files live under ignored `var/tooling/`. Do not invoke another PHP runner around Castor.
 
-See [framework upgrade notes](docs/framework-upgrade.md) for dependency decisions and recorded validation, rather than inferring a passing build from this setup guide.
+See [framework upgrade notes](docs/framework-upgrade.md) for dependency decisions and [project sources](docs/project-sources.md) for the registration/discovery contract. Do not infer a passing build from this setup guide alone.
 
 ## Running tests
 
@@ -71,15 +75,15 @@ Use `test --headed` or `check --headed` only when the owner requests a visible r
 
 Run `cs:fix`, relevant saved happy-path scenarios, and `qa:static` after code changes. `check` is the combined static + browser gate. The default gate starts the real isolated application but must not exercise owner/production databases or private credentials.
 
-Report actual elapsed time, results, and any gaps. Do not inflate assertion counts or add test matrices. Routine validation must stay short.
+Report actual elapsed time, results, and any gaps. Do not inflate assertion counts or add unauthorized test matrices. Routine validation must stay short.
 
 ## Fixtures and isolation
 
 Use a **verified isolated admin seed** for browser journeys (canonical demo operator such as `admin@test.com` / `admin` once seeded into isolated storage). Do not create a supplementary dataset that mutates development data for verification. Do not copy credentials from another checkout into reports.
 
-Native-network SQLite, cache, logs, library storage, MCP sessions, and Mercure state are under `var/browser-live/`. Doctrine migrations prepare the schema without purging it. `tests/Support/prepare_browser.php` accepts only the exact isolated database path with `APP_ENV=test`, verifies Doctrine's resolved path, and prepares only the synthetic admin identity. The old DAMA and Messenger test harnesses are removed; cross-process isolation is filesystem/network isolation, not transaction rollback.
+Native-network SQLite, cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). Doctrine migrations prepare the schema without purging it. `tests/Support/prepare_browser.php` accepts only the exact isolated database path with `APP_ENV=test`, verifies Doctrine's resolved path, and prepares only the synthetic admin identity. Cross-process isolation is filesystem/network isolation, not transaction rollback.
 
-Each journey deletes only its own UI-created records. Filesystem cleanup is through the application's owned deletion actions, never broad directory cleanup of `data/` or `public/`.
+Each journey deletes only its own UI-created registrations. Filesystem cleanup is through the application's owned deletion actions, never broad directory cleanup of `data/` or `public/`, and never deletion of source fixture trees.
 
 ## Isolated live stack
 
@@ -94,7 +98,7 @@ Use `vendor/bin/castor test` for initial migrations and admin preparation. Subse
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
-The upgraded runtime uses a **private network and loopback-published checkout URL**, not a shared multi-checkout development proxy. Always use the URL Castor prints for this checkout.
+The upgraded runtime uses a **private network and loopback-published checkout URL**, not a shared multi-checkout development proxy. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
 
 ## Diagnostics and evidence
 
@@ -104,10 +108,10 @@ Main runs saved tests and QA directly through Castor. Read `var/qa/<task>/result
 
 Exploratory browser work uses system `playwright-cli` with a unique session and isolated profile. Obtain permission first for special-case investigations. Close owned contexts on success and failure; never use global cleanup commands or the owner's browser profile.
 
-Keep screenshots, traces, profiles, cookies, reports, MCP tokens, and library index data private and out of Git. Static checks do not establish runtime behavior. Report only what was actually verified.
+Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, and session journals private and out of Git. Static checks do not establish runtime behavior. Report only what was actually verified.
 
 ## Out of scope for this testing policy
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
 - Speculative Symfony AI backends beyond what main installs for the approved upgrade
-- Production cutover, data backup, Hatfield changes, and later domain rewrite plans
+- Production cutover, data backup, Hatfield semantic removal, and later indexing/MCP-tool plans beyond the authorized plan 03 fixture cases

@@ -13,12 +13,15 @@ Librarian runs on FrankenPHP with Symfony worker mode, built-in Mercure, and SQL
   - Dev overrides: `compose.override.yaml`
   - Browser overrides: `compose.browser.yaml` (isolated Playwright stack)
   - Production-like overrides: `compose.prod.yaml`
+  - Optional ignored `compose.sources.yaml` (dev/prod only via Castor) for extra read-only source mounts
 
 ## Framework note
 
-Owner-approved on 2026-11-12: proceed with **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) using package-scoped stability allowances. See [framework upgrade notes](framework-upgrade.md) for locked dependencies and validation.
+Owner-approved on 2026-11-12: proceed with **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) using package-scoped stability allowances. See [framework upgrade notes](framework-upgrade.md) for locked dependencies.
 
 Selected packages: MCP 0.15 / sdk 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, UX Stimulus/Turbo 3.7. The tooling runtime is pinned FrankenPHP 1.13.5 / PHP 8.5; development and browsers use private networks with loopback-published URLs, not a shared proxy.
+
+Plan 03 product path: local project registration and read-only Hatfield source discovery. See [project-sources.md](project-sources.md). This supersedes the historical Git/Vera library workflow.
 
 ## First-time local setup
 
@@ -28,27 +31,36 @@ Selected packages: MCP 0.15 / sdk 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrin
    vendor/bin/castor tooling:prepare
    ```
 
-2. Migrate the development database:
+2. Configure project/source context (typical local values):
+
+   - `PROJECTS_HOST_PATH` (default `.`) mounted read-only as `/projects`
+   - `PROJECT_BROWSE_ROOT` picker start path inside the service
+   - `HATFIELD_USER_HOME` (required)
+   - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
+   - optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix mappings
+   - optional ignored `compose.sources.yaml` for additional read-only user/global/custom mounts (dev/prod via Castor; never imported by the browser stack)
+
+3. Migrate the development database:
 
    ```bash
    vendor/bin/castor app:console -- doctrine:migrations:migrate --no-interaction
    ```
 
-3. Create a local admin user when needed (confirm command via console list):
+4. Create a local admin user when needed (confirm command via console list):
 
    ```bash
    vendor/bin/castor app:console -- app:user:create-admin admin@example.com --password='change-me-now'
    ```
 
-4. Start the development stack and Messenger consumer with `vendor/bin/castor dev:stack:up` and read its loopback URL. Use `dev:stack:status` to rediscover it later.
+5. Start the development stack and Messenger consumer with `vendor/bin/castor dev:stack:up` and read its loopback URL. Use `dev:stack:status` to rediscover it later.
 
-5. Optional while editing CSS/templates:
+6. Optional while editing CSS/templates:
 
    ```bash
    vendor/bin/castor app:console -- tailwind:build --watch
    ```
 
-6. Open the printed development / browser URL from the stack status task (`LIBRARIAN_BROWSER_URL` for Playwright). The upgraded runtime uses a private network and loopback-published checkout URL — not a shared multi-checkout proxy.
+7. Open the printed development / browser URL from the stack status task (`LIBRARIAN_BROWSER_URL` for Playwright). The upgraded runtime uses a private network and loopback-published checkout URL — not a shared multi-checkout proxy.
 
 Development/browser ports are allocated and persisted per checkout by Castor. Production retains its existing `APP_HTTP_BIND` / `APP_HTTP_PORT` configuration. Prefer stack status output over inventing ports.
 
@@ -68,7 +80,7 @@ vendor/bin/castor browser:stack:up
 vendor/bin/castor browser:stack:status
 ```
 
-Use the printed loopback URL for host exploration. Tests receive `LIBRARIAN_BROWSER_URL=http://php:8080` inside the private network. Details: [TESTING.md](../TESTING.md).
+Use the printed loopback URL for host exploration. Tests receive `LIBRARIAN_BROWSER_URL=http://php:8080` inside the private network. The browser stack maps synthetic `/project-sources` fixtures and never imports operator `compose.sources.yaml` overlays. Details: [TESTING.md](../TESTING.md).
 
 ## Production-like local run
 
