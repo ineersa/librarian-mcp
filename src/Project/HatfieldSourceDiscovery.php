@@ -198,28 +198,18 @@ final class HatfieldSourceDiscovery
         }
 
         if (!is_readable($path)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SettingsMalformed,
-                \sprintf('Settings file is unreadable: %s', basename(dirname($path)).'/'.basename($path)),
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SettingsMalformed, \sprintf('Settings file is unreadable: %s', basename(\dirname($path)).'/'.basename($path)));
         }
 
         $content = file_get_contents($path);
         if (false === $content) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SettingsMalformed,
-                'Unable to read Hatfield settings YAML.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SettingsMalformed, 'Unable to read Hatfield settings YAML.');
         }
 
         try {
             $parsed = Yaml::parse($content);
         } catch (ParseException $exception) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SettingsMalformed,
-                'Hatfield settings YAML is malformed.',
-                previous: $exception,
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SettingsMalformed, 'Hatfield settings YAML is malformed.', previous: $exception);
         }
 
         if (null === $parsed) {
@@ -227,13 +217,10 @@ final class HatfieldSourceDiscovery
         }
 
         if (!\is_array($parsed)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SettingsMalformed,
-                'Hatfield settings YAML must parse to a mapping.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SettingsMalformed, 'Hatfield settings YAML must parse to a mapping.');
         }
 
-        /** @var array<string, mixed> $parsed */
+        /* @var array<string, mixed> $parsed */
         return $parsed;
     }
 
@@ -284,10 +271,7 @@ final class HatfieldSourceDiscovery
         }
 
         if (str_contains($path, '%kernel.project_dir%') && '' === trim($this->hatfieldAppRoot)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::AppRootRequired,
-                'HATFIELD_APP_ROOT is required because sessions.path uses %kernel.project_dir%.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::AppRootRequired, 'HATFIELD_APP_ROOT is required because sessions.path uses %kernel.project_dir%.');
         }
 
         return $this->pathResolver->resolve($path, $projectRoot);
@@ -318,25 +302,16 @@ final class HatfieldSourceDiscovery
     private function countSessions(string $sessionsPath): int
     {
         if (!is_dir($sessionsPath)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SessionsUnavailable,
-                'Configured sessions directory is missing.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SessionsUnavailable, 'Configured sessions directory is missing.');
         }
 
         if (!is_readable($sessionsPath)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SessionsUnavailable,
-                'Configured sessions directory is unreadable.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SessionsUnavailable, 'Configured sessions directory is unreadable.');
         }
 
         $entries = scandir($sessionsPath);
         if (false === $entries) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::SessionsUnavailable,
-                'Unable to list configured sessions directory.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::SessionsUnavailable, 'Unable to list configured sessions directory.');
         }
 
         $count = 0;
@@ -365,10 +340,7 @@ final class HatfieldSourceDiscovery
         }
 
         if ($unreadable > 0) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::JournalsUnreadable,
-                \sprintf('%d session journal(s) are unreadable.', $unreadable),
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::JournalsUnreadable, \sprintf('%d session journal(s) are unreadable.', $unreadable));
         }
 
         return $count;

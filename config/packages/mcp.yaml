@@ -16,5 +16,6 @@ mcp:
                 directory: '%kernel.project_dir%/var/mcp-sessions'
                 ttl: 3600
             registry:
-                # The legacy library tools are retired; plan 05 adds memory tools.
-                tools: ['App\Mcp\']
+                # Bundle 0.15 permits an empty wildcard registry, not an unmatched prefix.
+                # No MCP tool services remain; plan 05 will select the memory tools.
+                tools: ['*']

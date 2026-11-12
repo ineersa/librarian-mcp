@@ -89,7 +89,6 @@ final class McpTokenAuthenticator extends AbstractAuthenticator
             if (preg_match('/^Bearer\s+(.+)$/i', $auth, $matches)) {
                 return trim($matches[1]);
             }
-
         }
 
         $xToken = $request->headers->get(self::TOKEN_HEADER);

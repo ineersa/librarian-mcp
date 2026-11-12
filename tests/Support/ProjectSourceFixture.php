@@ -32,7 +32,7 @@ final class ProjectSourceFixture
     public static function hashTree(string $absoluteRoot): array
     {
         if (!is_dir($absoluteRoot)) {
-            throw new \InvalidArgumentException(sprintf('Fixture root missing: %s', $absoluteRoot));
+            throw new \InvalidArgumentException(\sprintf('Fixture root missing: %s', $absoluteRoot));
         }
 
         $hashes = [];
@@ -42,7 +42,7 @@ final class ProjectSourceFixture
         foreach ($iterator as $fileInfo) {
             /** @var \SplFileInfo $fileInfo */
             $path = $fileInfo->getPathname();
-            $relative = substr($path, strlen($absoluteRoot) + 1);
+            $relative = substr($path, \strlen($absoluteRoot) + 1);
             if ($fileInfo->isLink()) {
                 $hashes[$relative] = 'symlink:'.(string) readlink($path);
 
@@ -54,7 +54,7 @@ final class ProjectSourceFixture
                 continue;
             }
             if (!$fileInfo->isReadable()) {
-                $hashes[$relative] = 'unreadable:'.sprintf('%04o', $fileInfo->getPerms() & 0777);
+                $hashes[$relative] = 'unreadable:'.\sprintf('%04o', $fileInfo->getPerms() & 0777);
 
                 continue;
             }
@@ -72,12 +72,7 @@ final class ProjectSourceFixture
     public static function assertUnchanged(array $before, array $after, string $label): void
     {
         if ($before !== $after) {
-            throw new \RuntimeException(sprintf(
-                "%s source tree changed.\nBefore keys: %s\nAfter keys: %s",
-                $label,
-                implode(',', array_keys($before)),
-                implode(',', array_keys($after)),
-            ));
+            throw new \RuntimeException(\sprintf("%s source tree changed.\nBefore keys: %s\nAfter keys: %s", $label, implode(',', array_keys($before)), implode(',', array_keys($after))));
         }
     }
 }

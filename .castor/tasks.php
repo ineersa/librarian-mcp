@@ -178,6 +178,8 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
         stackRun('browser', ['exec', '-T', 'php', 'php', 'tests/Support/prepare_browser.php']);
+        // FrankenPHP workers retain loaded classes; use current application code.
+        stackRun('browser', ['restart', 'php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
         return report('test:browser', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);

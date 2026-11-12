@@ -14,6 +14,26 @@ use Playwright\Page\PageInterface;
  */
 trait ProjectSourceBrowserHelpers
 {
+    /** @var array<int|string, true> */
+    private array $registeredProjectIds = [];
+
+    protected function tearDown(): void
+    {
+        try {
+            foreach (array_keys($this->registeredProjectIds) as $id) {
+                $this->deleteRecord('/admin/projects/'.$id);
+            }
+        } finally {
+            parent::tearDown();
+        }
+    }
+
+    protected function deleteRecord(string $detailUrl): void
+    {
+        parent::deleteRecord($detailUrl);
+        unset($this->registeredProjectIds[basename($detailUrl)]);
+    }
+
     protected function openProjectsIndex(): PageInterface
     {
         $page = $this->visit('/admin/projects');
@@ -25,7 +45,7 @@ trait ProjectSourceBrowserHelpers
     protected function openRegisterProjectForm(): PageInterface
     {
         $page = $this->openProjectsIndex();
-        $page->getByRole('link', ['name' => 'Register Project'])->or($page->getByRole('button', ['name' => 'Register Project']))->click();
+        $page->getByRole('button', ['name' => 'Register Project'])->click();
         $page->waitForURL('**/admin/projects/new**');
         $page->getByRole('heading', ['name' => 'Register Project'])->waitFor();
 
@@ -43,8 +63,8 @@ trait ProjectSourceBrowserHelpers
         $page->getByRole('button', ['name' => 'Choose directory', 'exact' => true])->click();
         $dialog = $page->getByRole('dialog');
         $dialog->waitFor();
-        $dialog->getByLabel('Location', ['exact' => true])->fill($visibleAbsolutePath);
-        $dialog->getByLabel('Location', ['exact' => true])->press('Enter');
+        $dialog->getByRole('textbox', ['name' => 'Directory location', 'exact' => true])->fill($visibleAbsolutePath);
+        $dialog->getByRole('textbox', ['name' => 'Directory location', 'exact' => true])->press('Enter');
         $dialog->getByRole('button', ['name' => 'Select this directory', 'exact' => true])->click();
         Expect::locator($page->getByLabel('Project directory', ['exact' => true]))
             ->toHaveValue($visibleAbsolutePath, new AssertionOptions(timeoutMs: 10_000));
@@ -61,17 +81,19 @@ trait ProjectSourceBrowserHelpers
         $this->fillProjectName($name);
         $this->chooseProjectDirectory($visibleDirectory);
         $this->submitRegisterOrEditForm();
-        $this->page->waitForURL('**/admin/projects/**');
+        $this->page->locator('body.ea-index, body.ea-detail, body.ea-edit')->waitFor();
         $url = $this->page->url();
         if (!preg_match('#/admin/projects/(\d+)(?:/|$)#', $url, $matches)) {
             // Some EasyAdmin configs return to index; open the named row.
             $this->openProjectsIndex();
-            $this->page->getByRole('link', ['name' => $name, 'exact' => true])->click();
+            $this->page->getByRole('row')->filter(['hasText' => $name])->locator('a.action-detail')->click();
             $this->page->waitForURL('**/admin/projects/**');
             $url = $this->page->url();
             self::assertMatchesRegularExpression('#/admin/projects/(\d+)(?:/|$)#', $url);
             preg_match('#/admin/projects/(\d+)(?:/|$)#', $url, $matches);
         }
+
+        $this->registeredProjectIds[$matches[1]] = true;
 
         return $matches[1];
     }
@@ -86,13 +108,13 @@ trait ProjectSourceBrowserHelpers
 
     protected function triggerScanSources(): void
     {
-        $this->page->getByRole('link', ['name' => 'Scan sources'])->or($this->page->getByRole('button', ['name' => 'Scan sources']))->click();
+        $this->page->getByRole('button', ['name' => 'Scan sources'])->click();
     }
 
     protected function waitForProjectHealth(string $health): void
     {
         Expect::locator($this->page->locator('[data-project-health]'))
-            ->toHaveAttribute('data-project-health', $health, new AssertionOptions(timeoutMs: 60_000));
+            ->toHaveAttribute('data-project-health', strtolower($health), new AssertionOptions(timeoutMs: 60_000));
         if ('Ready' === $health) {
             Expect::locator($this->page->locator('#project-source-status'))
                 ->toContainText('Sources discovered', new AssertionOptions(timeoutMs: 60_000));

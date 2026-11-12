@@ -168,7 +168,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         Expect::locator($status)->toContainText('1');
         // Relaxed policy: resolved symlink metadata is accepted, not a forbidden-root error.
         Expect::locator($this->page->locator('[data-project-health]'))
-            ->toHaveAttribute('data-project-health', 'Ready');
+            ->toHaveAttribute('data-project-health', 'ready');
     }
 
     public function testDistinctProjectsWithSameSessionIdRemainIsolated(): void

@@ -24,6 +24,7 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\IntegerField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Exception\InvalidCsrfTokenException;
@@ -37,7 +38,13 @@ class ProjectCrudController extends AbstractCrudController
     public function __construct(
         private readonly ProjectManager $projectManager,
         private readonly UrlGeneratorInterface $urlGenerator,
+        private readonly ClockInterface $clock,
     ) {
+    }
+
+    public function createEntity(string $entityFqcn): Project
+    {
+        return new Project($this->clock->now());
     }
 
     public static function getEntityFqcn(): string
@@ -162,6 +169,7 @@ class ProjectCrudController extends AbstractCrudController
             ->addCssClass('btn btn-primary');
 
         return $actions
+            ->update(Crud::PAGE_INDEX, Action::NEW, static fn (Action $action) => $action->setLabel('Register Project'))
             ->add(Crud::PAGE_INDEX, Action::DETAIL)
             ->add(Crud::PAGE_INDEX, $scanSources)
             ->add(Crud::PAGE_DETAIL, $scanSources)
@@ -190,6 +198,7 @@ class ProjectCrudController extends AbstractCrudController
     {
         \assert($entityInstance instanceof Project);
 
+        parent::persistEntity($entityManager, $entityInstance);
         $this->projectManager->queueScan($entityInstance);
     }
 
@@ -197,6 +206,7 @@ class ProjectCrudController extends AbstractCrudController
     {
         \assert($entityInstance instanceof Project);
 
+        parent::updateEntity($entityManager, $entityInstance);
         $this->projectManager->queueScan($entityInstance);
     }
 

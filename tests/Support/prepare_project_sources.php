@@ -10,7 +10,6 @@ declare(strict_types=1);
  *
  * Does not boot Hatfield, load extension PHP, run OM migrations, or copy owner data.
  */
-
 const PROJECT_SOURCES_MANIFEST_VERSION = 1;
 const PROJECT_SOURCES_IDENTITY = 'librarian-plan03-project-sources-v2';
 const PROJECT_SOURCES_OWNED_IDENTITIES = [
@@ -51,7 +50,7 @@ if (is_file($manifestPath)) {
     if (!is_string($identity) || !in_array($identity, PROJECT_SOURCES_OWNED_IDENTITIES, true)) {
         throw new RuntimeException('Refusing foreign project-sources tree; identity mismatch.');
     }
-    if ($identity === PROJECT_SOURCES_IDENTITY
+    if (PROJECT_SOURCES_IDENTITY === $identity
         && ($existing['version'] ?? null) === PROJECT_SOURCES_MANIFEST_VERSION
         && ($existing['checksum'] ?? null) === $expectedManifest['checksum']
         && fixturesMatchManifest($targetRoot, $existing)
@@ -92,7 +91,7 @@ buildScanFailureProject($projectsRoot.'/scan-failure');
 buildDuplicateNameSource($projectsRoot.'/duplicate-name-source');
 buildDuplicateOriginSource($projectsRoot.'/duplicate-origin-source');
 
-file_put_contents($manifestPath, json_encode($expectedManifest, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
+file_put_contents($manifestPath, json_encode($expectedManifest, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR)."\n");
 echo "Prepared synthetic project sources at {$targetRoot}\n";
 echo "Visible mount: /project-sources\n";
 echo "HATFIELD_USER_HOME=/synthetic-home -> /project-sources/context-home\n";
@@ -602,7 +601,7 @@ function writeSessionJournal(string $path, string $runId, int $eventCount): void
                 'note' => 'synthetic sanitized event',
             ],
             'ts' => sprintf('2026-01-01T00:00:%02d+00:00', $seq),
-        ], JSON_THROW_ON_ERROR);
+        ], \JSON_THROW_ON_ERROR);
     }
     writeFile($path, implode("\n", $lines)."\n");
 }
@@ -642,13 +641,7 @@ function runCommand(array $command, bool $allowFailure = false): void
     fclose($pipes[2]);
     $exit = proc_close($process);
     if (0 !== $exit && !$allowFailure) {
-        throw new RuntimeException(sprintf(
-            "Command failed (%d): %s\n%s%s",
-            $exit,
-            implode(' ', $command),
-            $stdout,
-            $stderr,
-        ));
+        throw new RuntimeException(sprintf("Command failed (%d): %s\n%s%s", $exit, implode(' ', $command), $stdout, $stderr));
     }
 }
 

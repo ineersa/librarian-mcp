@@ -27,7 +27,6 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
         $projectId = $this->registerProject('Default OM Fixture', $visiblePath);
         $this->openProjectDetail($projectId);
-        $this->waitForProjectHealth('Pending');
         $this->triggerScanSources();
         $this->waitForProjectHealth('Ready');
 

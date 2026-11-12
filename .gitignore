@@ -34,12 +34,7 @@
 /config/schema.json
 /compose.sources.yaml
 /.castor.stub.php
-.vera/
-
-# Vera runtime state written by the binary at runtime
-/docker/vera/lib/
-/docker/vera/models/
-/docker/vera/update-check.json
+/.hatfield/
 
 # AI index artifacts
 *.toon

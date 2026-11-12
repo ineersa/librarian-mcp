@@ -11,7 +11,7 @@ use Symfony\Component\Process\Process;
 /** @return list<string> */
 function productionComposeCommand(): array
 {
-    return ['docker', 'compose', '--env-file', '.env', '--env-file', '.env.prod', '-f', 'compose.yaml', '-f', 'compose.prod.yaml'];
+    return ['docker', 'compose', '--env-file', '.env', '--env-file', '.env.prod', '-f', 'compose.yaml', '-f', 'compose.prod.yaml', ...(is_file(\dirname(__DIR__).'/compose.sources.yaml') ? ['-f', 'compose.sources.yaml'] : [])];
 }
 
 /** @param list<string> $arguments */

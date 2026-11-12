@@ -83,8 +83,10 @@ vendor/bin/castor list --raw
 ## Notes
 
 - Docker commands for the app are executed through Castor-owned compose invocations.
-- Dev tasks use `compose.yaml` + `compose.override.yaml` (+ browser override when present).
-- Prod-like tasks use `compose.yaml` + `compose.prod.yaml`.
+- Dev tasks use `compose.yaml` + `compose.override.yaml`; optional ignored `compose.sources.yaml` supplies deliberately configured read-only source mounts.
+- Prod-like tasks use `compose.yaml` + `compose.prod.yaml`, with the same optional source override (use production service name `messenger`, not `worker`).
+- Browser tasks always use `compose.browser.yaml` instead of the operator's source override, and prepare only synthetic project sources. `test` restarts the checkout's browser web workers after setup so loaded PHP classes match the code under test.
 - User-mapped container commands should use the host UID/GID to keep file ownership correct.
 - Do not run host PHP/Composer for application operations once the tooling runtime exists.
 - See [framework upgrade notes](framework-upgrade.md) for dependency resolution and validation evidence.
+- See [project sources](project-sources.md) for the local-project identity, source discovery, settings, and mount contract.

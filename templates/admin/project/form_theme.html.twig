@@ -12,6 +12,7 @@
                 type="text"
                 {{ block('widget_attributes') }}
                 class="{{ (existingClass ~ ' form-control')|trim }}"
+                value="{{ value }}"
                 readonly
                 data-project-directory-target="input"
             >

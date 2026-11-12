@@ -63,7 +63,7 @@ final class ProjectDiscoveryResult
     }
 
     /**
-     * @param array<string, mixed> $details
+     * @param array<string, mixed>                       $details
      * @param list<array{code: string, message: string}> $issues
      */
     public static function ready(

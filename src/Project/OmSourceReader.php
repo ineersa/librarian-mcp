@@ -25,17 +25,11 @@ final class OmSourceReader
     public function inspect(string $databasePath): array
     {
         if (!is_file($databasePath)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmDatabaseMissing,
-                'Observational memory database file is missing.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseMissing, 'Observational memory database file is missing.');
         }
 
         if (!is_readable($databasePath)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmDatabaseUnreadable,
-                'Observational memory database file is unreadable.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Observational memory database file is unreadable.');
         }
 
         $pdo = $this->openReadonly($databasePath);
@@ -65,11 +59,7 @@ final class OmSourceReader
                     $pdo->rollBack();
                 }
 
-                throw new ProjectSourceException(
-                    ProjectSourceIssueCode::OmDatabaseUnreadable,
-                    'Unable to read observational memory database snapshot.',
-                    previous: $exception,
-                );
+                throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Unable to read observational memory database snapshot.', previous: $exception);
             }
 
             return [
@@ -97,11 +87,7 @@ final class OmSourceReader
                 \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
             ]);
         } catch (\PDOException $exception) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmDatabaseUnreadable,
-                'Unable to open observational memory database read-only.',
-                previous: $exception,
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Unable to open observational memory database read-only.', previous: $exception);
         }
 
         return $pdo;
@@ -126,11 +112,7 @@ final class OmSourceReader
         try {
             $statement = $pdo->query('SELECT version FROM om_schema_version ORDER BY version ASC');
         } catch (\PDOException $exception) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaIncomplete,
-                'Observational memory schema version table is missing or unreadable.',
-                previous: $exception,
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaIncomplete, 'Observational memory schema version table is missing or unreadable.', previous: $exception);
         }
 
         $versions = [];
@@ -141,10 +123,7 @@ final class OmSourceReader
         }
 
         if ([] === $versions) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaIncomplete,
-                'Observational memory schema version table is empty.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaIncomplete, 'Observational memory schema version table is empty.');
         }
 
         return $versions;
@@ -158,18 +137,12 @@ final class OmSourceReader
         $required = OmExtensionIds::REQUIRED_SCHEMA_VERSIONS;
         $unknown = array_values(array_diff($applied, $required));
         if ([] !== $unknown) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaUnknown,
-                'Observational memory schema contains unsupported version(s).',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaUnknown, 'Observational memory schema contains unsupported version(s).');
         }
 
         $missing = array_values(array_diff($required, $applied));
         if ([] !== $missing) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaUnsupported,
-                'Observational memory schema is missing required version(s).',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaUnsupported, 'Observational memory schema is missing required version(s).');
         }
     }
 
@@ -186,10 +159,7 @@ final class OmSourceReader
             $existing = $this->tableColumns($pdo, $table);
             foreach ($columns as $column) {
                 if (!isset($existing[$column])) {
-                    throw new ProjectSourceException(
-                        ProjectSourceIssueCode::OmSchemaIncomplete,
-                        \sprintf('Observational memory table "%s" is missing required column "%s".', $table, $column),
-                    );
+                    throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaIncomplete, \sprintf('Observational memory table "%s" is missing required column "%s".', $table, $column));
                 }
             }
         }
@@ -201,20 +171,13 @@ final class OmSourceReader
     private function tableColumns(\PDO $pdo, string $table): array
     {
         if (1 !== preg_match('/^[a-z0-9_]+$/', $table)) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaIncomplete,
-                'Invalid observational memory table name.',
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaIncomplete, 'Invalid observational memory table name.');
         }
 
         try {
             $statement = $pdo->query('PRAGMA table_info('.$table.')');
         } catch (\PDOException $exception) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaIncomplete,
-                \sprintf('Observational memory table "%s" is missing or unreadable.', $table),
-                previous: $exception,
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaIncomplete, \sprintf('Observational memory table "%s" is missing or unreadable.', $table), previous: $exception);
         }
 
         $columns = [];
@@ -226,10 +189,7 @@ final class OmSourceReader
         }
 
         if ([] === $columns) {
-            throw new ProjectSourceException(
-                ProjectSourceIssueCode::OmSchemaIncomplete,
-                \sprintf('Observational memory table "%s" is missing or unreadable.', $table),
-            );
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaIncomplete, \sprintf('Observational memory table "%s" is missing or unreadable.', $table));
         }
 
         return $columns;

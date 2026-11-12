@@ -29,8 +29,8 @@ final class ProjectDirectoryType extends AbstractType
             ],
         ]);
 
-        $resolver->setAllowedTypes('browse_url', ['string']);
         $resolver->setRequired(['browse_url']);
+        $resolver->setAllowedTypes('browse_url', ['string']);
     }
 
     public function getParent(): string

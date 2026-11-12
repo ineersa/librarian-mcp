@@ -38,11 +38,13 @@ final class ServicePathMapper
             if ('' === $normalizedHost) {
                 $normalizedHost = '/';
             }
+            $normalizedService = rtrim($servicePrefix, '/');
+            $normalizedService = '' === $normalizedService ? '/' : $normalizedService;
 
             if ('/' === $normalizedHost) {
                 if (\strlen($normalizedHost) > $bestLength) {
                     $bestHost = $normalizedHost;
-                    $bestService = rtrim($servicePrefix, '/') ?: '/';
+                    $bestService = $normalizedService;
                     $bestLength = \strlen($normalizedHost);
                 }
                 continue;
@@ -51,7 +53,7 @@ final class ServicePathMapper
             if ($path === $normalizedHost || str_starts_with($path, $normalizedHost.'/')) {
                 if (\strlen($normalizedHost) > $bestLength) {
                     $bestHost = $normalizedHost;
-                    $bestService = rtrim($servicePrefix, '/') ?: '/';
+                    $bestService = $normalizedService;
                     $bestLength = \strlen($normalizedHost);
                 }
             }
