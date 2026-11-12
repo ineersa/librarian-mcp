@@ -10,12 +10,9 @@ declare(strict_types=1);
  *
  * Does not boot Hatfield, load extension PHP, run OM migrations, or copy owner data.
  */
-const PROJECT_SOURCES_MANIFEST_VERSION = 1;
-const PROJECT_SOURCES_IDENTITY = 'librarian-plan03-project-sources-v2';
-const PROJECT_SOURCES_OWNED_IDENTITIES = [
-    'librarian-plan03-project-sources-v1',
-    'librarian-plan03-project-sources-v2',
-];
+/** Fixed ownership marker content; not a cross-run checksum/version manifest. */
+const PROJECT_SOURCES_OWNERSHIP_MARKER = "librarian-plan03-synthetic-project-sources\n";
+const PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME = 'SYNTHETIC_PROJECT_SOURCES';
 const OM_EXTENSION_FQCN = 'Ineersa\\HatfieldExt\\ObservationalMemory\\ObservationalMemoryExtension';
 const OM_SCHEMA_VERSIONS = [
     '20260722_001_domain' => 'OM domain tables: observation, coverage, reflection, compaction request/result',
@@ -26,6 +23,26 @@ const OM_SCHEMA_VERSIONS = [
     '20261021_006_semantic_source_revisions' => 'Transactional canonical source revisions and incremental semantic reconciliation progress',
 ];
 
+const PROJECT_SOURCE_SLUGS = [
+    'default-om',
+    'custom-relative',
+    'custom-absolute',
+    'missing-hatfield',
+    'missing-om-db',
+    'inactive-extension',
+    'malformed-settings',
+    'unsupported-schema',
+    'unreadable-journal',
+    'unavailable-mount',
+    'symlink-resolved',
+    'isolation-alpha',
+    'isolation-beta',
+    'removal-proof',
+    'scan-failure',
+    'duplicate-name-source',
+    'duplicate-origin-source',
+];
+
 $projectDir = dirname(__DIR__, 2);
 $targetRoot = $projectDir.'/var/browser-live/project-sources';
 
@@ -33,32 +50,13 @@ assertExactNonSymlinkedPath($projectDir.'/var');
 assertExactNonSymlinkedPath($projectDir.'/var/browser-live');
 if (file_exists($targetRoot)) {
     assertExactNonSymlinkedPath($targetRoot);
+    assertPreparedProjectSources($targetRoot);
+    echo "Synthetic project sources already prepared at {$targetRoot}\n";
+    exit(0);
 }
 
 if (!is_dir(dirname($targetRoot)) && !mkdir(dirname($targetRoot), 0775, true) && !is_dir(dirname($targetRoot))) {
     throw new RuntimeException('Unable to create browser-live directory for project sources.');
-}
-
-$manifestPath = $targetRoot.'/manifest.json';
-$expectedManifest = expectedManifest();
-if (is_file($manifestPath)) {
-    $existing = json_decode((string) file_get_contents($manifestPath), true);
-    if (!is_array($existing)) {
-        throw new RuntimeException('Refusing unrecognized project-sources manifest.');
-    }
-    $identity = $existing['identity'] ?? null;
-    if (!is_string($identity) || !in_array($identity, PROJECT_SOURCES_OWNED_IDENTITIES, true)) {
-        throw new RuntimeException('Refusing foreign project-sources tree; identity mismatch.');
-    }
-    if (PROJECT_SOURCES_IDENTITY === $identity
-        && ($existing['version'] ?? null) === PROJECT_SOURCES_MANIFEST_VERSION
-        && ($existing['checksum'] ?? null) === $expectedManifest['checksum']
-        && fixturesMatchManifest($targetRoot, $existing)
-    ) {
-        echo "Synthetic project sources already prepared at {$targetRoot}\n";
-        exit(0);
-    }
-    removeOwnedTree($targetRoot, $identity);
 }
 
 if (!mkdir($targetRoot, 0775, true) && !is_dir($targetRoot)) {
@@ -91,81 +89,30 @@ buildScanFailureProject($projectsRoot.'/scan-failure');
 buildDuplicateNameSource($projectsRoot.'/duplicate-name-source');
 buildDuplicateOriginSource($projectsRoot.'/duplicate-origin-source');
 
-file_put_contents($manifestPath, json_encode($expectedManifest, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR)."\n");
+writeFile($targetRoot.'/'.PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME, PROJECT_SOURCES_OWNERSHIP_MARKER);
+assertPreparedProjectSources($targetRoot);
 echo "Prepared synthetic project sources at {$targetRoot}\n";
 echo "Visible mount: /project-sources\n";
 echo "HATFIELD_USER_HOME=/synthetic-home -> /project-sources/context-home\n";
 echo "HATFIELD_APP_ROOT=/synthetic-app -> /project-sources/context-app\n";
 
-/**
- * @return array{identity: string, version: int, checksum: string, projects: list<string>}
- */
-function expectedManifest(): array
+function assertPreparedProjectSources(string $targetRoot): void
 {
-    $projects = [
-        'default-om',
-        'custom-relative',
-        'custom-absolute',
-        'missing-hatfield',
-        'missing-om-db',
-        'inactive-extension',
-        'malformed-settings',
-        'unsupported-schema',
-        'unreadable-journal',
-        'unavailable-mount',
-        'symlink-resolved',
-        'isolation-alpha',
-        'isolation-beta',
-        'removal-proof',
-        'scan-failure',
-        'duplicate-name-source',
-        'duplicate-origin-source',
-    ];
-
-    return [
-        'identity' => PROJECT_SOURCES_IDENTITY,
-        'version' => PROJECT_SOURCES_MANIFEST_VERSION,
-        'checksum' => hash('sha256', PROJECT_SOURCES_IDENTITY.'|'.PROJECT_SOURCES_MANIFEST_VERSION.'|'.implode(',', $projects)),
-        'projects' => $projects,
-        'context' => [
-            'user_home_logical' => '/synthetic-home',
-            'user_home_visible' => '/project-sources/context-home',
-            'app_root_logical' => '/synthetic-app',
-            'app_root_visible' => '/project-sources/context-app',
-            'browse_root' => '/project-sources',
-        ],
-    ];
-}
-
-/**
- * @param array<string, mixed> $manifest
- */
-function fixturesMatchManifest(string $targetRoot, array $manifest): bool
-{
-    $projects = $manifest['projects'] ?? null;
-    if (!is_array($projects)) {
-        return false;
+    $markerPath = $targetRoot.'/'.PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME;
+    if (!is_file($markerPath)) {
+        throw new RuntimeException(sprintf('Project-sources tree exists at %s but is missing the synthetic ownership marker. Refusing automatic rebuild; remove the tree explicitly after verifying ownership if recreation is needed.', $targetRoot));
     }
-    foreach ($projects as $slug) {
-        if (!is_string($slug) || !is_dir($targetRoot.'/projects/'.$slug)) {
-            return false;
+    if (PROJECT_SOURCES_OWNERSHIP_MARKER !== (string) file_get_contents($markerPath)) {
+        throw new RuntimeException(sprintf('Project-sources tree at %s has a foreign ownership marker. Refusing to modify or rebuild it.', $targetRoot));
+    }
+    if (!is_dir($targetRoot.'/context-home') || !is_dir($targetRoot.'/context-app') || !is_dir($targetRoot.'/projects')) {
+        throw new RuntimeException(sprintf('Project-sources tree at %s is incomplete (missing context-home, context-app, or projects). Refusing automatic rebuild.', $targetRoot));
+    }
+    foreach (PROJECT_SOURCE_SLUGS as $slug) {
+        if (!is_dir($targetRoot.'/projects/'.$slug)) {
+            throw new RuntimeException(sprintf('Project-sources tree at %s is incomplete (missing projects/%s). Refusing automatic rebuild.', $targetRoot, $slug));
         }
     }
-
-    return is_dir($targetRoot.'/context-home') && is_dir($targetRoot.'/context-app');
-}
-
-function removeOwnedTree(string $targetRoot, string $identity): void
-{
-    $manifestPath = $targetRoot.'/manifest.json';
-    if (!is_file($manifestPath)) {
-        throw new RuntimeException('Refusing to replace project-sources without owned manifest.');
-    }
-    $existing = json_decode((string) file_get_contents($manifestPath), true);
-    if (!is_array($existing) || ($existing['identity'] ?? null) !== $identity || !in_array($identity, PROJECT_SOURCES_OWNED_IDENTITIES, true)) {
-        throw new RuntimeException('Refusing to replace foreign project-sources tree.');
-    }
-    deletePath($targetRoot);
 }
 
 function assertExactNonSymlinkedPath(string $path): void
@@ -643,30 +590,4 @@ function runCommand(array $command, bool $allowFailure = false): void
     if (0 !== $exit && !$allowFailure) {
         throw new RuntimeException(sprintf("Command failed (%d): %s\n%s%s", $exit, implode(' ', $command), $stdout, $stderr));
     }
-}
-
-function deletePath(string $path): void
-{
-    if (file_exists($path) || is_link($path)) {
-        @chmod($path, is_dir($path) && !is_link($path) ? 0775 : 0664);
-    }
-    if (is_link($path) || is_file($path)) {
-        unlink($path);
-
-        return;
-    }
-    if (!is_dir($path)) {
-        return;
-    }
-    $items = scandir($path);
-    if (false === $items) {
-        throw new RuntimeException(sprintf('Unable to scan %s', $path));
-    }
-    foreach ($items as $item) {
-        if ('.' === $item || '..' === $item) {
-            continue;
-        }
-        deletePath($path.'/'.$item);
-    }
-    rmdir($path);
 }
