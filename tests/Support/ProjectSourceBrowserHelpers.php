@@ -1,0 +1,108 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Support;
+
+use Playwright\Assertions\AssertionOptions;
+use Playwright\Assertions\Expect;
+use Playwright\Page\PageInterface;
+
+/**
+ * Shared Playwright helpers for plan 03 project registration journeys.
+ * Does not modify LibrarianNetworkBrowserTest; parent owns dashboard heading updates.
+ */
+trait ProjectSourceBrowserHelpers
+{
+    protected function openProjectsIndex(): PageInterface
+    {
+        $page = $this->visit('/admin/projects');
+        $page->getByRole('heading', ['name' => 'Projects', 'exact' => true])->waitFor();
+
+        return $page;
+    }
+
+    protected function openRegisterProjectForm(): PageInterface
+    {
+        $page = $this->openProjectsIndex();
+        $page->getByRole('link', ['name' => 'Register Project'])->or($page->getByRole('button', ['name' => 'Register Project']))->click();
+        $page->waitForURL('**/admin/projects/new**');
+        $page->getByRole('heading', ['name' => 'Register Project'])->waitFor();
+
+        return $page;
+    }
+
+    protected function fillProjectName(string $name): void
+    {
+        $this->page->getByLabel('Name', ['exact' => true])->fill($name);
+    }
+
+    protected function chooseProjectDirectory(string $visibleAbsolutePath): void
+    {
+        $page = $this->page;
+        $page->getByRole('button', ['name' => 'Choose directory', 'exact' => true])->click();
+        $dialog = $page->getByRole('dialog');
+        $dialog->waitFor();
+        $dialog->getByLabel('Location', ['exact' => true])->fill($visibleAbsolutePath);
+        $dialog->getByLabel('Location', ['exact' => true])->press('Enter');
+        $dialog->getByRole('button', ['name' => 'Select this directory', 'exact' => true])->click();
+        Expect::locator($page->getByLabel('Project directory', ['exact' => true]))
+            ->toHaveValue($visibleAbsolutePath, new AssertionOptions(timeoutMs: 10_000));
+    }
+
+    protected function submitRegisterOrEditForm(): void
+    {
+        $this->submitEasyAdminForm();
+    }
+
+    protected function registerProject(string $name, string $visibleDirectory): string
+    {
+        $this->openRegisterProjectForm();
+        $this->fillProjectName($name);
+        $this->chooseProjectDirectory($visibleDirectory);
+        $this->submitRegisterOrEditForm();
+        $this->page->waitForURL('**/admin/projects/**');
+        $url = $this->page->url();
+        if (!preg_match('#/admin/projects/(\d+)(?:/|$)#', $url, $matches)) {
+            // Some EasyAdmin configs return to index; open the named row.
+            $this->openProjectsIndex();
+            $this->page->getByRole('link', ['name' => $name, 'exact' => true])->click();
+            $this->page->waitForURL('**/admin/projects/**');
+            $url = $this->page->url();
+            self::assertMatchesRegularExpression('#/admin/projects/(\d+)(?:/|$)#', $url);
+            preg_match('#/admin/projects/(\d+)(?:/|$)#', $url, $matches);
+        }
+
+        return $matches[1];
+    }
+
+    protected function openProjectDetail(string $projectId): PageInterface
+    {
+        $page = $this->visit('/admin/projects/'.$projectId);
+        $page->locator('#project-source-status')->waitFor();
+
+        return $page;
+    }
+
+    protected function triggerScanSources(): void
+    {
+        $this->page->getByRole('link', ['name' => 'Scan sources'])->or($this->page->getByRole('button', ['name' => 'Scan sources']))->click();
+    }
+
+    protected function waitForProjectHealth(string $health): void
+    {
+        Expect::locator($this->page->locator('[data-project-health]'))
+            ->toHaveAttribute('data-project-health', $health, new AssertionOptions(timeoutMs: 60_000));
+        if ('Ready' === $health) {
+            Expect::locator($this->page->locator('#project-source-status'))
+                ->toContainText('Sources discovered', new AssertionOptions(timeoutMs: 60_000));
+        }
+    }
+
+    protected function assertFormValidationVisible(): void
+    {
+        $page = $this->page;
+        $feedback = $page->locator('.invalid-feedback, .form-error-message, .alert-danger, .ea-form-error');
+        Expect::locator($feedback->first())->toBeVisible(new AssertionOptions(timeoutMs: 10_000));
+    }
+}
