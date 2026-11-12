@@ -1,0 +1,24 @@
+{% extends '@EasyAdmin/crud/detail.html.twig' %}
+
+{% block main %}
+    {% set project = entity.instance %}
+    <div
+        id="project-source-status"
+        class="mb-3"
+        data-project-health="{{ project.health.value }}"
+        data-project-id="{{ project.id }}"
+    >
+        <p class="mb-1">
+            <strong>Health:</strong>
+            <span data-project-health="{{ project.health.value }}">{{ project.health.label() }}</span>
+        </p>
+        <p class="mb-1 text-muted">
+            Ready means sources were discovered. Indexing arrives in plan04.
+        </p>
+        {% if project.lastError %}
+            <p class="mb-0 text-danger" data-project-error>{{ project.lastError }}</p>
+        {% endif %}
+    </div>
+
+    {{ parent() }}
+{% endblock %}

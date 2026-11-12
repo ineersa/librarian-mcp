@@ -1,0 +1,8 @@
+{% extends '@EasyAdmin/crud/index.html.twig' %}
+
+{% block entity_row_attributes %}
+    data-project-id="{{ entity.primaryKeyValue }}"
+    {% if entity.instance.health is defined and entity.instance.health is not null %}
+        data-project-health="{{ entity.instance.health.value }}"
+    {% endif %}
+{% endblock %}
