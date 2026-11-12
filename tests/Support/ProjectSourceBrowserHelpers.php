@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Support;
 
+use App\Entity\ProjectHealth;
 use Playwright\Assertions\AssertionOptions;
 use Playwright\Assertions\Expect;
 use Playwright\Page\PageInterface;
@@ -30,7 +31,7 @@ trait ProjectSourceBrowserHelpers
 
     protected function deleteRecord(string $detailUrl): void
     {
-        parent::deleteRecord($detailUrl);
+        parent::deleteRecord($this->url.$detailUrl);
         unset($this->registeredProjectIds[basename($detailUrl)]);
     }
 
@@ -63,8 +64,11 @@ trait ProjectSourceBrowserHelpers
         $page->getByRole('button', ['name' => 'Choose directory', 'exact' => true])->click();
         $dialog = $page->getByRole('dialog');
         $dialog->waitFor();
+        // Wait for the initial listing before editing its async-populated location.
+        Expect::locator($dialog->getByRole('button', ['name' => 'Select this directory', 'exact' => true]))->toBeEnabled();
         $dialog->getByRole('textbox', ['name' => 'Directory location', 'exact' => true])->fill($visibleAbsolutePath);
         $dialog->getByRole('textbox', ['name' => 'Directory location', 'exact' => true])->press('Enter');
+        Expect::locator($dialog->locator('[data-project-directory-target="currentPath"]'))->toHaveText($visibleAbsolutePath);
         $dialog->getByRole('button', ['name' => 'Select this directory', 'exact' => true])->click();
         Expect::locator($page->getByLabel('Project directory', ['exact' => true]))
             ->toHaveValue($visibleAbsolutePath, new AssertionOptions(timeoutMs: 10_000));
@@ -81,21 +85,13 @@ trait ProjectSourceBrowserHelpers
         $this->fillProjectName($name);
         $this->chooseProjectDirectory($visibleDirectory);
         $this->submitRegisterOrEditForm();
-        $this->page->locator('body.ea-index, body.ea-detail, body.ea-edit')->waitFor();
-        $url = $this->page->url();
-        if (!preg_match('#/admin/projects/(\d+)(?:/|$)#', $url, $matches)) {
-            // Some EasyAdmin configs return to index; open the named row.
-            $this->openProjectsIndex();
-            $this->page->getByRole('row')->filter(['hasText' => $name])->locator('a.action-detail')->click();
-            $this->page->waitForURL('**/admin/projects/**');
-            $url = $this->page->url();
-            self::assertMatchesRegularExpression('#/admin/projects/(\d+)(?:/|$)#', $url);
-            preg_match('#/admin/projects/(\d+)(?:/|$)#', $url, $matches);
-        }
+        $this->page->waitForURL('**/admin/projects');
+        $id = $this->page->locator('tr[data-project-id]')->filter(['hasText' => $name])->getAttribute('data-project-id');
+        self::assertNotNull($id);
 
-        $this->registeredProjectIds[$matches[1]] = true;
+        $this->registeredProjectIds[$id] = true;
 
-        return $matches[1];
+        return $id;
     }
 
     protected function openProjectDetail(string $projectId): PageInterface
@@ -111,11 +107,11 @@ trait ProjectSourceBrowserHelpers
         $this->page->getByRole('button', ['name' => 'Scan sources'])->click();
     }
 
-    protected function waitForProjectHealth(string $health): void
+    protected function waitForProjectHealth(ProjectHealth $health): void
     {
         Expect::locator($this->page->locator('[data-project-health]'))
-            ->toHaveAttribute('data-project-health', strtolower($health), new AssertionOptions(timeoutMs: 60_000));
-        if ('Ready' === $health) {
+            ->toHaveAttribute('data-project-health', $health->value, new AssertionOptions(timeoutMs: 60_000));
+        if (ProjectHealth::Ready === $health) {
             Expect::locator($this->page->locator('#project-source-status'))
                 ->toContainText('Sources discovered', new AssertionOptions(timeoutMs: 60_000));
         }
@@ -126,5 +122,11 @@ trait ProjectSourceBrowserHelpers
         $page = $this->page;
         $feedback = $page->locator('.invalid-feedback, .form-error-message, .alert-danger, .ea-form-error');
         Expect::locator($feedback->first())->toBeVisible(new AssertionOptions(timeoutMs: 10_000));
+    }
+
+    protected function assertSourceCount(string $label, int $expected): void
+    {
+        $value = $this->page->locator('.field-group:has(.field-label > :text-is("'.$label.'")) .field-value')->textContent();
+        self::assertSame((string) $expected, trim($value));
     }
 }

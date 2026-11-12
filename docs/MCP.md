@@ -60,7 +60,7 @@ Plan 03 retires the old library tools (`search-libraries`, `semantic-search`, `g
 Until plan 05 lands the memory tools:
 
 - the registry is explicit and empty of public tools
-- authenticated `initialize` / `initialized` / `tools/list` remain the HTTP contract smoke path
+- anonymous `initialize` / `initialized` plus token-bearing `tools/list` cover the optional-auth HTTP smoke path
 - `tools/list` returns no tools
 
 Future public tools (plan 05, not implemented here):

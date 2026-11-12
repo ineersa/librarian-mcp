@@ -37,8 +37,6 @@ const PROJECT_SOURCE_SLUGS = [
     'symlink-resolved',
     'isolation-alpha',
     'isolation-beta',
-    'removal-proof',
-    'scan-failure',
     'duplicate-name-source',
     'duplicate-origin-source',
 ];
@@ -84,8 +82,6 @@ buildUnavailableMountProject($projectsRoot.'/unavailable-mount');
 buildSymlinkResolvedProject($projectsRoot.'/symlink-resolved', $targetRoot);
 buildIsolationProject($projectsRoot.'/isolation-alpha', 'isolation-alpha', 'git://librarian-fixtures/isolation-alpha.git', 2, 1);
 buildIsolationProject($projectsRoot.'/isolation-beta', 'isolation-beta', 'git://librarian-fixtures/isolation-beta.git', 3, 2);
-buildRemovalProofProject($projectsRoot.'/removal-proof');
-buildScanFailureProject($projectsRoot.'/scan-failure');
 buildDuplicateNameSource($projectsRoot.'/duplicate-name-source');
 buildDuplicateOriginSource($projectsRoot.'/duplicate-origin-source');
 
@@ -304,33 +300,6 @@ YAML);
         idPrefix: $slug,
     );
     writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 1);
-}
-
-function buildRemovalProofProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/removal-proof.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createSupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite', observationCount: 1, reflectionCount: 1, sourceRevision: 2, sourceChangeCount: 2);
-    writeSessionJournal($path.'/.hatfield/sessions/5/events.jsonl', '5', 1);
-    writeFile($path.'/PROOF.txt', "removal-proof-marker\n");
-}
-
-function buildScanFailureProject(string $path): void
-{
-    initGitProject($path, 'git://librarian-fixtures/scan-failure.git');
-    writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
-sessions:
-    path: '.hatfield/sessions'
-YAML);
-    createSupportedOmDatabase($path.'/.hatfield/extensions-data/observational-memory/om.sqlite', observationCount: 1, reflectionCount: 0, sourceRevision: 1, sourceChangeCount: 1);
-    // Directory named as a session but missing events.jsonl: discovery should error distinctly.
-    if (!mkdir($path.'/.hatfield/sessions/99', 0775, true) && !is_dir($path.'/.hatfield/sessions/99')) {
-        throw new RuntimeException('Unable to create incomplete session directory.');
-    }
-    writeFile($path.'/PROOF.txt', "scan-failure-marker\n");
 }
 
 function buildDuplicateNameSource(string $path): void

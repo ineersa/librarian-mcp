@@ -32,17 +32,17 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - `HATFIELD_PATH_MAPPINGS` when host/service path prefixes differ
-   - `PROJECTS_HOST_PATH` (host tree mounted read-only as `/projects`; default `.`)
    - `PROJECT_BROWSE_ROOT` (picker start path inside the service)
    - `MERCURE_JWT_SECRET`, `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`
    - `SYMFONY_TRUSTED_PROXIES=REMOTE_ADDR`
    - `SYMFONY_TRUSTED_HEADERS=x-forwarded-for,x-forwarded-host,x-forwarded-proto,x-forwarded-port`
 
-3. Configure the published app port in `.env` (Compose interpolation, not the container-only `.env.prod.local`):
+3. Configure the published app port and host project bind in `.env` (Compose interpolation, not the container-only `.env.prod.local`), or use exported process environment / an explicit bind in `compose.sources.yaml`:
 
    ```bash
    APP_HTTP_BIND=127.0.0.1
    APP_HTTP_PORT=8081
+   PROJECTS_HOST_PATH=/absolute/host/projects
    ```
 
    Keep it loopback-only (`127.0.0.1`) when nginx is your public entrypoint.
@@ -62,7 +62,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
 6. Create an admin user, then configure nginx to proxy the explicit loopback port selected above.
 
-Optional: maintain an ignored `compose.sources.yaml` for additional read-only mounts of user/global/custom Hatfield settings or data. Castor may layer it for **dev/prod only**; never use it for the isolated browser stack.
+Optional: maintain an ignored `compose.sources.yaml` for additional read-only mounts of user/global/custom Hatfield settings or data. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production use service name `messenger`, not development's `worker`; see [source mounts](project-sources.md#docker-source-mounts).
 
 ## Nginx example (host machine)
 

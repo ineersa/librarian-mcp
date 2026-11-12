@@ -19,6 +19,8 @@ final class McpTokenAuthenticator extends AbstractAuthenticator
     private const string MCP_PATH = '/_mcp';
     private const string AUTHORIZATION_HEADER = 'Authorization';
     private const string TOKEN_HEADER = 'X-MCP-Token';
+    private const string TOKEN_QUERY = 'token';
+    private const string ACCESS_TOKEN_QUERY = 'access_token';
 
     public function __construct(
         private readonly McpTokenManager $tokenManager,
@@ -32,7 +34,10 @@ final class McpTokenAuthenticator extends AbstractAuthenticator
         }
 
         return str_starts_with($request->getPathInfo(), self::MCP_PATH)
-            && ($request->headers->has(self::AUTHORIZATION_HEADER) || $request->headers->has(self::TOKEN_HEADER));
+            && ($request->headers->has(self::AUTHORIZATION_HEADER)
+                || $request->headers->has(self::TOKEN_HEADER)
+                || $request->query->has(self::TOKEN_QUERY)
+                || $request->query->has(self::ACCESS_TOKEN_QUERY));
     }
 
     public function authenticate(Request $request): SelfValidatingPassport
@@ -89,11 +94,20 @@ final class McpTokenAuthenticator extends AbstractAuthenticator
             if (preg_match('/^Bearer\s+(.+)$/i', $auth, $matches)) {
                 return trim($matches[1]);
             }
+            if (str_starts_with(trim($auth), McpTokenManager::TOKEN_PREFIX)) {
+                return trim($auth);
+            }
         }
 
         $xToken = $request->headers->get(self::TOKEN_HEADER);
         if (\is_string($xToken) && '' !== trim($xToken)) {
             return trim($xToken);
+        }
+
+        // Preserve local Inspector stream compatibility without requiring tokens.
+        $queryToken = $request->query->get(self::TOKEN_QUERY) ?? $request->query->get(self::ACCESS_TOKEN_QUERY);
+        if (\is_string($queryToken) && '' !== trim($queryToken)) {
+            return trim($queryToken);
         }
 
         return null;

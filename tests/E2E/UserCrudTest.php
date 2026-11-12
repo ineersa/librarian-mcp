@@ -38,7 +38,7 @@ final class UserCrudTest extends LibrarianNetworkBrowserTest
             self::assertSame($editedEmail, $page->getByLabel('Email', ['exact' => true])->inputValue());
             $this->logout();
             $this->login($editedEmail, self::CHANGED_PASSWORD);
-            self::assertTrue($page->getByRole('heading', ['name' => 'MCP Tools Dashboard', 'exact' => true])->isVisible());
+            self::assertTrue($page->getByRole('heading', ['name' => 'Projects dashboard', 'exact' => true])->isVisible());
         } finally {
             $this->visit('/logout');
             $this->login();

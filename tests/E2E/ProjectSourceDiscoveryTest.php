@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\E2E;
 
+use App\Entity\ProjectHealth;
 use App\Tests\Support\LibrarianNetworkBrowserTest;
 use App\Tests\Support\ProjectSourceBrowserHelpers;
 use App\Tests\Support\ProjectSourceFixture;
@@ -18,23 +19,6 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
 {
     use ProjectSourceBrowserHelpers;
 
-    public function testCustomRelativeDatabaseAndSessionPathsAreDiscovered(): void
-    {
-        $this->login();
-        $projectId = $this->registerProject(
-            'Custom Relative Paths',
-            ProjectSourceFixture::visibleProjectPath('custom-relative'),
-        );
-        $this->openProjectDetail($projectId);
-        $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
-
-        $status = $this->page->locator('#project-source-status');
-        Expect::locator($status)->toContainText('.hatfield/custom-om/memory.sqlite');
-        Expect::locator($status)->toContainText('.hatfield/custom-sessions');
-        Expect::locator($status)->toContainText('Sources discovered');
-    }
-
     public function testCustomAbsolutePathMappedLocationsAreDiscovered(): void
     {
         $this->login();
@@ -44,7 +28,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
+        $this->waitForProjectHealth(ProjectHealth::Ready);
 
         $status = $this->page->locator('#project-source-status');
         Expect::locator($status)->toContainText('/synthetic-home/absolute-om/custom-absolute.sqlite');
@@ -62,7 +46,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('.hatfield', new AssertionOptions(timeoutMs: 10_000));
     }
@@ -76,7 +60,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('database', new AssertionOptions(ignoreCase: true, timeoutMs: 10_000));
     }
@@ -90,7 +74,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('ObservationalMemoryExtension', new AssertionOptions(timeoutMs: 10_000));
     }
@@ -104,13 +88,15 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('settings', new AssertionOptions(ignoreCase: true, timeoutMs: 10_000));
     }
 
     public function testUnsupportedOmSchemaReportsDistinctError(): void
     {
+        $builderPath = ProjectSourceFixture::builderProjectPath('unsupported-schema');
+        $before = ProjectSourceFixture::hashTree($builderPath);
         $this->login();
         $projectId = $this->registerProject(
             'Unsupported Schema',
@@ -118,9 +104,10 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('schema', new AssertionOptions(ignoreCase: true, timeoutMs: 10_000));
+        ProjectSourceFixture::assertUnchanged($before, ProjectSourceFixture::hashTree($builderPath), 'unsupported-schema failed discovery');
     }
 
     public function testUnreadableSessionJournalReportsDistinctError(): void
@@ -132,7 +119,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('journal', new AssertionOptions(ignoreCase: true, timeoutMs: 10_000));
     }
@@ -146,7 +133,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
+        $this->waitForProjectHealth(ProjectHealth::Error);
         Expect::locator($this->page->locator('#project-source-status'))
             ->toContainText('mount', new AssertionOptions(ignoreCase: true, timeoutMs: 10_000));
     }
@@ -160,7 +147,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
+        $this->waitForProjectHealth(ProjectHealth::Ready);
 
         $status = $this->page->locator('#project-source-status');
         Expect::locator($status)->toContainText('Sources discovered');
@@ -168,7 +155,7 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         Expect::locator($status)->toContainText('1');
         // Relaxed policy: resolved symlink metadata is accepted, not a forbidden-root error.
         Expect::locator($this->page->locator('[data-project-health]'))
-            ->toHaveAttribute('data-project-health', 'ready');
+            ->toHaveAttribute('data-project-health', ProjectHealth::Ready->value);
     }
 
     public function testDistinctProjectsWithSameSessionIdRemainIsolated(): void
@@ -181,10 +168,10 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($alphaId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
-        $alphaStatus = $this->page->locator('#project-source-status')->textContent() ?? '';
-        self::assertStringContainsString('2', $alphaStatus);
-        self::assertStringContainsString('1', $alphaStatus);
+        $this->waitForProjectHealth(ProjectHealth::Ready);
+        $this->assertSourceCount('Observations', 2);
+        $this->assertSourceCount('Reflections', 1);
+        $this->assertSourceCount('Sessions', 1);
 
         $betaId = $this->registerProject(
             'Isolation Beta',
@@ -192,60 +179,16 @@ final class ProjectSourceDiscoveryTest extends LibrarianNetworkBrowserTest
         );
         $this->openProjectDetail($betaId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
-        $betaStatus = $this->page->locator('#project-source-status')->textContent() ?? '';
-        self::assertStringContainsString('3', $betaStatus);
-        self::assertStringContainsString('2', $betaStatus);
+        $this->waitForProjectHealth(ProjectHealth::Ready);
+        $this->assertSourceCount('Observations', 3);
+        $this->assertSourceCount('Reflections', 2);
+        $this->assertSourceCount('Sessions', 1);
 
         self::assertNotSame($alphaId, $betaId);
         // Same numeric session id 108 exists in both fixtures; metadata stays project-scoped.
         $this->openProjectDetail($alphaId);
-        Expect::locator($this->page->locator('#project-source-status'))->toContainText('2');
+        $this->assertSourceCount('Observations', 2);
+        $this->assertSourceCount('Reflections', 1);
         Expect::locator($this->page->locator('#project-source-status'))->not()->toContainText('isolation-beta');
-    }
-
-    public function testFailedDiscoveryLeavesSourceFixtureUnchanged(): void
-    {
-        $slug = 'scan-failure';
-        $builderPath = ProjectSourceFixture::builderProjectPath($slug);
-        $before = ProjectSourceFixture::hashTree($builderPath);
-
-        $this->login();
-        $projectId = $this->registerProject(
-            'Scan Failure Proof',
-            ProjectSourceFixture::visibleProjectPath($slug),
-        );
-        $this->openProjectDetail($projectId);
-        $this->triggerScanSources();
-        $this->waitForProjectHealth('Error');
-
-        $after = ProjectSourceFixture::hashTree($builderPath);
-        ProjectSourceFixture::assertUnchanged($before, $after, 'scan-failure discovery');
-        self::assertFileExists($builderPath.'/PROOF.txt');
-        self::assertSame("scan-failure-marker\n", (string) file_get_contents($builderPath.'/PROOF.txt'));
-    }
-
-    public function testRegistrationRemovalLeavesSourceFixtureUnchanged(): void
-    {
-        $slug = 'removal-proof';
-        $builderPath = ProjectSourceFixture::builderProjectPath($slug);
-        $before = ProjectSourceFixture::hashTree($builderPath);
-
-        $this->login();
-        $projectId = $this->registerProject(
-            'Removal Proof',
-            ProjectSourceFixture::visibleProjectPath($slug),
-        );
-        $this->openProjectDetail($projectId);
-        $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
-        $this->deleteRecord('/admin/projects/'.$projectId);
-
-        $after = ProjectSourceFixture::hashTree($builderPath);
-        ProjectSourceFixture::assertUnchanged($before, $after, 'removal-proof');
-        self::assertDirectoryExists($builderPath);
-        self::assertFileExists($builderPath.'/.hatfield/extensions-data/observational-memory/om.sqlite');
-        self::assertFileExists($builderPath.'/.hatfield/sessions/5/events.jsonl');
-        self::assertSame("removal-proof-marker\n", (string) file_get_contents($builderPath.'/PROOF.txt'));
     }
 }

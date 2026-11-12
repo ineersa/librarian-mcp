@@ -22,4 +22,5 @@ enum ProjectSourceIssueCode: string
     case SessionsUnavailable = 'sessions_unavailable';
     case JournalsUnreadable = 'journals_unreadable';
     case AppRootRequired = 'app_root_required';
+    case UnexpectedFailure = 'unexpected_failure';
 }

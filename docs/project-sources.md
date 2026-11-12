@@ -89,6 +89,8 @@ For a production checkout, use the production consumer service name **`messenger
 
 Use `vendor/bin/castor dev:stack:up` and the printed URL. Register a directory with **Choose directory**, inspect the scan result, and use **Scan sources** to rescan. Production lifecycle and migration authorization remain in [server-deployment.md](server-deployment.md); this change does not itself authorize a production cutover.
 
+EasyAdmin pages use full-page navigation (`data-turbo="false"` and UX Turbo's `turbo_page_requires_reload()` helper) so its native forms and confirmation dialogs initialize on every visit. The directory picker remains a Stimulus controller; Turbo stays installed for other application surfaces.
+
 ## Validation evidence
 
 Saved acceptance uses only synthetic source trees built under ignored `var/browser-live/project-sources`, mounted at `/project-sources` read-only for web/worker. No private Hatfield state is committed. Fixtures exercise default/custom relative/absolute paths, overlays, source errors, external/symlink paths under the relaxed policy, uniqueness, same-numbered sessions in separate projects, and unchanged source hashes after failed scans/removal. Each journey deletes its own registrations through the UI; databases are not blanket-purged.

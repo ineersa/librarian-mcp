@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Support;
 
+use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
 use PHPUnit\Framework\TestCase;
 use Playwright\Browser\BrowserContextBuilder;
 use Playwright\Browser\BrowserContextInterface;
@@ -84,7 +85,7 @@ abstract class LibrarianNetworkBrowserTest extends TestCase
 
     protected function submitEasyAdminForm(): void
     {
-        $this->page->locator('button[name="ea[newForm][btn]"], button[name="ea[editForm][btn]"]')->first()->click();
+        $this->page->locator('button[value="'.Action::SAVE_AND_RETURN.'"]')->click();
     }
 
     protected function deleteRecord(string $detailUrl): void

@@ -1,5 +1,13 @@
 {% extends '@!EasyAdmin/layout.html.twig' %}
 
+{% block head_metas %}
+    {{ parent() }}
+    {# EasyAdmin's native confirmation/form scripts initialize on page load. #}
+    {{ turbo_page_requires_reload() }}
+{% endblock %}
+
+{% block body_attr %}{{ parent() }} data-turbo="false"{% endblock %}
+
 {% block head_favicon %}
     <link rel="shortcut icon" href="{{ asset('favicon.svg') }}">
 {% endblock %}

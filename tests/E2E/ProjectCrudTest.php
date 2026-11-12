@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\E2E;
 
+use App\Entity\ProjectHealth;
 use App\Tests\Support\LibrarianNetworkBrowserTest;
 use App\Tests\Support\ProjectSourceBrowserHelpers;
 use App\Tests\Support\ProjectSourceFixture;
@@ -20,6 +21,8 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
         $visiblePath = ProjectSourceFixture::visibleProjectPath($slug);
         $builderPath = ProjectSourceFixture::builderProjectPath($slug);
         $before = ProjectSourceFixture::hashTree($builderPath);
+        $reboundPath = ProjectSourceFixture::builderProjectPath('custom-relative');
+        $reboundBefore = ProjectSourceFixture::hashTree($reboundPath);
 
         $this->login();
         $page = $this->openProjectsIndex();
@@ -28,22 +31,36 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
         $projectId = $this->registerProject('Default OM Fixture', $visiblePath);
         $this->openProjectDetail($projectId);
         $this->triggerScanSources();
-        $this->waitForProjectHealth('Ready');
+        $this->waitForProjectHealth(ProjectHealth::Ready);
 
         $status = $this->page->locator('#project-source-status');
         Expect::locator($status)->toContainText('Sources discovered', new AssertionOptions(timeoutMs: 10_000));
         Expect::locator($status)->toContainText('.hatfield/extensions-data/observational-memory/om.sqlite');
         Expect::locator($status)->toContainText('.hatfield/sessions');
         Expect::locator($status)->toContainText('20261021_006_semantic_source_revisions');
-        Expect::locator($status)->toContainText('2'); // observationCount
-        Expect::locator($status)->toContainText('1'); // reflectionCount / sessionCount
+        $this->assertSourceCount('Observations', 2);
+        $this->assertSourceCount('Reflections', 1);
+        $this->assertSourceCount('Sessions', 1);
+
+        // Explicit path rebinding and rename keep the same stable registration ID.
+        $this->visit('/admin/projects/'.$projectId.'/edit');
+        $this->fillProjectName('Rebound OM Fixture');
+        $this->chooseProjectDirectory(ProjectSourceFixture::visibleProjectPath('custom-relative'));
+        $this->submitRegisterOrEditForm();
+        $this->page->waitForURL('**/admin/projects');
+        $this->openProjectDetail($projectId);
+        $this->waitForProjectHealth(ProjectHealth::Ready);
+        Expect::locator($status)->toHaveAttribute('data-project-id', $projectId);
+        Expect::locator($status)->toContainText('.hatfield/custom-om/memory.sqlite');
+        Expect::locator($this->page->getByRole('heading', ['level' => 1]))->toContainText('Rebound OM Fixture');
 
         $this->deleteRecord('/admin/projects/'.$projectId);
         $this->openProjectsIndex();
-        self::assertFalse($this->page->getByRole('link', ['name' => 'Default OM Fixture', 'exact' => true])->isVisible());
+        self::assertSame(0, $this->page->locator('tr[data-project-id="'.$projectId.'"]')->count());
 
         $after = ProjectSourceFixture::hashTree($builderPath);
         ProjectSourceFixture::assertUnchanged($before, $after, 'default-om removal');
+        ProjectSourceFixture::assertUnchanged($reboundBefore, ProjectSourceFixture::hashTree($reboundPath), 'rebound source removal');
         self::assertDirectoryExists($builderPath);
         self::assertFileExists($builderPath.'/.hatfield/extensions-data/observational-memory/om.sqlite');
         self::assertFileExists($builderPath.'/.hatfield/sessions/108/events.jsonl');

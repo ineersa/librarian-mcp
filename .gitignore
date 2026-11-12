@@ -36,6 +36,10 @@
 /.castor.stub.php
 /.hatfield/
 
+# Retired runtime artifacts may remain locally; preserve them without committing.
+.vera/
+/docker/vera/
+
 # AI index artifacts
 *.toon
 .bash_history

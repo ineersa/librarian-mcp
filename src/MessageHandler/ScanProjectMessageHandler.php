@@ -8,6 +8,7 @@ use App\Entity\Project;
 use App\Message\ScanProjectMessage;
 use App\Project\HatfieldSourceDiscovery;
 use App\Project\ProjectDiscoveryResult;
+use App\Project\ProjectSourceIssueCode;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -56,7 +57,7 @@ final class ScanProjectMessageHandler
             $result = ProjectDiscoveryResult::error(
                 'Unexpected discovery failure.',
                 issues: [[
-                    'code' => 'unexpected_failure',
+                    'code' => ProjectSourceIssueCode::UnexpectedFailure->value,
                     'message' => 'Unexpected discovery failure.',
                 ]],
             );

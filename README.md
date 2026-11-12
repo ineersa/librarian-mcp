@@ -58,7 +58,7 @@ Edit `.env.prod.local` and set at least:
 - `MCP_ALLOWED_HOSTS` (CSV; include the external hostname without scheme or port)
 - `HATFIELD_USER_HOME` (required logical Hatfield home context)
 - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
-- `PROJECTS_HOST_PATH` / `PROJECT_BROWSE_ROOT` for the mounted project tree and picker start path
+- `PROJECT_BROWSE_ROOT` for the picker start path
 - `MERCURE_JWT_SECRET`
 - `MERCURE_PUBLISHER_JWT_KEY`
 - `MERCURE_SUBSCRIBER_JWT_KEY`
@@ -82,6 +82,8 @@ Then put them in `.env.prod.local` and set:
 
 - `DEFAULT_URI=https://your.domain`
 - `MERCURE_PUBLIC_URL=https://your.domain/.well-known/mercure`
+
+Configure `PROJECTS_HOST_PATH` in `.env` (or exported process environment), not the container-only `.env.prod.local`; alternatively declare the read-only binds in ignored `compose.sources.yaml`. See [source mounts](docs/project-sources.md#docker-source-mounts).
 
 > For the default HS256 setup in this repo, keep `MERCURE_JWT_SECRET` equal to `MERCURE_PUBLISHER_JWT_KEY`.
 

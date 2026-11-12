@@ -97,7 +97,9 @@ final class GitOriginNormalizer
      */
     private function runGit(string $cwd, array $arguments): ?string
     {
-        $process = new Process(['git', ...$arguments], $cwd, null, null, self::PROCESS_TIMEOUT_SECONDS);
+        // Inspect only the explicitly selected checkout, including host-owned RO mounts.
+        // Keep this permission per command; never modify Git's global safe.directory.
+        $process = new Process(['git', '-c', 'safe.directory='.$cwd, ...$arguments], $cwd, null, null, self::PROCESS_TIMEOUT_SECONDS);
         $process->run();
         if (!$process->isSuccessful()) {
             return null;
