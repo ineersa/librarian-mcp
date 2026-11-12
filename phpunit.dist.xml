@@ -7,19 +7,21 @@
          failOnDeprecation="true"
          failOnNotice="true"
          failOnWarning="true"
+         failOnIncomplete="true"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
 >
     <php>
         <ini name="display_errors" value="1" />
         <ini name="error_reporting" value="-1" />
+        <ini name="memory_limit" value="256M" />
         <server name="APP_ENV" value="test" force="true" />
         <server name="SHELL_VERBOSITY" value="-1" />
     </php>
 
     <testsuites>
-        <testsuite name="Project Test Suite">
-            <directory>tests</directory>
+        <testsuite name="Browser suite">
+            <directory>tests/E2E</directory>
         </testsuite>
     </testsuites>
 
@@ -40,5 +42,6 @@
     </source>
 
     <extensions>
+        <bootstrap class="DAMA\DoctrineTestBundle\PHPUnit\PHPUnitExtension" />
     </extensions>
 </phpunit>

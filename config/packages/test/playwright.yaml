@@ -1,0 +1,4 @@
+playwright:
+    assets:
+        # Preserve the bridge defaults and serve installed EasyAdmin files from public/.
+        prefixes: ['/assets', '/build', '/_framework/ux', '/bundles/easyadmin', '/favicon.svg']
