@@ -4,15 +4,21 @@ services:
     environment:
       APP_ENV: test
       APP_DEBUG: '1'
+      APP_SHARE_DIR: var/browser-live/share
       APP_SECRET: browser-synthetic-only
       DATABASE_URL: 'sqlite:////app/var/browser-live/application.db'
       LIBRARY_DATA_DIR: var/browser-live/libraries
       MCP_ALLOWED_HOSTS: 'localhost,127.0.0.1,php,server'
+      MERCURE_EXTRA_DIRECTIVES: |-
+        transport bolt {
+          path /app/var/browser-live/mercure.db
+        }
     volumes: !override
       - .:/app:ro
       - ./var/browser-live:/app/var/browser-live
       - ./var/browser-live/cache:/app/var/cache
       - ./var/browser-live/log:/app/var/log
+      - ./var/browser-live/mcp-sessions:/app/var/mcp-sessions
       - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
       - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
@@ -22,6 +28,7 @@ services:
     environment:
       APP_ENV: test
       APP_DEBUG: '1'
+      APP_SHARE_DIR: var/browser-live/share
       APP_SECRET: browser-synthetic-only
       DATABASE_URL: 'sqlite:////app/var/browser-live/application.db'
       LIBRARY_DATA_DIR: var/browser-live/libraries

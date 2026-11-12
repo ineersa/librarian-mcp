@@ -160,5 +160,5 @@ Under configured `libraryDataDir` (default `data`):
 - Owner-approved Symfony **8.2.0-BETA1** (2026-11-12); stable 8.2 was unavailable.
 - MCP HTTP remains on `/_mcp` with token auth; bundle 0.15 uses `mcp.servers.librarian` + explicit registry.
 - Compatibility compiler pass for TraceableRegistry reset is removed (service no longer present).
-- Dependency pins, container/runtime proof, and test-gap documentation are owned by main — this architecture page does not claim validation passed.
+- Dependency decisions and validation evidence are recorded in [framework upgrade notes](framework-upgrade.md); [TESTING.md](../TESTING.md) lists the intentionally limited saved browser coverage.
 - Domain rewrite (ingestion, embedding model changes, reranking removal, backups, Hatfield, production cutover) remains out of scope for plan 01.

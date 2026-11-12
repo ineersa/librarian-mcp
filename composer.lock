@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e299a10dd56d7a067bdc163ae0de1e0d",
+    "content-hash": "200fcbcbf054ce16098eeb7cbee7b0e2",
     "packages": [
         {
             "name": "composer/semver",
@@ -10473,76 +10473,6 @@
             "published-time": "2024-05-06T17:01:42+00:00"
         },
         {
-            "name": "dama/doctrine-test-bundle",
-            "version": "v8.7.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/dmaicher/doctrine-test-bundle.git",
-                "reference": "463b866b178f2a2072d2622d9cfc331e2d099667"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/dmaicher/doctrine-test-bundle/zipball/463b866b178f2a2072d2622d9cfc331e2d099667",
-                "reference": "463b866b178f2a2072d2622d9cfc331e2d099667",
-                "shasum": ""
-            },
-            "require": {
-                "doctrine/dbal": "^3.3 || ^4.0",
-                "doctrine/doctrine-bundle": "^2.11.0 || ^3.0",
-                "php": ">= 8.2",
-                "psr/cache": "^2.0 || ^3.0",
-                "symfony/cache": "^6.4 || ^7.3 || ^8.0",
-                "symfony/framework-bundle": "^6.4 || ^7.3 || ^8.0"
-            },
-            "conflict": {
-                "phpunit/phpunit": "<11.0"
-            },
-            "require-dev": {
-                "behat/behat": "^3.17 || ^4.0",
-                "php-cs-fixer/shim": "^3.95",
-                "phpstan/phpstan": "^2.0",
-                "phpunit/phpunit": "^11.5.41 || ^12.3.14 || ^13.0",
-                "symfony/dotenv": "^6.4 || ^7.3 || ^8.0",
-                "symfony/process": "^6.4 || ^7.3 || ^8.0"
-            },
-            "type": "symfony-bundle",
-            "extra": {
-                "branch-alias": {
-                    "dev-master": "8.x-dev"
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "DAMA\\DoctrineTestBundle\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "David Maicher",
-                    "email": "mail@dmaicher.de"
-                }
-            ],
-            "description": "Symfony bundle to isolate doctrine database tests and improve test performance",
-            "keywords": [
-                "doctrine",
-                "isolation",
-                "performance",
-                "symfony",
-                "testing",
-                "tests"
-            ],
-            "support": {
-                "issues": "https://github.com/dmaicher/doctrine-test-bundle/issues",
-                "source": "https://github.com/dmaicher/doctrine-test-bundle/tree/v8.7.1"
-            },
-            "time": "2026-11-10T19:25:16+00:00",
-            "published-time": "2026-11-10T19:28:56+00:00"
-        },
-        {
             "name": "ergebnis/agent-detector",
             "version": "2.0.0",
             "source": {
@@ -14755,150 +14685,6 @@
             "published-time": "2026-10-23T07:55:14+00:00"
         },
         {
-            "name": "symfony/browser-kit",
-            "version": "v8.2.0-BETA1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/symfony/browser-kit.git",
-                "reference": "cc14546cd2b3e9f68e61aaf2b605d08789abd612"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/symfony/browser-kit/zipball/cc14546cd2b3e9f68e61aaf2b605d08789abd612",
-                "reference": "cc14546cd2b3e9f68e61aaf2b605d08789abd612",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.4.1",
-                "symfony/dom-crawler": "^7.4|^8.0"
-            },
-            "require-dev": {
-                "symfony/css-selector": "^7.4|^8.0",
-                "symfony/http-client": "^7.4|^8.0",
-                "symfony/http-foundation": "^7.4|^8.0",
-                "symfony/mime": "^7.4|^8.0",
-                "symfony/process": "^7.4|^8.0"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Symfony\\Component\\BrowserKit\\": ""
-                },
-                "exclude-from-classmap": [
-                    "/Tests/"
-                ]
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Fabien Potencier",
-                    "email": "fabien@symfony.com"
-                },
-                {
-                    "name": "Symfony Community",
-                    "homepage": "https://symfony.com/contributors"
-                }
-            ],
-            "description": "Simulates the behavior of a web browser, allowing you to make requests, click on links and submit forms programmatically",
-            "homepage": "https://symfony.com",
-            "support": {
-                "source": "https://github.com/symfony/browser-kit/tree/v8.2.0-BETA1"
-            },
-            "funding": [
-                {
-                    "url": "https://symfony.com/sponsor",
-                    "type": "custom"
-                },
-                {
-                    "url": "https://github.com/fabpot",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/nicolas-grekas",
-                    "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
-                    "type": "tidelift"
-                }
-            ],
-            "time": "2026-11-01T08:31:46+00:00",
-            "published-time": "2026-11-04T12:36:57+00:00"
-        },
-        {
-            "name": "symfony/css-selector",
-            "version": "v8.2.0-BETA1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/symfony/css-selector.git",
-                "reference": "9cfd588b8b07cf83e3426b030dbafd2291c132d9"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/symfony/css-selector/zipball/9cfd588b8b07cf83e3426b030dbafd2291c132d9",
-                "reference": "9cfd588b8b07cf83e3426b030dbafd2291c132d9",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.4.1"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Symfony\\Component\\CssSelector\\": ""
-                },
-                "exclude-from-classmap": [
-                    "/Tests/"
-                ]
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Fabien Potencier",
-                    "email": "fabien@symfony.com"
-                },
-                {
-                    "name": "Jean-François Simon",
-                    "email": "jeanfrancois.simon@sensiolabs.com"
-                },
-                {
-                    "name": "Symfony Community",
-                    "homepage": "https://symfony.com/contributors"
-                }
-            ],
-            "description": "Converts CSS selectors to XPath expressions",
-            "homepage": "https://symfony.com",
-            "support": {
-                "source": "https://github.com/symfony/css-selector/tree/v8.2.0-BETA1"
-            },
-            "funding": [
-                {
-                    "url": "https://symfony.com/sponsor",
-                    "type": "custom"
-                },
-                {
-                    "url": "https://github.com/fabpot",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/nicolas-grekas",
-                    "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
-                    "type": "tidelift"
-                }
-            ],
-            "time": "2026-10-18T14:56:39+00:00",
-            "published-time": "2026-11-04T12:38:35+00:00"
-        },
-        {
             "name": "symfony/debug-bundle",
             "version": "v8.2.0-BETA1",
             "source": {
@@ -14973,77 +14759,6 @@
             ],
             "time": "2026-06-05T06:23:12+00:00",
             "published-time": "2026-11-04T12:35:33+00:00"
-        },
-        {
-            "name": "symfony/dom-crawler",
-            "version": "v8.2.0-BETA1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/symfony/dom-crawler.git",
-                "reference": "0bf3e73ed0d98abc2be097896a048cbc1518b98a"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/symfony/dom-crawler/zipball/0bf3e73ed0d98abc2be097896a048cbc1518b98a",
-                "reference": "0bf3e73ed0d98abc2be097896a048cbc1518b98a",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.4.1",
-                "symfony/polyfill-ctype": "^1.8",
-                "symfony/polyfill-mbstring": "^1.0"
-            },
-            "require-dev": {
-                "symfony/css-selector": "^7.4|^8.0"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Symfony\\Component\\DomCrawler\\": ""
-                },
-                "exclude-from-classmap": [
-                    "/Tests/"
-                ]
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Fabien Potencier",
-                    "email": "fabien@symfony.com"
-                },
-                {
-                    "name": "Symfony Community",
-                    "homepage": "https://symfony.com/contributors"
-                }
-            ],
-            "description": "Eases DOM navigation for HTML and XML documents",
-            "homepage": "https://symfony.com",
-            "support": {
-                "source": "https://github.com/symfony/dom-crawler/tree/v8.2.0-BETA1"
-            },
-            "funding": [
-                {
-                    "url": "https://symfony.com/sponsor",
-                    "type": "custom"
-                },
-                {
-                    "url": "https://github.com/fabpot",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/nicolas-grekas",
-                    "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
-                    "type": "tidelift"
-                }
-            ],
-            "time": "2026-10-28T08:03:22+00:00",
-            "published-time": "2026-11-04T12:34:53+00:00"
         },
         {
             "name": "symfony/maker-bundle",
@@ -15148,16 +14863,16 @@
         },
         {
             "name": "symfony/tui",
-            "version": "v8.2.0-BETA1",
+            "version": "v8.1.11",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/tui.git",
-                "reference": "f9050be3abd1f87a6fe3ba07829e8901ab3b14ac"
+                "reference": "92cc5502af762d58e7a1b576de8adc88a6c0a1ef"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/tui/zipball/f9050be3abd1f87a6fe3ba07829e8901ab3b14ac",
-                "reference": "f9050be3abd1f87a6fe3ba07829e8901ab3b14ac",
+                "url": "https://api.github.com/repos/symfony/tui/zipball/92cc5502af762d58e7a1b576de8adc88a6c0a1ef",
+                "reference": "92cc5502af762d58e7a1b576de8adc88a6c0a1ef",
                 "shasum": ""
             },
             "require": {
@@ -15203,7 +14918,7 @@
                 "tui"
             ],
             "support": {
-                "source": "https://github.com/symfony/tui/tree/v8.2.0-BETA1"
+                "source": "https://github.com/symfony/tui/tree/v8.1.11"
             },
             "funding": [
                 {
@@ -15223,8 +14938,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-11-03T13:22:33+00:00",
-            "published-time": "2026-11-04T12:34:29+00:00"
+            "time": "2026-11-03T10:49:33+00:00",
+            "published-time": "2026-11-04T11:31:24+00:00"
         },
         {
             "name": "symfony/web-profiler-bundle",
@@ -15314,144 +15029,6 @@
             ],
             "time": "2026-10-30T12:53:50+00:00",
             "published-time": "2026-11-04T12:37:07+00:00"
-        },
-        {
-            "name": "zenstruck/assert",
-            "version": "v1.7.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/zenstruck/assert.git",
-                "reference": "1e32d48847d4e82c345112ca226b21a1a792af0a"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/zenstruck/assert/zipball/1e32d48847d4e82c345112ca226b21a1a792af0a",
-                "reference": "1e32d48847d4e82c345112ca226b21a1a792af0a",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.1",
-                "symfony/polyfill-php81": "^1.23",
-                "symfony/var-exporter": "^5.4|^6.0|^7.0|^8.0"
-            },
-            "require-dev": {
-                "phpstan/phpstan": "^1.4",
-                "phpunit/phpunit": "^9.5.21",
-                "symfony/phpunit-bridge": "^6.3|^7.0|^8.0"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Zenstruck\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Kevin Bond",
-                    "email": "kevinbond@gmail.com"
-                }
-            ],
-            "description": "Standalone, lightweight, framework agnostic, test assertion library.",
-            "homepage": "https://github.com/zenstruck/assert",
-            "keywords": [
-                "assertion",
-                "phpunit",
-                "test"
-            ],
-            "support": {
-                "issues": "https://github.com/zenstruck/assert/issues",
-                "source": "https://github.com/zenstruck/assert/tree/v1.7.0"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/kbond",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/nikophil",
-                    "type": "github"
-                }
-            ],
-            "time": "2025-12-07T01:59:12+00:00",
-            "published-time": "2025-12-07T01:59:15+00:00"
-        },
-        {
-            "name": "zenstruck/messenger-test",
-            "version": "v1.15.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/zenstruck/messenger-test.git",
-                "reference": "ebf4c1bd483132282a59c7174ac9758893b3b3ba"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/zenstruck/messenger-test/zipball/ebf4c1bd483132282a59c7174ac9758893b3b3ba",
-                "reference": "ebf4c1bd483132282a59c7174ac9758893b3b3ba",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.1",
-                "symfony/deprecation-contracts": "^2.2|^3.0",
-                "symfony/framework-bundle": "^6.4.15|^7.0|^8.0",
-                "symfony/messenger": "^6.4.4|^7.0|^8.0",
-                "zenstruck/assert": "^1.0"
-            },
-            "require-dev": {
-                "phpstan/phpstan": "^2.1",
-                "phpunit/phpunit": "^11.5|^12|^13",
-                "symfony/browser-kit": "^6.4|^7.0|^8.0",
-                "symfony/clock": "^6.4|^7.0|^8.0",
-                "symfony/runtime": "^6.4|^7.0|^8.0",
-                "symfony/yaml": "^6.4|^7.0|^8.0"
-            },
-            "suggest": {
-                "symfony/clock": "A PSR-20 clock implementation in order to support DelayStamp."
-            },
-            "type": "symfony-bundle",
-            "autoload": {
-                "psr-4": {
-                    "Zenstruck\\Messenger\\Test\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Kevin Bond",
-                    "email": "kevinbond@gmail.com"
-                }
-            ],
-            "description": "Assertions and helpers for testing your symfony/messenger queues.",
-            "homepage": "https://github.com/zenstruck/messenger-test",
-            "keywords": [
-                "Messenger",
-                "dev",
-                "queue",
-                "symfony",
-                "test"
-            ],
-            "support": {
-                "issues": "https://github.com/zenstruck/messenger-test/issues",
-                "source": "https://github.com/zenstruck/messenger-test/tree/v1.15.1"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/kbond",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/nikophil",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-10-28T21:24:13+00:00",
-            "published-time": "2026-10-28T21:24:18+00:00"
         }
     ],
     "aliases": [],
@@ -15459,17 +15036,14 @@
     "stability-flags": {
         "symfony/asset": 10,
         "symfony/asset-mapper": 10,
-        "symfony/browser-kit": 10,
         "symfony/cache": 10,
         "symfony/clock": 10,
         "symfony/config": 10,
         "symfony/console": 10,
-        "symfony/css-selector": 10,
         "symfony/debug-bundle": 10,
         "symfony/dependency-injection": 10,
         "symfony/doctrine-bridge": 10,
         "symfony/doctrine-messenger": 10,
-        "symfony/dom-crawler": 10,
         "symfony/dotenv": 10,
         "symfony/error-handler": 10,
         "symfony/event-dispatcher": 10,
@@ -15503,7 +15077,6 @@
         "symfony/stopwatch": 10,
         "symfony/string": 10,
         "symfony/translation": 10,
-        "symfony/tui": 10,
         "symfony/twig-bridge": 10,
         "symfony/twig-bundle": 10,
         "symfony/type-info": 10,

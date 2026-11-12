@@ -13,7 +13,7 @@ services:
       APP_DEBUG: "1"
       SERVER_NAME: ":8080"
       MERCURE_URL: http://127.0.0.1:8080/.well-known/mercure
-      MERCURE_PUBLIC_URL: '${LIBRARIAN_PUBLIC_URL}/.well-known/mercure'
+      MERCURE_PUBLIC_URL: /.well-known/mercure
       MERCURE_CORS_ORIGINS: '${MERCURE_CORS_ORIGINS}'
       MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
       MERCURE_PUBLISHER_JWT_KEY: '${MERCURE_PUBLISHER_JWT_KEY}'
@@ -22,7 +22,7 @@ services:
       MERCURE_SUBSCRIBER_JWT_ALG: HS256
       MERCURE_EXTRA_DIRECTIVES: |-
         transport bolt {
-          path /data/mercure.db
+          path /app/var/mercure-dev.db
         }
       FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
       # Vera CLI — container-reachable API endpoints
@@ -65,7 +65,7 @@ services:
       APP_ENV: dev
       APP_DEBUG: "1"
       MERCURE_URL: http://php:8080/.well-known/mercure
-      MERCURE_PUBLIC_URL: '${LIBRARIAN_PUBLIC_URL}/.well-known/mercure'
+      MERCURE_PUBLIC_URL: /.well-known/mercure
       MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
       EMBEDDING_MODEL_BASE_URL: http://host.docker.internal:${VERA_EMBED_PORT:-8059}/v1
       EMBEDDING_MODEL_ID: ${VERA_EMBED_MODEL:-coderankembed-q8_0.gguf}

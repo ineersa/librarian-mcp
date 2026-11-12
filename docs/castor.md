@@ -9,9 +9,9 @@ vendor/bin/castor list
 
 If `vendor/bin/castor` is missing, bootstrap locked dependencies once through the development image, then run `vendor/bin/castor tooling:prepare` (see [TESTING.md](../TESTING.md)).
 
-## Task layout (target after framework upgrade)
+## Task layout
 
-Exact file layout is owned by the runtime child. Discover live commands with `vendor/bin/castor list` rather than copying names from memory. Expected public surface:
+Task definitions live in `.castor/`, imported by `castor.php`. Discover live commands with `vendor/bin/castor list` rather than copying names from memory.
 
 | Area | Examples | Use for |
 |---|---|---|
@@ -28,7 +28,7 @@ Exact file layout is owned by the runtime child. Discover live commands with `ve
 
 ```bash
 vendor/bin/castor tooling:prepare
-vendor/bin/castor app:console -- doctrine:migrations:migrate --no-interaction
+vendor/bin/castor test:database:fresh
 vendor/bin/castor cs:fix
 vendor/bin/castor qa:static
 vendor/bin/castor test
@@ -43,7 +43,7 @@ vendor/bin/castor browser:stack:status
 vendor/bin/castor browser:stack:stop
 ```
 
-Use the printed `LIBRARIAN_BROWSER_URL`. Do not invent ports or Compose project names.
+Use the printed loopback URL for host exploration. Saved tests receive `LIBRARIAN_BROWSER_URL=http://php:8080` inside the private browser network. Do not invent ports or Compose project names.
 
 ### Mate diagnostics
 
@@ -87,4 +87,4 @@ vendor/bin/castor list --raw
 - Prod-like tasks use `compose.yaml` + `compose.prod.yaml`.
 - User-mapped container commands should use the host UID/GID to keep file ownership correct.
 - Do not run host PHP/Composer for application operations once the tooling runtime exists.
-- Framework-upgrade dependency resolution and validation evidence are owned by main; this guide does not claim those checks passed.
+- See [framework upgrade notes](framework-upgrade.md) for dependency resolution and validation evidence.

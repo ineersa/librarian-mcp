@@ -67,6 +67,7 @@ abstract class LibrarianNetworkBrowserTest extends TestCase
         $page->getByPlaceholder('Password', ['exact' => true])->fill($password);
         $page->getByRole('button', ['name' => 'Sign in', 'exact' => true])->click();
         $page->waitForURL('**/admin**');
+        $page->getByRole('heading', ['name' => 'MCP Tools Dashboard', 'exact' => true])->waitFor();
     }
 
     protected function logout(): void

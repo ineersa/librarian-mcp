@@ -16,9 +16,9 @@ function checkoutId(): string
     return substr($slug, 0, 36).'-'.substr(hash('sha256', $root), 0, 10);
 }
 
-function stackNetwork(): string
+function stackNetwork(string $mode = 'browser'): string
 {
-    return 'librarian-'.checkoutId().'-net';
+    return stackProject($mode).'-net';
 }
 
 function stackProject(string $mode): string
@@ -117,13 +117,13 @@ function stackEnvironment(string $mode): array
     return [
         'LIBRARIAN_CHECKOUT_ID' => checkoutId(),
         'LIBRARIAN_PROJECT' => stackProject($mode),
-        'LIBRARIAN_NETWORK' => stackNetwork(),
+        'LIBRARIAN_NETWORK' => stackNetwork($mode),
         'LIBRARIAN_PUBLIC_URL' => $url,
         'HTTP_PORT' => 'browser' === $mode ? browserPublishedPort() : developmentPublishedPort(),
         'MERCURE_JWT_SECRET' => $jwt,
         'MERCURE_PUBLISHER_JWT_KEY' => $jwt,
         'MERCURE_SUBSCRIBER_JWT_KEY' => $jwt,
-        'MERCURE_CORS_ORIGINS' => $url,
+        'MERCURE_CORS_ORIGINS' => $url.' http://php:8080',
         'LOCAL_UID' => (string) posix_getuid(),
         'LOCAL_GID' => (string) posix_getgid(),
     ];
@@ -138,9 +138,9 @@ function stackRun(string $mode, array $arguments): void
     echo $process->getErrorOutput();
 }
 
-function ensureStackNetwork(): void
+function ensureStackNetwork(string $mode): void
 {
-    $network = stackNetwork();
+    $network = stackNetwork($mode);
     $inspect = new Process(['docker', 'network', 'inspect', '--format', '{{index .Labels "librarian.stack.owner"}}', $network]);
     if (0 === runTaskProcess($inspect, false)) {
         if (hash('sha256', \dirname(__DIR__)) !== trim($inspect->getOutput())) {
@@ -184,14 +184,14 @@ function developmentStack(string $mode, string $action): int
                 }
             }
             if ('browser' === $mode) {
-                foreach (['/var/browser-live', '/var/browser-live/cache', '/var/browser-live/log', '/var/browser-live/libraries'] as $relative) {
+                foreach (['/var/browser-live', '/var/browser-live/cache', '/var/browser-live/log', '/var/browser-live/libraries', '/var/browser-live/mcp-sessions'] as $relative) {
                     $path = \dirname(__DIR__).$relative;
                     if (!is_dir($path)) {
                         mkdir($path, 0700, true);
                     }
                 }
             }
-            ensureStackNetwork();
+            ensureStackNetwork($mode);
             stackRun($mode, ['build']);
             stackRun($mode, ['up', '-d', '--wait']);
         } else {
@@ -234,7 +234,7 @@ function browserLiveTest(#[AsArgsAfterOptionEnd] array $arguments = [], bool $he
         throw new \InvalidArgumentException('Pass the PHPUnit test selection after --.');
     }
 
-    return report('browser:live:test', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
+    return report('browser:live:test', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
 }
 
 #[AsTask(namespace: 'browser', name: 'stack:up', description: 'Build and start only the isolated browser-test application.')]
@@ -278,6 +278,20 @@ function browserStackConsole(#[AsArgsAfterOptionEnd] array $arguments = [], bool
 
     return report('browser:stack:console', [...stackCommand('browser'), ...$command], runtime: false, operation: static function () use ($command): int {
         stackRun('browser', $command);
+
+        return 0;
+    });
+}
+
+#[AsTask(namespace: 'browser', name: 'stack:logs', description: 'Capture a bounded tail of this checkout browser stack logs.')]
+function browserStackLogs(int $lines = 30): int
+{
+    if ($lines < 1 || $lines > 100) {
+        throw new \InvalidArgumentException('Choose between 1 and 100 log lines per service.');
+    }
+
+    return report('browser:stack:logs', [...stackCommand('browser'), 'logs', '--tail='.$lines], runtime: false, operation: static function () use ($lines): int {
+        stackRun('browser', ['logs', '--no-color', '--tail='.$lines]);
 
         return 0;
     });

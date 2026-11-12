@@ -13,24 +13,28 @@ if ('test' !== ($_SERVER['APP_ENV'] ?? getenv('APP_ENV'))) {
     throw new LogicException('Synthetic admin preparation requires APP_ENV=test.');
 }
 
-$kernel = new Kernel('test', false);
+$projectDir = dirname(__DIR__, 2);
+$databasePath = $projectDir.'/var/browser-live/application.db';
+$databaseUrl = (string) ($_SERVER['DATABASE_URL'] ?? getenv('DATABASE_URL') ?: '');
+if ('sqlite:///'.$databasePath !== $databaseUrl) {
+    throw new LogicException('Synthetic admin preparation requires the exact browser-live DATABASE_URL.');
+}
+foreach ([$projectDir.'/var', dirname($databasePath), $databasePath] as $path) {
+    if (is_link($path)) {
+        throw new LogicException('Refusing symlinked browser storage.');
+    }
+}
+
+$kernel = new Kernel('test', true);
 try {
     $kernel->boot();
-    $projectDir = $kernel->getProjectDir();
-    $databaseUrl = (string) ($_SERVER['DATABASE_URL'] ?? getenv('DATABASE_URL') ?: '');
-    $expectedPrefix = 'sqlite:///'.$projectDir.'/var/browser-live';
-    if (!str_starts_with($databaseUrl, $expectedPrefix)) {
-        throw new LogicException(\sprintf(
-            'Refusing to mutate users outside the isolated browser-live SQLite path. Expected DATABASE_URL under %s, got %s.',
-            $expectedPrefix,
-            '' === $databaseUrl ? '<empty>' : $databaseUrl,
-        ));
-    }
-
-    $container = $kernel->getContainer();
+    $container = $kernel->getContainer()->get('test.service_container');
     $doctrine = $container->get('doctrine');
     if (!$doctrine instanceof ManagerRegistry) {
         throw new LogicException('Doctrine is unavailable for synthetic admin preparation.');
+    }
+    if ($databasePath !== $doctrine->getConnection()->getParams()['path']) {
+        throw new LogicException('Doctrine did not resolve the isolated browser database.');
     }
 
     $manager = $doctrine->getManagerForClass(User::class) ?? throw new LogicException('The user manager is unavailable.');

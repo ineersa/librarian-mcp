@@ -13,8 +13,9 @@ final class LibraryCrudTest extends LibrarianNetworkBrowserTest
         $this->login();
         $page = $this->visit('/admin/libraries');
         self::assertTrue($page->getByRole('heading', ['name' => 'Libraries', 'exact' => true])->isVisible());
-        $page->getByRole('link', ['name' => 'Add Library', 'exact' => true])->click();
+        $page->getByRole('button', ['name' => 'Add Library', 'exact' => true])->click();
         $page->waitForURL('**/admin/libraries/new**');
+        $page->getByRole('heading', ['name' => 'Add Library', 'exact' => true])->waitFor();
         self::assertTrue($page->getByRole('heading', ['name' => 'Add Library', 'exact' => true])->isVisible());
         self::assertTrue($page->getByLabel('Git URL', ['exact' => true])->isVisible());
         self::assertTrue($page->getByLabel('Branch', ['exact' => true])->isVisible());

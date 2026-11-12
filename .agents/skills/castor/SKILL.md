@@ -19,7 +19,7 @@ This repository uses a Composer-locked Castor binary as the single public toolin
 - Pass native Composer, console, and PHPUnit arguments after `--` when the task supports passthrough.
 - Read `var/qa/<task>/result.json` on failure; do not dump full reports into agent context by default.
 
-## Primary surface (framework-upgrade target)
+## Primary surface
 
 ```sh
 vendor/bin/castor tooling:prepare
@@ -40,7 +40,7 @@ vendor/bin/castor browser:stack:status
 
 Mate diagnostics: `mate:discover`, `mate:tools`, `mate:inspect`, `mate:call`, `mate:collector`.
 
-Production-like and remaining lifecycle tasks are documented in [docs/castor.md](../../../docs/castor.md). Runtime implementation is owned by the framework-upgrade runtime child; until tasks exist, report the gap instead of fabricating wrappers.
+Production-like and remaining lifecycle tasks are documented in [docs/castor.md](../../../docs/castor.md). Discover existing tasks before adding a small operation; do not fabricate wrappers or duplicate the runner.
 
 ## When adding or debugging Castor tasks
 

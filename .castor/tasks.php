@@ -169,7 +169,6 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
                 throw new \RuntimeException('Refusing symlinked browser storage.');
             }
         }
-        $fresh = !file_exists($database);
         $started = browserStackUp();
         if (0 !== $started) {
             return $started;
@@ -178,16 +177,10 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         stackRun('browser', ['stop', 'worker']);
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
-        if ($fresh) {
-            $prepare = \dirname(__DIR__).'/tests/Support/prepare_browser.php';
-            if (!is_file($prepare)) {
-                throw new \RuntimeException('Missing tests/Support/prepare_browser.php. Fixture child must add the isolated admin seeder before browser tests.');
-            }
-            stackRun('browser', ['exec', '-T', 'php', 'php', 'tests/Support/prepare_browser.php']);
-        }
+        stackRun('browser', ['exec', '-T', 'php', 'php', 'tests/Support/prepare_browser.php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
-        return report('test:browser', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
+        return report('test:browser', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
     });
 }
 

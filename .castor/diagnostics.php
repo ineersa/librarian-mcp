@@ -93,7 +93,7 @@ function mateDiscover(): int
 {
     $root = \dirname(__DIR__);
     $instructions = [];
-    foreach (['AGENTS.md', 'mate/AGENT_INSTRUCTIONS.md', 'CLAUDE.md'] as $path) {
+    foreach (['AGENTS.md', 'mate/AGENT_INSTRUCTIONS.md', 'CLAUDE.md', '.agents/skills/mate-tools/SKILL.md'] as $path) {
         $instructions[$path] = is_file($root.'/'.$path) ? file_get_contents($root.'/'.$path) : false;
     }
     try {
@@ -101,6 +101,9 @@ function mateDiscover(): int
     } finally {
         foreach ($instructions as $path => $content) {
             if (false !== $content) {
+                if (!is_dir(\dirname($root.'/'.$path))) {
+                    mkdir(\dirname($root.'/'.$path), 0755, true);
+                }
                 file_put_contents($root.'/'.$path, $content);
             } elseif (is_file($root.'/'.$path)) {
                 unlink($root.'/'.$path);

@@ -40,6 +40,7 @@ final class UserCrudTest extends LibrarianNetworkBrowserTest
             $this->login($editedEmail, self::CHANGED_PASSWORD);
             self::assertTrue($page->getByRole('heading', ['name' => 'MCP Tools Dashboard', 'exact' => true])->isVisible());
         } finally {
+            $this->visit('/logout');
             $this->login();
             $this->deleteRecord($userDetailUrl);
         }

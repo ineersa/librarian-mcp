@@ -4,17 +4,17 @@ This guide assumes `compose.yaml` + `compose.prod.yaml`. Prefer Castor productio
 
 ## Framework upgrade note
 
-Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 for this upgrade because stable 8.2 was unavailable. Production images must satisfy PHP 8.4+ / project PHP 8.5 and extension requirements recorded by main. Exact dependency pins and smoke proof are owned by main/runtime — this document does not claim validation passed.
+Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 because stable 8.2 was unavailable. The framework requires PHP 8.4.1+; this project uses PHP 8.5. See [framework upgrade notes](framework-upgrade.md) for dependency pins and validation.
 
-Preserve current deployment topology (loopback app port + host nginx TLS by default) unless a later plan replaces it. Do not use the dependency upgrade as permission to rewrite the domain model or Vera workflow.
+The production compose topology, data mounts, project name, and Vera workflow are preserved. No production cutover is part of this upgrade.
 
 ## Default mode (recommended)
 
-By default, app HTTP is published to loopback only:
+The existing compose default publishes HTTP on the LAN:
 
-- `127.0.0.1:${APP_HTTP_PORT:-8080}:80`
+- `${APP_HTTP_BIND:-0.0.0.0}:${APP_HTTP_PORT:-8093}:80`
 
-Use host nginx (or another reverse proxy) for public TLS on 443.
+For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_HTTP_PORT`. The upgrade does not silently change existing bindings.
 
 ## One-time setup
 
@@ -28,11 +28,12 @@ Use host nginx (or another reverse proxy) for public TLS on 443.
 
    - `APP_SECRET`
    - `DEFAULT_URI` (for example `https://librarian.example.com`)
+   - `MCP_ALLOWED_HOSTS` (comma-separated hostnames without scheme/port; include `librarian.example.com`)
    - `MERCURE_JWT_SECRET`, `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`
    - `SYMFONY_TRUSTED_PROXIES=REMOTE_ADDR`
    - `SYMFONY_TRUSTED_HEADERS=x-forwarded-for,x-forwarded-host,x-forwarded-proto,x-forwarded-port`
 
-3. If host port `8080` is already used by another stack, override the published app port in `.env`:
+3. Configure the published app port in `.env` (Compose interpolation, not the container-only `.env.prod.local`):
 
    ```bash
    APP_HTTP_BIND=127.0.0.1
@@ -54,7 +55,7 @@ Use host nginx (or another reverse proxy) for public TLS on 443.
    vendor/bin/castor prod:console -- doctrine:migrations:migrate --no-interaction
    ```
 
-6. Create an admin user, then configure nginx to proxy `http://127.0.0.1:${APP_HTTP_PORT:-8080}`.
+6. Create an admin user, then configure nginx to proxy the explicit loopback port selected above.
 
 ## Nginx example (host machine)
 
@@ -120,4 +121,5 @@ Then publish host 443 with a local compose override.
 - `compose.prod.yaml` loads `.env.prod.local` with `env_file`.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
 - Symfony environment is baked by `composer dump-env prod` during image build.
+- Castor loads `.env` and `.env.prod` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
 - Do not exercise migrations against the real application database for tests; use isolated storage for validation.

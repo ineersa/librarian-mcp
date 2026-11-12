@@ -6,13 +6,14 @@ Librarian turns Git repositories into searchable MCP libraries. It is a Symfony 
 
 On 2026-11-12 the owner approved proceeding with the named **Symfony 8.2.0-BETA1** prerelease because stable Symfony 8.2 was not yet available. Use package-scoped stability allowances and keep global `minimum-stability` stable. Do not silently substitute another minor or relax stability globally.
 
-Resolved selections reported by main (lockfile/runtime children own proof; docs do not claim checks passed):
+Resolved dependency selections (runtime validation is recorded separately):
 
-- Symfony core **8.2.0-BETA1** exact pins (including transitive pins required by stable global flags)
+- Symfony core locked at **8.2.0-BETA1**; package-scoped `~8.2.0-BETA1` constraints include the transitive components required under stable global flags and stay within the 8.2 minor
 - `symfony/mcp-bundle` **0.15** with `mcp/sdk` **0.9** (`0.10` is incompatible with the bundle's `^0.9` constraint)
 - Official Mate + selected extensions **0.15** stable (`1.0` beta not selected); no speculative AI backends
 - EasyAdmin **5.10**, Doctrine ORM **3.7.6**
 - Symfony UX Stimulus/Turbo **3.7** (required; AssetMapper conflicts block remaining on UX 2.x)
+- Tooling-only `symfony/tui` stays at **8.1.11**: Castor 1.9.1 does not implement the new 8.2 terminal interface. This is not a framework downgrade.
 - MCP 0.15 config uses `mcp.servers.librarian` plus an explicit registry; the old TraceableRegistry reset compiler-pass workaround is removed because the new bundle no longer exposes that service
 - `MCP_ALLOWED_HOSTS` CSV env (default `localhost,127.0.0.1,php,server,192.168.2.38`); production external hostnames override via env
 - Dev/browser runtime: **no shared proxy** — private network with a loopback-published checkout URL / `LIBRARIAN_BROWSER_URL`
@@ -49,7 +50,7 @@ Resolved selections reported by main (lockfile/runtime children own proof; docs 
 
 - Prefer Castor for development, dependency management, QA, and diagnostics. Use host `vendor/bin/castor` as the single tooling entry point. Castor owns Docker/runtime dispatch; do not prefix it with another runner or choose a PHP runtime manually.
 - If `vendor/bin/castor` is missing, bootstrap locked Composer dependencies once through the development image, then run `vendor/bin/castor tooling:prepare`. See [TESTING.md](TESTING.md).
-- Primary task surface (runtime implementation lands with the framework-upgrade work):
+- Primary task surface:
 
   | Task | Purpose |
   |---|---|
@@ -103,7 +104,7 @@ Resolved selections reported by main (lockfile/runtime children own proof; docs 
 
 # Symfony UX Frontend Stack
 
-This project uses Symfony UX packages that are actually installed: **Stimulus** and **Turbo**. The `symfony-ux` skill remains available as a decision aid. Skills for TwigComponent, LiveComponent, UX Icons, and UX Map are intentionally not installed because those packages are not project dependencies.
+Application frontend behavior uses **Stimulus** and **Turbo**. EasyAdmin also installs TwigComponent transitively; that does not select a new component architecture for this application. The `symfony-ux` skill remains available as a decision aid. LiveComponent, UX Icons, and UX Map are not installed.
 
 ## Which tool to use
 
@@ -127,6 +128,6 @@ Mate diagnostics use the same host Castor entry point as QA. Prefer these projec
 
 - Discover extensions with `vendor/bin/castor mate:discover`, list tools with `vendor/bin/castor mate:tools`, and inspect one schema with `vendor/bin/castor mate:inspect TOOL`.
 - Run selected official tools with `vendor/bin/castor mate:call TOOL --json='{...}'`; inspect upstream parameter names first. Use `vendor/bin/castor mate:collector TOKEN COLLECTOR` for one targeted profiler collector. Read the result path printed by each task.
-- See [Mate instructions](mate/AGENT_INSTRUCTIONS.md) for prerequisites, limits, and privacy rules once curated for Castor. Do not invoke Mate directly or add overlapping tool wrappers.
+- See [Mate instructions](mate/AGENT_INSTRUCTIONS.md) for prerequisites, limits, and privacy rules. Do not invoke Mate directly or add overlapping tool wrappers.
 - Selected extensions for this upgrade: `symfony/ai-mate`, `symfony/ai-monolog-mate-extension`, `symfony/ai-symfony-mate-extension`. Do not install every Mate/AI backend speculatively.
 <!-- END AI_MATE_INSTRUCTIONS -->

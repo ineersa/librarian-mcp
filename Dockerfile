@@ -12,7 +12,10 @@ RUN git clone --branch ${VERA_BRANCH} --depth 1 ${VERA_REPO} /vera-src
 
 WORKDIR /vera-src
 
-RUN --mount=type=cache,target=/vera-src/target \
+# Vera keeps these grammars out of Git and links them into vera-core.
+RUN bash scripts/bootstrap-vendored-grammars.sh
+
+RUN --mount=type=cache,id=librarian-vera-target,target=/vera-src/target \
     --mount=type=cache,target=/usr/local/cargo/registry \
     CARGO_BUILD_JOBS=$(nproc) cargo build --release -p vera-cli \
     && cp target/release/vera /usr/local/bin/vera \
@@ -61,13 +64,6 @@ ENV APP_ENV=dev APP_DEBUG=1
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
 COPY docker/php/conf.d/app.dev.ini /usr/local/etc/php/conf.d/app.dev.ini
-COPY docker/frankenphp/watch-and-restart.sh /usr/local/bin/watch-and-restart.sh
-COPY docker/frankenphp/docker-entrypoint-dev.sh /usr/local/bin/docker-entrypoint-dev.sh
-RUN chmod +x /usr/local/bin/watch-and-restart.sh /usr/local/bin/docker-entrypoint-dev.sh \
-    && apt-get update && apt-get install -y --no-install-recommends inotify-tools \
-    && rm -rf /var/lib/apt/lists/*
-
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint-dev.sh"]
 
 FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS tooling_node
 

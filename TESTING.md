@@ -14,28 +14,29 @@ Baseline happy-path coverage for current admin/MCP surfaces is authorized by the
 
 ## Native-network suite
 
-Browser journeys use Playwright against the isolated stack URL supplied as `LIBRARIAN_BROWSER_URL` (printed by the browser stack tasks). They do not boot a kernel, intercept HTTP in-process, or roll back database writes for cross-process isolation.
+Browser journeys use Playwright against the isolated stack URL supplied as `LIBRARIAN_BROWSER_URL` (`http://php:8080` inside the private browser network). Stack tasks also print the loopback-published URL for host browser exploration. They do not boot a kernel, intercept HTTP in-process, or roll back database writes for cross-process isolation.
 
 Each scenario opens and closes its own browser/context and signs in through the real login form. Headed launches request a 2560×1440 window with native 1000ms slow motion and `viewport: null`. Headless launches use a 1920×1080 viewport without slow motion.
 
-Expected journey set after the tests child lands (names may match these intents):
+Saved journeys in `tests/E2E/`:
 
 | Scenario | Happy path |
 |---|---|
 | Homepage | Public landing / login entry |
 | Authentication | Login and logout |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
-| Libraries | Create/register, list, edit, detail, delete only its own library records |
-| Sync / indexing status | Trigger sync for an owned library and observe status UI without claiming production Vera correctness beyond the isolated stack |
-| MCP HTTP | Authenticated MCP endpoint happy path against the isolated stack |
+| Libraries | List and registration form; no sync submission or external model calls |
+| MCP HTTP | Regenerate the isolated admin's token through the UI, then authenticated initialize / initialized / tools-list over real HTTP |
 
 CRUD creates uniquely named records and deletes only those records through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass.
+
+The former kernel/unit suite and FakeVera / MockHub / `test://` substitutions have been removed. The new suite does **not** claim equivalent coverage for library create/edit/delete, search, sync/indexing, dashboard tool execution, negative authentication/authorization, concurrency, recovery, or entity validation. Those gaps are explicit: the routine upgrade suite does not contact embedding/reranking providers or clone repositories.
 
 ## Prepare the tooling runtime
 
 Use Linux amd64, Docker, Docker Compose 2.24.4 or newer, Git, and host PHP 8.5 CLI with PCNTL/POSIX when Castor requires them. Castor owns application runtime selection. Only owner-requested headed runs need display access and host `xauth`.
 
-If `vendor/bin/castor` is missing, bootstrap the locked dependencies once through the development image (exact image target is owned by the runtime child), for example:
+If `vendor/bin/castor` is missing, bootstrap the locked dependencies once through the development image:
 
 ```sh
 docker build --target frankenphp_dev -t librarian-mcp-bootstrap .
@@ -53,11 +54,11 @@ vendor/bin/castor qa:static
 
 `tooling:prepare` builds the development tooling image, installs locked dependencies, and prepares Chromium. Private browser/tooling files live under ignored `var/tooling/`. Do not invoke another PHP runner around Castor.
 
-Exact dependency resolution, Symfony 8.2.0-BETA1 pins, and package-scoped stability allowances are owned by main/runtime; this document does not claim those checks have passed.
+See [framework upgrade notes](docs/framework-upgrade.md) for dependency decisions and recorded validation, rather than inferring a passing build from this setup guide.
 
 ## Running tests
 
-`vendor/bin/castor test` prepares the checkout-owned isolated browser stack as implemented by the runtime child, ensures the verified isolated admin seed exists, then runs Playwright scenarios headlessly by default. Native PHPUnit arguments go after `--`:
+`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, applies migrations, ensures the verified isolated admin seed exists, then runs Playwright scenarios headlessly by default. Native PHPUnit arguments go after `--`:
 
 ```sh
 vendor/bin/castor test -- tests/E2E/AuthenticationTest.php
@@ -76,7 +77,7 @@ Report actual elapsed time, results, and any gaps. Do not inflate assertion coun
 
 Use a **verified isolated admin seed** for browser journeys (canonical demo operator such as `admin@test.com` / `admin` once seeded into isolated storage). Do not create a supplementary dataset that mutates development data for verification. Do not copy credentials from another checkout into reports.
 
-Native-network storage belongs to this checkout's isolated browser stack under ignored paths owned by the runtime child (for example under `var/browser-live/`). The first bootstrap uses Doctrine migrations and append-only seed loading; existing owner/production storage is never purged. DAMA may remain installed for any residual in-process helpers, but it does not isolate independent workers or the live stack.
+Native-network SQLite, cache, logs, library storage, MCP sessions, and Mercure state are under `var/browser-live/`. Doctrine migrations prepare the schema without purging it. `tests/Support/prepare_browser.php` accepts only the exact isolated database path with `APP_ENV=test`, verifies Doctrine's resolved path, and prepares only the synthetic admin identity. The old DAMA and Messenger test harnesses are removed; cross-process isolation is filesystem/network isolation, not transaction rollback.
 
 Each journey deletes only its own UI-created records. Filesystem cleanup is through the application's owned deletion actions, never broad directory cleanup of `data/` or `public/`.
 
@@ -89,9 +90,9 @@ vendor/bin/castor browser:stack:up
 vendor/bin/castor browser:stack:status
 ```
 
-For a fresh isolated stack, migrate and apply the verified admin seed once through the stack console tasks provided by the runtime child. Do not purge data to make seeding pass.
+Use `vendor/bin/castor test` for initial migrations and admin preparation. Subsequent targeted runs can use `vendor/bin/castor browser:live:test -- tests/E2E/AuthenticationTest.php`. Do not purge data to make seeding pass.
 
-After changing worker code or streamed templates, restart only this checkout's isolated browser worker before the live journey, leaving web preview and storage intact when such a task exists.
+After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
 The upgraded runtime uses a **private network and loopback-published checkout URL**, not a shared multi-checkout development proxy. Always use the URL Castor prints for this checkout.
 

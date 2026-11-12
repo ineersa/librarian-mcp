@@ -1,6 +1,6 @@
 # Librarian MCP
 
-Librarian MCP is a Symfony 8.2 application (upgrade in progress; see AGENTS.md) that turns Git repositories into searchable MCP libraries.
+Librarian MCP is a Symfony 8.2.0-BETA1 application that turns Git repositories into searchable MCP libraries. This prerelease was explicitly owner-approved; see [upgrade notes](docs/framework-upgrade.md).
 
 It provides:
 
@@ -58,6 +58,7 @@ Edit `.env.prod.local` and set at least:
 
 - `APP_SECRET`
 - `DEFAULT_URI`
+- `MCP_ALLOWED_HOSTS` (CSV; include the external hostname without scheme or port)
 - `MERCURE_JWT_SECRET`
 - `MERCURE_PUBLISHER_JWT_KEY`
 - `MERCURE_SUBSCRIBER_JWT_KEY`
@@ -194,7 +195,7 @@ These are applied when running `vera index` for that library.
 
 ## Development notes
 
-Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover live task names with `vendor/bin/castor list` — the framework-upgrade runtime child replaces legacy `dev:*` wrappers with `tooling:prepare`, `app:composer`, `app:console`, `cs:fix`, `qa:static`, `test`, `check`, and browser-stack tasks.
+Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover tasks with `vendor/bin/castor list`: `tooling:prepare`, `app:composer`, `app:console`, `cs:fix`, `qa:static`, `test`, `check`, and private browser/development stack tasks replace the legacy `dev:*` wrappers.
 
 - Bootstrap tooling:
 
@@ -226,13 +227,13 @@ Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover live t
 
 ### Framework upgrade gate
 
-On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. Main resolved core 8.2.0-BETA1 pins, MCP 0.15 / sdk 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. Lockfile/runtime smoke proof and remaining test-gap notes are owned by main — this documentation update does **not** claim those checks passed.
+On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions, recorded checks, and remaining coverage gaps.
 
 ---
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for Playwright policy, isolated browser stack (`LIBRARIAN_BROWSER_URL`), and Castor QA commands. This README does not claim tests have passed.
+See [TESTING.md](TESTING.md) for Playwright policy, isolated browser stack (`LIBRARIAN_BROWSER_URL`), and Castor QA commands.
 
 ## Extra docs
 
