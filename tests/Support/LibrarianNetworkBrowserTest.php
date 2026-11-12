@@ -64,8 +64,8 @@ abstract class LibrarianNetworkBrowserTest extends TestCase
     protected function login(string $email = 'admin@test.com', string $password = 'admin'): void
     {
         $page = $this->visit('/login');
-        $page->getByPlaceholder('Email', ['exact' => true])->fill($email);
-        $page->getByPlaceholder('Password', ['exact' => true])->fill($password);
+        $page->getByLabel('Email', ['exact' => true])->fill($email);
+        $page->getByLabel('Password', ['exact' => true])->fill($password);
         $page->getByRole('button', ['name' => 'Sign in', 'exact' => true])->click();
         $page->waitForURL('**/admin**');
         $page->getByRole('heading', ['name' => 'Projects dashboard', 'exact' => true])->waitFor();

@@ -184,7 +184,7 @@ export default class extends Controller {
 
         if (0 === entries.length) {
             const empty = document.createElement('p');
-            empty.className = 'mb-0 p-3 text-sm text-muted';
+            empty.className = 'mb-0 p-3 small text-muted';
             empty.textContent = 'No readable subdirectories.';
             this.entriesTarget.appendChild(empty);
             return;
@@ -197,7 +197,7 @@ export default class extends Controller {
 
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = 'block w-full border-0 border-b border-gray-800 bg-transparent px-3 py-2 text-left text-sm text-gray-100 hover:bg-gray-800';
+            button.className = 'list-group-item list-group-item-action bg-dark text-light';
             button.setAttribute('role', 'option');
             button.textContent = entry.name;
             button.dataset.path = entry.path;

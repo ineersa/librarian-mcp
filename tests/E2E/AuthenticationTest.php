@@ -11,8 +11,8 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
     public function testLoginAndLogout(): void
     {
         $page = $this->visit('/login');
-        $page->getByPlaceholder('Email', ['exact' => true])->fill('admin@test.com');
-        $page->getByPlaceholder('Password', ['exact' => true])->fill('admin');
+        $page->getByLabel('Email', ['exact' => true])->fill('admin@test.com');
+        $page->getByLabel('Password', ['exact' => true])->fill('admin');
         $page->getByRole('button', ['name' => 'Sign in', 'exact' => true])->click();
         $page->waitForURL('**/admin**');
         $page->getByRole('heading', ['name' => 'Projects dashboard', 'exact' => true])->waitFor();

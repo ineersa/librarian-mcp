@@ -15,9 +15,7 @@ final class HomepageTest extends LibrarianNetworkBrowserTest
         $this->assertPageContains('Shared memory service for local Hatfield projects');
         $page->getByRole('link', ['name' => 'Login', 'exact' => true])->click();
         $page->getByRole('button', ['name' => 'Sign in', 'exact' => true])->waitFor();
-        $heading = $page->getByRole('heading', ['level' => 1]);
-        $heading->waitFor();
-        self::assertSame('Librarian MCP', trim($heading->textContent()));
+        self::assertSame('Librarian MCP', trim($page->locator('#header-logo .logo')->textContent()));
         self::assertTrue($page->getByRole('button', ['name' => 'Sign in', 'exact' => true])->isVisible());
     }
 }

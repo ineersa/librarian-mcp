@@ -5,9 +5,9 @@
     <div
         data-controller="project-directory"
         data-project-directory-browse-url-value="{{ browseUrl }}"
-        class="project-directory-picker space-y-2"
+        class="project-directory-picker d-grid gap-2"
     >
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center">
             <input
                 type="text"
                 {{ block('widget_attributes') }}
@@ -28,13 +28,13 @@
 
         <dialog
             data-project-directory-target="dialog"
-            class="w-full max-w-3xl rounded-lg border border-gray-600 bg-gray-900 p-4 text-gray-100 shadow-xl"
+            class="col-12 col-md-9 col-xl-6 rounded border bg-dark p-4 text-light shadow"
             aria-labelledby="project-directory-title"
         >
-            <div class="mb-3 flex items-start justify-between gap-3">
+            <div class="mb-3 d-flex align-items-start justify-content-between gap-3">
                 <div>
                     <h2 id="project-directory-title" class="h5 mb-1">Choose directory</h2>
-                    <p class="mb-0 text-sm text-muted">
+                    <p class="mb-0 small text-muted">
                         Browse directories visible to the Librarian service. Host folders require a deliberate Docker mount.
                     </p>
                 </div>
@@ -48,7 +48,7 @@
                 </button>
             </div>
 
-            <div class="mb-3 flex flex-col gap-2 sm:flex-row">
+            <div class="mb-3 d-flex flex-column flex-sm-row gap-2">
                 <input
                     type="text"
                     class="form-control"
@@ -75,34 +75,34 @@
             </div>
 
             <p
-                class="mb-2 text-sm text-muted"
+                class="mb-2 small text-muted"
                 data-project-directory-target="currentPath"
                 aria-live="polite"
             ></p>
 
             <p
-                class="mb-2 text-sm text-danger"
+                class="mb-2 small text-danger"
                 data-project-directory-target="error"
                 role="alert"
                 hidden
             ></p>
 
             <div
-                class="mb-3 max-h-80 overflow-auto rounded border border-gray-700"
+                class="mb-3 list-group overflow-auto rounded border"
                 data-project-directory-target="entries"
                 role="listbox"
                 aria-label="Directories"
             ></div>
 
             <p
-                class="mb-3 text-sm text-muted"
+                class="mb-3 small text-muted"
                 data-project-directory-target="truncated"
                 hidden
             >
                 Showing the first 200 directories.
             </p>
 
-            <div class="flex flex-wrap gap-2">
+            <div class="d-flex flex-wrap gap-2">
                 <button
                     type="button"
                     class="btn btn-primary"

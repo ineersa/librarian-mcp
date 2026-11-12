@@ -91,6 +91,8 @@ Use `vendor/bin/castor dev:stack:up` and the printed URL. Register a directory w
 
 EasyAdmin pages use full-page navigation (`data-turbo="false"` and UX Turbo's `turbo_page_requires_reload()` helper) so its native forms and confirmation dialogs initialize on every visit. The directory picker remains a Stimulus controller; Turbo stays installed for other application surfaces.
 
+Admin pages load the separate `admin` AssetMapper entry, which starts Stimulus without importing the public site's Tailwind reset. The picker uses EasyAdmin's bundled Bootstrap utilities, and login uses EasyAdmin's built-in template. Keep public `app.css` out of admin pages: its reset layer overrides EasyAdmin's headings, spacing, and buttons.
+
 ## Validation evidence
 
 Saved acceptance uses only synthetic source trees built under ignored `var/browser-live/project-sources`, mounted at `/project-sources` read-only for web/worker. No private Hatfield state is committed. Fixtures exercise default/custom relative/absolute paths, overlays, source errors, external/symlink paths under the relaxed policy, uniqueness, same-numbered sessions in separate projects, and unchanged source hashes after failed scans/removal. Each journey deletes its own registrations through the UI; databases are not blanket-purged.
