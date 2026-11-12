@@ -32,6 +32,7 @@
 *.code-workspace
 /config/reference.php
 /config/schema.json
+/compose.sources.yaml
 /.castor.stub.php
 .vera/
 

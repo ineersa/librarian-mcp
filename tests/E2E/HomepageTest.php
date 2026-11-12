@@ -12,7 +12,7 @@ final class HomepageTest extends LibrarianNetworkBrowserTest
     {
         $page = $this->visit('/');
         self::assertSame('Librarian MCP', trim($page->getByRole('heading', ['level' => 1])->textContent()));
-        $this->assertPageContains('System for libraries and documentation management, ingestion pipeline and MCP server');
+        $this->assertPageContains('Shared memory service for local Hatfield projects');
         $page->getByRole('link', ['name' => 'Login', 'exact' => true])->click();
         $page->getByRole('button', ['name' => 'Sign in', 'exact' => true])->waitFor();
         $heading = $page->getByRole('heading', ['level' => 1]);

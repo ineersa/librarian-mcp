@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class McpHttpServerTest extends LibrarianNetworkBrowserTest
 {
-    public function testAuthenticatedInitializeAndToolsList(): void
+    public function testOptionalAuthenticationAndRetiredToolRegistry(): void
     {
         $this->login();
         $page = $this->visit('/admin/users?query='.rawurlencode('admin@test.com'));
@@ -34,7 +34,6 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         $headers = [
             'Content-Type' => 'application/json',
             'Accept' => 'application/json, text/event-stream',
-            'Authorization' => 'Bearer '.$token,
         ];
         $initialize = $this->page->request()->post($this->url.'/_mcp', [
             'headers' => $headers,
@@ -64,6 +63,8 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         ]);
         self::assertSame(Response::HTTP_ACCEPTED, $initialized->status());
 
+        // Anonymous requests work; an explicitly supplied token is still accepted.
+        $headers['Authorization'] = 'Bearer '.$token;
         $toolsList = $this->page->request()->post($this->url.'/_mcp', [
             'headers' => $headers,
             'data' => [
@@ -74,9 +75,6 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         ]);
         self::assertSame(Response::HTTP_OK, $toolsList->status());
         $body = $toolsList->text();
-        self::assertStringContainsString('search-libraries', $body);
-        self::assertStringContainsString('semantic-search', $body);
-        self::assertStringContainsString('read', $body);
-        self::assertStringContainsString('grep', $body);
+        self::assertStringContainsString('"tools":[]', $body);
     }
 }
