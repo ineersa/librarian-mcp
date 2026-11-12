@@ -1,35 +1,21 @@
 includes:
     - vendor/phpstan/phpstan-strict-rules/rules.neon
     - vendor/phpstan/phpstan-phpunit/extension.neon
-    - vendor/shipmonk/dead-code-detector/rules.neon
-    - phpstan-baseline.neon
+    - vendor/phpstan/phpstan-doctrine/extension.neon
+    - vendor/phpstan/phpstan-doctrine/rules.neon
+    - vendor/jolicode/castor/extension.neon
 
 parameters:
     level: 6
     treatPhpDocTypesAsCertain: false
     paths:
         - src/
-        - tests/
-    scanFiles:
-        - .castor.stub.php
-        - .castor/helpers.php
+        - .castor/
+        - castor.php
+        - .php-cs-fixer.dist.php
+        - bin/console
+        - public/index.php
+        - mate/config.php
     tmpDir: var/phpstan
-    excludePaths:
-        - tests/bootstrap.php
-        - var/*
-        - vendor/*
-    shipmonkDeadCode:
-        usageProviders:
-            symfony:
-                enabled: true
-                configDir: config
-                containerXmlPaths:
-                    - var/cache/dev/App_KernelDevDebugContainer.xml
-                    - var/cache/test/App_KernelTestDebugContainer.xml
-        usageExcluders:
-            tests:
-                enabled: true
-            usageOverMixed:
-                enabled: true
     parallel:
         maximumNumberOfProcesses: 1

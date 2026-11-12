@@ -8,6 +8,7 @@ return (new PhpCsFixer\Config())
     ->setRules([
         '@Symfony' => true,
         '@Symfony:risky' => true,
+        'fopen_flags' => ['b_mode' => true],
         'protected_to_private' => false,
         'declare_strict_types' => true,
         'php_unit_test_case_static_method_calls' => ['call_type' => 'self'],
@@ -32,10 +33,8 @@ return (new PhpCsFixer\Config())
         ],
     ])
     ->setRiskyAllowed(true)
-    ->setFinder(
-        (new PhpCsFixer\Finder())
-            ->in(__DIR__.'/{.phpstan,fixtures,src,tests}')
-            ->append([__FILE__])
-            ->exclude('var')
+    ->setFinder(PhpCsFixer\Finder::create()
+        ->in([__DIR__.'/src', __DIR__.'/tests', __DIR__.'/.castor'])
+        ->append([__DIR__.'/bin/console', __DIR__.'/public/index.php', __DIR__.'/castor.php', __DIR__.'/mate/config.php', __FILE__])
     )
 ;
