@@ -1,5 +1,5 @@
 # Production-like / VPS stack: FrankenPHP + SQLite volume.
-# Usage: docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+# Usage: vendor/bin/castor prod:up
 #
 # Symfony: `.env` + `.env.prod` (+ optional `.env.prod.local` on the build host) are compiled into
 # `.env.local.php` in the image via `composer dump-env prod` in the Dockerfile.
@@ -7,10 +7,6 @@
 # Compose loads `.env.prod.local` via `env_file` into each service (no shell `export`). Use it for
 # Caddy `{env.MERCURE_*}` / `SERVER_NAME` and any runtime overrides; values override Symfony’s dump
 # for the same variable names. Copy `.env.prod.local.dist` → `.env.prod.local`.
-#
-# HTTP publish: default is 0.0.0.0:8093→container:80 so the app is reachable from the local network.
-# For dedicated hosts where Caddy should bind public 80/443 + ACME, override in `.env.prod.local`
-# (or project `.env`) and add 443 mappings via a local compose override (see docs/server-deployment.md).
 
 x-prod-env-file: &prod-env-file
   env_file:
@@ -39,7 +35,7 @@ x-caddy-inline-env: &caddy-inline-env
 
 services:
   php:
-    image: ${APP_IMAGE:-symfony-web-template-app}
+    image: ${APP_IMAGE:-librarian-mcp-php:prod}
     restart: unless-stopped
     <<: [*prod-env-file, *host-gateway, *json-logging]
     environment:
@@ -50,8 +46,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
       # Keep vera config available for both root and non-root execution.
-      - ./docker/vera:/root/.vera:delegated
-      - ./docker/vera:/app/.vera:delegated
+      - ./docker/vera:/root/.vera
+      - ./docker/vera:/app/.vera
     networks:
       - app_net
     ports:
@@ -61,7 +57,7 @@ services:
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
   messenger:
-    image: ${APP_IMAGE:-symfony-web-template-app}
+    image: ${APP_IMAGE:-librarian-mcp-php:prod}
     restart: unless-stopped
     <<: [*prod-env-file, *host-gateway, *json-logging]
     environment:
@@ -72,8 +68,8 @@ services:
     volumes:
       - ./data-prod:/app/data-prod
       # Messenger may run as a non-root user (HOME=/app) depending on runtime.
-      - ./docker/vera:/root/.vera:delegated
-      - ./docker/vera:/app/.vera:delegated
+      - ./docker/vera:/root/.vera
+      - ./docker/vera:/app/.vera
     networks:
       - app_net
     dns:
