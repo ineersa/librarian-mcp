@@ -4,7 +4,7 @@ Status: implementation design, not acceptance evidence. The model/backend choice
 
 ## Versioned integration and framework reuse
 
-Candidate dependency set: Symfony AI Store, Generic platform, ChromaDB bridge and SQLite bridge **0.15.0**, PHP Chroma client **1.0.0**, Chroma server **1.0.21**. Keep the existing Symfony 8.2 prerelease constraints and global stable stability policy. Add Symfony Lock and Scheduler from the same approved 8.2 minor.
+Candidate dependency set: Symfony AI Store, Generic/Voyage platform components, ChromaDB bridge and SQLite bridge **0.15.0**, PHP Chroma client **1.0.0**, Chroma server **1.0.21**. Keep the existing Symfony 8.2 prerelease constraints and global stable stability policy. Add Symfony Lock and Scheduler from the same approved 8.2 minor.
 
 The 0.15 Chroma bridge requires PHP client `^1.0`; that client's tagged README requires Chroma >=1.0 and uses the v2 API. The bridge's test Compose still names 0.6.3: this is not a compatible-version proof. Verify the proposed 1.0.21 combination against an isolated service before claiming compatibility.
 
@@ -16,7 +16,7 @@ Symfony's SQLite bridge supplies FTS5 schema creation, writes, deletes and nativ
 
 Use the official Generic platform for the OpenAI-compatible CodeRank endpoint and Symfony AI's document/vectorization pipeline, preserving raw document text. Its factory supports configurable embedding paths; `/v1` base URLs need `/embeddings`, not another `/v1/embeddings` suffix. Query preprocessing remains `Represent this query for searching relevant code: ` plus the raw query. Validate exact configured dimensions (baseline 768), response cardinality and finite nonzero vectors. Provider bodies and source text must not enter logs or exception chains; disable HTTP response-body tracing and leave vectorizer content logging on a null logger.
 
-The existing BGE contract is llama.cpp `/v1/rerank`, `results[{index,relevance_score}]`. Do not substitute a hosted reranking provider. Verify whether a selected official bridge can express that contract; otherwise document the required small Symfony HttpClient adapter explicitly. Preserve complete index/score validation and sanitized visible failure, not an embeddings-only fallback.
+The existing BGE contract is llama.cpp `/v1/rerank`, `results[{index,relevance_score}]`. The installed 0.15 Voyage `Reranker\\ModelClient` supports a configured base URL and sends the required `model/query/documents` body to `/v1/rerank`. Reuse that official request client against the local endpoint with no truncating top-k option; verify that the endpoint returns every input index. Its stock Voyage result converter expects `data`, not llama.cpp's `results`, so retain strict application-side result count/type/index/finite-score validation. This selects no hosted Voyage backend and adds no custom HTTP transport. Preserve sanitized visible failure, not an embeddings-only fallback.
 
 ## Corpus and identity
 

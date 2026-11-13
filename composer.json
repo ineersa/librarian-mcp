@@ -27,6 +27,7 @@
         "symfony/ai-generic-platform": "~0.15.0",
         "symfony/ai-sqlite-store": "~0.15.0",
         "symfony/ai-store": "~0.15.0",
+        "symfony/ai-voyage-platform": "~0.15.0",
         "symfony/asset": "~8.2.0-BETA1",
         "symfony/asset-mapper": "~8.2.0-BETA1",
         "symfony/cache": "~8.2.0-BETA1",
