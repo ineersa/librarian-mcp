@@ -74,9 +74,9 @@ Do not reintroduce library/Vera tools as a compatibility layer.
 
 ## 4) Output / readiness notes
 
-There is no library readiness or readable-file sandbox in the current product path. Project source discovery health lives in admin (`pending` / `scanning` / `ready` / `error`) and means **sources discovered**, not indexed.
+There is no library readiness or readable-file sandbox in the current product path. Project source discovery health lives in admin (`pending` / `scanning` / `ready` / `error`) and means **sources discovered**, not indexed. Admin Index now / Search memory operate on Librarian-owned derived indexes; they are not MCP tools.
 
-Indexing, hybrid retrieval, and memory tool payloads are deferred to plans 04–05. See [project-sources.md](project-sources.md) for registration/discovery semantics.
+Public memory tool payloads remain plan 05. See [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md) for registration/discovery/indexing semantics.
 
 ---
 
