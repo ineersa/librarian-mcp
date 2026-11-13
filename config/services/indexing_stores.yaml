@@ -1,18 +1,16 @@
 # yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 #
-# Index services are explicitly registered; DTOs and per-generation adapters are
-# constructed by their owners, not registered as synthetic container services.
+# Model and shared indexing settings. Main owns IndexStoreFactory / HybridSearch
+# rewiring onto the official Postgres store.
 
 parameters:
-    app.index.storage_dir: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%'
-    env(INDEX_STORAGE_DIR): 'data/indexes'
     env(CODERANK_URL): 'http://host.docker.internal:8059/v1'
     env(CODERANK_MODEL): 'CodeRankEmbed'
     env(CODERANK_ARTIFACT): ''
     env(BGE_URL): 'http://host.docker.internal:8060/v1'
     env(BGE_MODEL): 'bge-reranker-base'
-    env(CHROMA_HOST): 'http://chroma'
-    env(CHROMA_PORT): '8000'
+    env(INDEX_STORAGE_DIR): 'data/indexes'
+    app.index_execution_lock_dir: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%/locks'
 
 services:
     _defaults:
@@ -30,29 +28,36 @@ services:
 
     App\Index\MemoryChunker: ~
 
-    App\Index\Store\ChromaClientFactory:
-        arguments:
-            $host: '%env(CHROMA_HOST)%'
-            $port: '%env(int:CHROMA_PORT)%'
-
-    Codewithkyrian\ChromaDB\Client:
-        factory: ['@App\Index\Store\ChromaClientFactory', 'create']
-        # The client constructor performs tenant/database HTTP requests. Route
-        # discovery and static diagnostics must not connect to the backend.
-        lazy: true
+    # Scoped only to the CodeRank Generic platform dispatcher created below.
+    App\Index\Model\EmbeddingResultValidator:
+        autoconfigure: false
 
     # Keep private model requests out of the application's traceable HTTP client.
-    # These adapters create a bounded native Symfony HttpClient when passed null.
-    App\Index\Model\ValidatingVectorizer:
+    App\Index\Model\CodeRankVectorizerFactory:
         arguments:
             $httpClient: null
+
+    Symfony\AI\Store\Document\Vectorizer:
+        factory: ['@App\Index\Model\CodeRankVectorizerFactory', 'create']
+
+    Symfony\AI\Store\Document\VectorizerInterface: '@Symfony\AI\Store\Document\Vectorizer'
+
     App\Index\Model\LocalBgeReranker:
         arguments:
             $httpClient: null
 
-    App\Index\Store\IndexStoreFactory:
+    # Separate from the default SQLite PdoStore used by Messenger DeduplicateStamp.
+    # Flock releases on process death and owns one project checkpoint at a time.
+    index_execution_lock.store:
+        class: Symfony\Component\Lock\Store\FlockStore
         arguments:
-            $storageDir: '%app.index.storage_dir%'
-            $client: '@Codewithkyrian\ChromaDB\Client'
+            - '%app.index_execution_lock_dir%'
 
-    App\Index\Search\HybridSearch: ~
+    index_execution_lock_factory:
+        class: Symfony\Component\Lock\LockFactory
+        arguments:
+            - '@index_execution_lock.store'
+        calls:
+            - setLogger: ['@?logger']
+        tags:
+            - { name: monolog.logger, channel: lock }

@@ -46,16 +46,6 @@ final class LocalBgeReranker
     /**
      * @param list<string> $documents
      *
-     * @return list<int> original document offsets, best first (capability / simple API)
-     */
-    public function rank(string $query, array $documents): array
-    {
-        return array_column($this->rankWithScores($query, $documents), 'offset');
-    }
-
-    /**
-     * @param list<string> $documents
-     *
      * @return list<array{offset: int, score: float}>
      */
     public function rankWithScores(string $query, array $documents): array

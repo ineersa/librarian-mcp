@@ -5,7 +5,6 @@
 # See also https://symfony.com/doc/current/service_container/import.html
 
 imports:
-    - { resource: services/indexing_runtime.yaml }
     - { resource: services/indexing_stores.yaml }
     - { resource: services/indexing_domain.yaml }
 
