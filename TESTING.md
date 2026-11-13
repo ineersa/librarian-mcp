@@ -101,7 +101,7 @@ Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
-Development and browser stacks share this repository's Caddy proxy and route registry across worktrees, following the finance setup. `LIBRARIAN_PROXY_PORT` defaults to **8082** so finance's port 80 remains untouched; set it in the environment or `.env.local` before starting stacks if needed. App/worker/PostgreSQL remain checkout-scoped and no database ports are published. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
+Development and browser stacks share this repository's Caddy proxy and route registry across worktrees, following the finance setup. The repository-wide port initially defaults to **8082**; see [Castor proxy operations](docs/castor.md#isolated-browser-stack) for overrides and explicit recreation. App/worker/PostgreSQL remain checkout-scoped and no database ports are published. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
 
 ## Diagnostics and evidence
 

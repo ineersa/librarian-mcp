@@ -156,24 +156,27 @@ final class CanonicalSourceReader
         $idColumn = $kind->idColumn();
         $dateColumn = $kind->dateColumn();
         $relevanceSelect = MemoryKind::Observation === $kind ? 'relevance' : 'NULL AS relevance';
+        $where = null === $afterId ? '' : \sprintf('WHERE %s > :after_id', $idColumn);
 
         // Per-table PK keyset. Avoid sorting a full UNION for every page.
         $sql = \sprintf(
             'SELECT %s AS source_id, run_id AS session_id, content, %s AS occurred_raw, %s
              FROM %s
-             WHERE (:after_id IS NULL OR %s > :after_id)
+             %s
              ORDER BY %s ASC
              LIMIT :limit',
             $idColumn,
             $dateColumn,
             $relevanceSelect,
             $kind->table(),
-            $idColumn,
+            $where,
             $idColumn,
         );
 
         $statement = $pdo->prepare($sql);
-        $statement->bindValue(':after_id', $afterId);
+        if (null !== $afterId) {
+            $statement->bindValue(':after_id', $afterId);
+        }
         $statement->bindValue(':limit', $limit, \PDO::PARAM_INT);
         $statement->execute();
 

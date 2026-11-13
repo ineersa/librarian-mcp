@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Index\Search;
 
 /**
- * Bounded hybrid search result after RRF and BGE reranking.
+ * Bounded native PostgreSQL hybrid search result after BGE reranking.
  *
  * @phpstan-type Hit array{
  *     project_id: int,

@@ -18,6 +18,7 @@ use App\Repository\IndexGenerationRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Psr\Log\LoggerInterface;
 use Symfony\AI\Store\Bridge\Postgres\Store;
 use Symfony\AI\Store\Document\Metadata;
@@ -43,6 +44,7 @@ final class ProjectIndexer
         private readonly IndexGenerationRepository $generationRepository,
         private readonly IndexedMemoryRepository $memoryRepository,
         private readonly EntityManagerInterface $entityManager,
+        private readonly ManagerRegistry $managerRegistry,
         private readonly CanonicalSourceReader $sourceReader,
         private readonly IndexStoreFactory $storeFactory,
         private readonly VectorizerInterface $vectorizer,
@@ -99,8 +101,7 @@ final class ProjectIndexer
             $this->entityManager->flush();
         }
 
-        // setup() is idempotent, including a retry after generation creation.
-        $store = $this->storeFactory->forGeneration($projectId, (int) $generation->id);
+        $store = $this->storeFactory->forGeneration($projectId, (int) $generation->id, initialize: false);
         if (null !== $generation->sourceCursor) {
             $this->processSourceBatch($generation, $snapshot, $store);
 
@@ -129,8 +130,13 @@ final class ProjectIndexer
         }
 
         $generation = new IndexGeneration($project, $signature, $snapshot->identity, $snapshot->path, $root, $this->clock->now());
-        $this->entityManager->persist($generation);
-        $this->entityManager->flush();
+        // PostgreSQL DDL and the generation row commit together; retries cannot
+        // observe a registered generation without its provisioned store.
+        $this->entityManager->wrapInTransaction(function () use ($generation, $project): void {
+            $this->entityManager->persist($generation);
+            $this->entityManager->flush();
+            $this->storeFactory->forGeneration((int) $project->id, (int) $generation->id);
+        });
 
         return $generation;
     }
@@ -315,6 +321,9 @@ final class ProjectIndexer
                 });
             }
         } catch (\Throwable) {
+            if (!$this->entityManager->isOpen()) {
+                $this->managerRegistry->resetManager();
+            }
             $this->logger->warning('Obsolete index cleanup deferred until the next indexing tick.', ['projectId' => $projectId]);
         }
     }
@@ -326,10 +335,10 @@ final class ProjectIndexer
 
     private function persistSafeFailure(int $projectId, IndexException $exception): void
     {
-        if (!$this->entityManager->isOpen()) {
-            return; // Messenger resets a closed manager before retrying a failed transaction.
-        }
         try {
+            if (!$this->entityManager->isOpen()) {
+                $this->managerRegistry->resetManager();
+            }
             $this->entityManager->clear();
             $generation = $this->generationRepository->findLatestForProject($projectId);
             if (null !== $generation) {

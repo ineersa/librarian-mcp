@@ -43,7 +43,9 @@ vendor/bin/castor browser:stack:status
 vendor/bin/castor browser:stack:stop
 ```
 
-Use the printed `http://<checkout>.browser.librarian.localhost:8082` URL for host exploration and saved browser journeys. Caddy's repository-shared proxy binds `127.0.0.1:8082`; finance's separate proxy keeps port 80. `LIBRARIAN_PROXY_PORT` can override the port through the environment or `.env.local`. Checkout stacks have separate routes; proxy state and network identity derive from Git's common directory, so worktrees share only their repository's proxy.
+Use the printed `http://<checkout>.browser.librarian.localhost:<port>` URL for host exploration and saved browser journeys. Caddy's repository-shared proxy binds loopback, initially on **8082**, leaving finance's proxy untouched. Checkout stacks have separate routes; proxy state and network identity derive from Git's common directory.
+
+The port is repository-wide: worktrees without an explicit `LIBRARIAN_PROXY_PORT` adopt the shared container's published port. An explicit environment or `.env.local` value must match it; conflicts fail before modifying shared routes. To change the port, stop this repository's checkout stacks, run `vendor/bin/castor dev:proxy:stop --for-upgrade` to remove the owned proxy container, then start a stack with the new `LIBRARIAN_PROXY_PORT`. Plain `dev:proxy:stop` preserves the container and its old port binding, so it is not sufficient for a port change. `--for-upgrade` explicitly permits a shared preview outage if routes remain registered. Other worktrees must remove or update conflicting overrides; application data is not deleted.
 
 Native-network PHPUnit joins the proxy network and the checkout-private browser network. `LIBRARIAN_PROXY_IP` supplies Chromium's hostname resolution and an exact Docker hosts entry for Playwright's Node HTTP client; both use the public hostname, not `http://php:8080`. No host networking or database port publishing is needed. Dev/browser stacks retain their own PostgreSQL/pgvector volumes (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). Lifecycle: `browser:stack:restart --service=php|worker|...` (and compatible `browser:stack:restart-worker`). Stop checkout stacks before `dev:proxy:stop`; `--for-upgrade` explicitly permits a shared preview outage without deleting application data.
 
@@ -57,13 +59,14 @@ vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
 
 ```bash
 vendor/bin/castor app:console -- doctrine:migrations:migrate --no-interaction
-vendor/bin/castor app:console -- --browser-database doctrine:migrations:migrate --no-interaction
-vendor/bin/castor app:console -- --isolated-database=<id> doctrine:migrations:migrate --no-interaction
+vendor/bin/castor app:console --browser-database -- doctrine:migrations:migrate --no-interaction
+vendor/bin/castor app:console --isolated-database=<id> -- doctrine:database:create --if-not-exists
+vendor/bin/castor app:console --isolated-database=<id> -- doctrine:migrations:migrate --no-interaction
 vendor/bin/castor browser:stack:console -- app:index-project <project-id> --queue-only
 vendor/bin/castor browser:stack:console -- app:index-project <project-id> --drain
 ```
 
-Default `app:console` executes inside the running development `php` service — start `dev:stack:up` first for migrate/create-admin. `--browser-database` targets `librarian_browser`. `--isolated-database=<id>` targets `librarian_iso_<id>` on the browser Postgres service and starts only that owned service (no app/worker/reset). `--drain` processes the same bounded indexing units synchronously and clears Doctrine's identity map between units; ordinary operation uses Messenger plus `scheduler_default` with `CallbackMessageProvider` yielding indexing jobs. It does not make source writes or turn search into ingestion. See [indexing design](indexing-design.md) and [indexing validation](indexing-validation.md).
+Default `app:console` executes inside the running development `php` service — start `dev:stack:up` first for migrate/create-admin. Castor target flags belong **before** `--`; Symfony console arguments belong after it. `--browser-database` targets `librarian_browser`. `--isolated-database=<id>` targets `librarian_iso_<id>` on the browser Postgres service and starts only that owned service (no app/worker/reset); create a fresh database before migrating it. `--drain` processes the same bounded indexing units synchronously and clears Doctrine's identity map between units; ordinary operation uses Messenger plus `scheduler_default` with `CallbackMessageProvider` yielding indexing jobs. It does not make source writes or turn search into ingestion. See [indexing design](indexing-design.md) and [indexing validation](indexing-validation.md).
 
 ### Mate diagnostics
 

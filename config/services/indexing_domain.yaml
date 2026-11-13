@@ -1,7 +1,6 @@
 # yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 #
-# Domain-owned indexing services. Main owns IndexStoreFactory / HybridSearch /
-# scheduler CallbackMessageProvider simplification.
+# Indexing and Scheduler services.
 
 parameters:
     app.index_interval_seconds: '%env(int:INDEX_INTERVAL)%'
@@ -23,8 +22,6 @@ services:
 
     App\MessageHandler\IndexProjectMessageHandler: ~
 
-    # Main will change the constructor to (ProjectRepository, int) and use
-    # CallbackMessageProvider. ProjectRepository remains autowired.
     App\Scheduler\IndexProjectsSchedule:
         arguments:
             $indexIntervalSeconds: '%app.index_interval_seconds%'

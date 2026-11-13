@@ -144,44 +144,44 @@ Summary:
 
 ### Runtime / deployment
 
-- `APP_HTTP_BIND`, `APP_HTTP_PORT`  
+- `APP_HTTP_BIND`, `APP_HTTP_PORT`
   Host bind/port for the app container (from `compose.prod.yaml`).
-- `SERVER_NAME`  
+- `SERVER_NAME`
   Caddy/FrankenPHP server name mode.
-- `DOCKER_DNS_PRIMARY`, `DOCKER_DNS_SECONDARY`  
+- `DOCKER_DNS_PRIMARY`, `DOCKER_DNS_SECONDARY`
   DNS override for container resolution reliability.
-- `PROJECTS_HOST_PATH`  
+- `PROJECTS_HOST_PATH`
   Host path mounted read-only into the service as `/projects` (default `.`).
 
 ### Symfony / app
 
 - `APP_ENV` (`prod` in production)
-- `APP_SECRET`  
+- `APP_SECRET`
   Required app secret.
-- `DEFAULT_URI`  
+- `DEFAULT_URI`
   Canonical base URL.
-- `HATFIELD_USER_HOME`  
+- `HATFIELD_USER_HOME`
   Required logical Hatfield user-home context for settings/path resolution.
-- `HATFIELD_APP_ROOT`  
+- `HATFIELD_APP_ROOT`
   Optional unless settings use `%kernel.project_dir%`.
-- `HATFIELD_PATH_MAPPINGS`  
+- `HATFIELD_PATH_MAPPINGS`
   Optional JSON longest-prefix host→service path mappings.
-- `DATABASE_URL`  
+- `DATABASE_URL`
   Shared PostgreSQL + pgvector for Doctrine metadata and official store tables.
-- `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`  
+- `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
   Local CodeRankEmbed endpoint, model alias, and immutable artifact digest.
-- `BGE_URL`, `BGE_MODEL`  
+- `BGE_URL`, `BGE_MODEL`
   Local BGE reranker endpoint/model (Voyage request client used only as protocol adapter).
-- `INDEX_INTERVAL`, `LOCK_DSN`  
+- `INDEX_INTERVAL`, `LOCK_DSN`
   Scheduler interval (`CallbackMessageProvider` yields indexing jobs) and shared lock DSN.
 
 ### Mercure
 
-- `MERCURE_PUBLIC_URL`  
+- `MERCURE_PUBLIC_URL`
   Browser-facing Mercure URL.
-- `MERCURE_JWT_SECRET`  
+- `MERCURE_JWT_SECRET`
   Symfony Mercure bundle secret.
-- `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`  
+- `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`
   Hub signing keys used by Caddy/Mercure.
 
 ### Security / MCP

@@ -34,6 +34,8 @@ Plans 03/04 product path: local project registration, read-only Hatfield source 
 
 2. Configure project/source context (typical local values):
 
+   Put application settings such as `CODERANK_*`, `BGE_*` and `INDEX_INTERVAL` in `.env.local` or `.env.dev.local`. Symfony loads these for both web and worker; development Compose does not inject tracked model defaults over them. Castor supplies checkout-owned database credentials explicitly.
+
    - `PROJECTS_HOST_PATH` (default `.`) mounted read-only as `/projects`
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
@@ -67,7 +69,7 @@ Plans 03/04 product path: local project registration, read-only Hatfield source 
 
 6. Open the printed development / browser URL from the stack status task (`LIBRARIAN_BROWSER_URL` for Playwright). Caddy binds loopback on port 8082, leaving finance's port 80 untouched. The proxy and route registry are shared across this repository's worktrees; app/worker/PostgreSQL remain checkout-scoped.
 
-`LIBRARIAN_PROXY_PORT` can override 8082 through the environment or `.env.local` before starting stacks. Production retains its existing `APP_HTTP_BIND` / `APP_HTTP_PORT` configuration. Prefer stack status output over inventing hostnames. PostgreSQL publishes no host ports, including for the native-network browser harness.
+The proxy port is repository-wide, not checkout-local. For override/conflict behavior and explicit proxy recreation, follow the [Castor proxy instructions](castor.md#isolated-browser-stack). Production retains its existing `APP_HTTP_BIND` / `APP_HTTP_PORT` configuration. Prefer stack status output over inventing hostnames. PostgreSQL publishes no host ports, including for the native-network browser harness.
 
 If Tailwind binary download fails resolving `github.com`, set Docker DNS overrides in `.env.local`:
 

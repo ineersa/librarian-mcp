@@ -56,6 +56,8 @@ Canonical change signal is ordinary metadata revision advance:
 5. Embed outside the short write transaction. Upsert/remove store chunks and commit the relational manifest together in one short PostgreSQL transaction
 6. Advance the cursor only after that work succeeds. After traversal, remove unseen parents in bounded batches and publish the committed boundary
 
+Generation registration and native store provisioning commit together once. Ordinary indexing batches open the existing store without repeating extension/table/index setup. Source pages omit the range predicate initially, then use a direct primary-key range for subsequent pages. Transaction failures use Doctrine's registry reset before recording sanitized Error state; deferred obsolete cleanup also resets a closed manager so synchronous draining can continue.
+
 Source identity remains path + filesystem device/inode. A changed filesystem identity or lower revision starts a fresh generation. An in-place restore that preserves identity and revision is not reliably detected.
 
 ## Scheduling
