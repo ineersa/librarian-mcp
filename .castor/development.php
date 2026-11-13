@@ -245,7 +245,7 @@ function browserLiveTest(#[AsArgsAfterOptionEnd] array $arguments = [], bool $he
         throw new \InvalidArgumentException('Pass the PHPUnit test selection after --.');
     }
 
-    return report('browser:live:test', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
+    return report('browser:live:test', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, hostNetwork: true);
 }
 
 #[AsTask(namespace: 'browser', name: 'stack:up', description: 'Build and start only the isolated browser-test application.')]
@@ -266,19 +266,27 @@ function browserStackStop(): int
     return developmentStack('browser', 'stop');
 }
 
-#[AsTask(namespace: 'browser', name: 'stack:restart-worker', description: 'Restart only this checkout\'s isolated browser worker to load changed code.')]
-function browserStackRestartWorker(bool $force = false): int
+#[AsTask(namespace: 'browser', name: 'stack:restart', description: 'Restart one verified service in this checkout\'s isolated browser stack: php, worker, or chroma.')]
+function browserStackRestart(string $service = 'php', bool $force = false): int
 {
-    $command = ['restart', 'worker'];
+    if (!\in_array($service, ['php', 'worker', 'chroma'], true)) {
+        throw new \InvalidArgumentException('Choose a verified browser service: php, worker, or chroma.');
+    }
 
-    return report('browser:stack:restart-worker', [...stackCommand('browser'), ...$command], runtime: false, operation: static function () use ($command, $force): int {
+    return report('browser:stack:restart', [...stackCommand('browser'), 'restart', $service], runtime: false, operation: static function () use ($service, $force): int {
         if ($force) {
-            stackRun('browser', ['kill', '--signal', 'SIGKILL', 'worker']);
+            stackRun('browser', ['kill', '--signal', 'SIGKILL', $service]);
         }
-        stackRun('browser', $command);
+        stackRun('browser', ['restart', $service]);
 
         return 0;
     });
+}
+
+#[AsTask(namespace: 'browser', name: 'stack:restart-worker', description: 'Restart only this checkout\'s isolated browser worker to load changed code.')]
+function browserStackRestartWorker(bool $force = false): int
+{
+    return browserStackRestart('worker', $force);
 }
 
 /** @param list<string> $arguments */

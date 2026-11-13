@@ -12,7 +12,7 @@ use Symfony\Component\Process\Process;
  * @param list<string>           $command
  * @param (\Closure(): int)|null $operation
  */
-function report(string $task, array $command, bool $runtime = true, bool $headed = false, ?\Closure $operation = null, string $artifact = '', bool $networked = false): int
+function report(string $task, array $command, bool $runtime = true, bool $headed = false, ?\Closure $operation = null, string $artifact = '', bool $networked = false, bool $hostNetwork = false): int
 {
     $root = \dirname(__DIR__);
     $relative = 'var/qa/'.str_replace(':', '-', $task);
@@ -67,7 +67,7 @@ function report(string $task, array $command, bool $runtime = true, bool $headed
             }
         } else {
             if (null !== $container) {
-                $command = runtimeCommand($command, $container, $headed, $networked);
+                $command = runtimeCommand($command, $container, $headed, $networked, $hostNetwork);
                 $result['command'] = $command;
                 $result['runtime_container'] = $container;
                 $save();
@@ -184,7 +184,9 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         stackRun('browser', ['restart', 'php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
-        return report('test:browser', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
+        // Linux host networking reaches the printed loopback URL; fixture setup
+        // does not need private Chroma DNS. No silent php:8080 fallback.
+        return report('test:browser', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, hostNetwork: true);
     });
 }
 
