@@ -1,2 +1,5 @@
 # yaml-language-server: $schema=../schema.json
-lock: '%env(LOCK_DSN)%'
+
+# Default LockBundle resource. Messenger DeduplicateStamp requires a serializable
+# store; sqlite: resolves to PdoStore and creates its vendor lock table.
+lock: '%env(resolve:LOCK_DSN)%'

@@ -21,6 +21,27 @@ services:
       start_period: 20s
       retries: 3
 
+  chroma:
+    image: chromadb/chroma:1.0.21
+    restart: unless-stopped
+    command: ["run", "--path", "/data", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma_data:/data
+    # Official image has no curl/wget. Bash /dev/tcp probes the private v2 heartbeat.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8000 && printf \"GET /api/v2/heartbeat HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+
 volumes:
   caddy_data:
   caddy_config:
+  chroma_data:

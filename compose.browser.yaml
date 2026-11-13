@@ -16,12 +16,16 @@ services:
         transport bolt {
           path /app/var/browser-live/mercure.db
         }
+      INDEX_STORAGE_DIR: var/browser-live/indexes
+      INDEX_INTERVAL: '2'
+      LOCK_DSN: 'sqlite:%kernel.project_dir%/var/browser-live/indexing-locks.db'
     volumes: !override
       - .:/app:ro
       - ./var/browser-live:/app/var/browser-live
       - ./var/browser-live/cache:/app/var/cache
       - ./var/browser-live/log:/app/var/log
       - ./var/browser-live/mcp-sessions:/app/var/mcp-sessions
+      - ./var/browser-live/indexes:/app/var/browser-live/indexes
       - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
       - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
@@ -38,9 +42,13 @@ services:
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
       MCP_ALLOWED_HOSTS: 'localhost,127.0.0.1,php,server'
+      INDEX_STORAGE_DIR: var/browser-live/indexes
+      INDEX_INTERVAL: '2'
+      LOCK_DSN: 'sqlite:%kernel.project_dir%/var/browser-live/indexing-locks.db'
     volumes: !override
       - .:/app:ro
       - ./var/browser-live:/app/var/browser-live
       - ./var/browser-live/cache:/app/var/cache
       - ./var/browser-live/log:/app/var/log
+      - ./var/browser-live/indexes:/app/var/browser-live/indexes
       - ./var/browser-live/project-sources:/project-sources:ro

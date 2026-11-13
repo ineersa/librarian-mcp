@@ -184,7 +184,14 @@ function developmentStack(string $mode, string $action): int
                 }
             }
             if ('browser' === $mode) {
-                foreach (['/var/browser-live', '/var/browser-live/cache', '/var/browser-live/log', '/var/browser-live/mcp-sessions'] as $relative) {
+                foreach ([
+                    '/var/browser-live',
+                    '/var/browser-live/cache',
+                    '/var/browser-live/log',
+                    '/var/browser-live/mcp-sessions',
+                    '/var/browser-live/indexes',
+                    '/var/browser-live/indexes/locks',
+                ] as $relative) {
                     $path = \dirname(__DIR__).$relative;
                     if (!is_dir($path)) {
                         mkdir($path, 0700, true);

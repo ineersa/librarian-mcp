@@ -22,7 +22,10 @@ function runtimeCommand(array $command, string $container, bool $headed, bool $n
     }
     $docker = ['docker', 'run', '--rm', '--init', '--name', $container, '--label', 'librarian.qa.owner='.hash('sha256', $root), '--user', posix_getuid().':'.posix_getgid(), '--volume', $root.':/app', '--env', 'XDG_CONFIG_HOME=/app/var/tooling/home/.config', '--env', 'XDG_CACHE_HOME=/app/var/tooling/home/.cache'];
     if ($networked) {
-        $docker = [...$docker, '--network', stackNetwork()];
+        // Join the private browser/dev stack network for chroma/php, and keep
+        // host-gateway for 0.0.0.0-published host model listeners (8059/8060).
+        // Loopback-published stack ports are NOT reachable via host-gateway.
+        $docker = [...$docker, '--network', stackNetwork(), '--add-host', 'host.docker.internal:host-gateway'];
     }
     if ($headed) {
         $display = getenv('DISPLAY');

@@ -43,7 +43,9 @@ vendor/bin/castor browser:stack:status
 vendor/bin/castor browser:stack:stop
 ```
 
-Use the printed loopback URL for host exploration. Saved tests receive `LIBRARIAN_BROWSER_URL=http://php:8080` inside the private browser network. Do not invent ports or Compose project names.
+Use the printed loopback URL for host exploration. Saved tests run inside the private browser Compose network and therefore use `LIBRARIAN_BROWSER_URL=http://php:8080` (service DNS). That is intentional: stack ports are published only on host loopback (`127.0.0.1:PORT`), which is not reachable from containers via `host.docker.internal`. There is no shared proxy. Tooling containers that need models still add `--add-host host.docker.internal:host-gateway` and join `stackNetwork('browser')` for private Chroma/php access. Do not invent ports or Compose project names.
+
+Dev/browser stacks include a private `chromadb/chroma:1.0.21` service (no published host port, persistent Compose volume, `/data` persist path). Browser preparation creates writable `var/browser-live/indexes` (+ `locks/`) separately from the read-only synthetic source mount.
 
 `test` recreates only the verified checkout-owned browser SQLite database before applying migrations. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture in the PHPUnit browser base; SQLite IDs therefore restart on each saved run. `browser:live:test` reuses current storage and does not provide that reset. To watch the single Projects journey rather than the whole suite:
 

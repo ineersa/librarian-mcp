@@ -1,6 +1,18 @@
 # Castor supplies checkout identity and the private compose network.
 name: "${LIBRARIAN_PROJECT:?Run vendor/bin/castor dev:stack:up}"
 
+x-indexing-env: &indexing-env
+  CODERANK_URL: '${CODERANK_URL}'
+  CODERANK_MODEL: '${CODERANK_MODEL}'
+  CODERANK_ARTIFACT: '${CODERANK_ARTIFACT}'
+  BGE_URL: '${BGE_URL}'
+  BGE_MODEL: '${BGE_MODEL}'
+  CHROMA_HOST: '${CHROMA_HOST}'
+  CHROMA_PORT: '${CHROMA_PORT}'
+  INDEX_STORAGE_DIR: '${INDEX_STORAGE_DIR}'
+  INDEX_INTERVAL: '${INDEX_INTERVAL}'
+  LOCK_DSN: '${LOCK_DSN}'
+
 services:
   php:
     image: "librarian-${LIBRARIAN_CHECKOUT_ID:?Run vendor/bin/castor dev:stack:up}-php:dev"
@@ -29,6 +41,7 @@ services:
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
+      <<: *indexing-env
     volumes: !override
       - ./:/app
       - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -49,6 +62,9 @@ services:
           - php
     extra_hosts:
       - host.docker.internal:host-gateway
+    depends_on:
+      chroma:
+        condition: service_healthy
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
@@ -68,6 +84,7 @@ services:
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
+      <<: *indexing-env
     volumes:
       - ./:/app
       - type: bind
@@ -76,11 +93,14 @@ services:
         read_only: true
         bind:
           create_host_path: false
+    # --all includes async + scheduler_default; failed stays excluded.
     command: ['php', 'bin/console', 'messenger:consume', '--all', '--exclude-receivers=failed', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
     healthcheck:
       disable: true
     depends_on:
       php:
+        condition: service_healthy
+      chroma:
         condition: service_healthy
     networks:
       default: {}
@@ -90,6 +110,14 @@ services:
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
+
+  chroma:
+    networks:
+      default: {}
+      librarian:
+        aliases:
+          - chroma
+    # No published host port; app/worker reach chroma:8000 on the private network.
 
 networks:
   librarian:

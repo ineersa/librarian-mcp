@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+
+# Runtime-only indexing wiring. Domain/store services will inject these later.
+parameters:
+    app.coderank_url: '%env(CODERANK_URL)%'
+    app.coderank_model: '%env(CODERANK_MODEL)%'
+    app.coderank_artifact: '%env(CODERANK_ARTIFACT)%'
+    app.bge_url: '%env(BGE_URL)%'
+    app.bge_model: '%env(BGE_MODEL)%'
+    app.chroma_host: '%env(CHROMA_HOST)%'
+    app.chroma_port: '%env(int:CHROMA_PORT)%'
+    app.index_storage_dir: '%env(INDEX_STORAGE_DIR)%'
+    app.index_interval: '%env(int:INDEX_INTERVAL)%'
+    app.index_storage_path: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%'
+    app.index_execution_lock_dir: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%/locks'
+
+services:
+    # Separate from the default SQLite PdoStore used by Messenger DeduplicateStamp.
+    # Flock releases on process death and owns one project checkpoint at a time.
+    index_execution_lock.store:
+        class: Symfony\Component\Lock\Store\FlockStore
+        arguments:
+            - '%app.index_execution_lock_dir%'
+
+    index_execution_lock_factory:
+        class: Symfony\Component\Lock\LockFactory
+        arguments:
+            - '@index_execution_lock.store'
+        calls:
+            - setLogger: ['@?logger']
+        tags:
+            - { name: monolog.logger, channel: lock }

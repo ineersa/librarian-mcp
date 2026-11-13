@@ -55,6 +55,9 @@ services:
       - app_net
     ports:
       - "${APP_HTTP_BIND:-0.0.0.0}:${APP_HTTP_PORT:-8093}:80"
+    depends_on:
+      chroma:
+        condition: service_healthy
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
@@ -67,7 +70,10 @@ services:
       APP_ENV: prod
     command: ["php", "bin/console", "messenger:consume", "--all", "--exclude-receivers=failed"]
     depends_on:
-      - php
+      php:
+        condition: service_started
+      chroma:
+        condition: service_healthy
     volumes:
       - ./data-prod:/app/data-prod
       - type: bind
@@ -81,6 +87,11 @@ services:
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
+
+  chroma:
+    networks:
+      - app_net
+    # Production keeps the existing app_net name and owner volumes; Chroma stays private.
 
 networks:
   app_net:
