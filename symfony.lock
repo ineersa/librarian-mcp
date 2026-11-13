@@ -132,15 +132,6 @@
             "ref": "e805aba9eff5372e2d149a9ff56566769e22819d"
         }
     },
-    "symfony/ai-chroma-db-store": {
-        "version": "0.15",
-        "recipe": {
-            "repo": "github.com/symfony/recipes",
-            "branch": "main",
-            "version": "0.1",
-            "ref": "e99fe77e913e0047db0377846e0cabf0c023895c"
-        }
-    },
     "symfony/ai-generic-platform": {
         "version": "0.15",
         "recipe": {

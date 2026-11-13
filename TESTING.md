@@ -34,7 +34,7 @@ The Projects journey uses only the two synthetic source trees needed for registr
 
 CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. After the journey restores any intentional harness mutation, source fixture trees/databases must match the pre-journey hash; registration removal must not change sources.
 
-The former kernel/unit suite and FakeVera / MockHub / library TOON tool harnesses have been removed. Do not add unit/API-only suites as the primary coverage model. Public MCP memory tools remain plan 05. Do not claim plan 04 acceptance from docs alone; see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
+Do not add unit/API-only suites as the primary coverage model. Public MCP memory tools remain plan 05. Do not claim plan 04 acceptance from docs alone; see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
 
 ## Prepare the tooling runtime
 

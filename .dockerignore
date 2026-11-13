@@ -1,8 +1,6 @@
 .git
 .hatfield
 compose.sources.yaml
-.vera
-docker/vera
 .idea
 .agents
 vendor

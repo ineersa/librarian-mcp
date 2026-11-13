@@ -2,7 +2,7 @@
 
 ## Current product boundary
 
-Librarian registers **local directories**, not GitHub libraries. It discovers Hatfield OM/session metadata read-only, then builds Librarian-owned hybrid indexes from retained observations/reflections. It does not boot Hatfield, load extension PHP, run source migrations, clone repositories, or call Vera/Vektor/Gemma paths.
+Librarian registers **local directories**. It discovers Hatfield OM/session metadata read-only, then builds Librarian-owned hybrid indexes from retained observations/reflections. It does not boot Hatfield, load extension PHP, run source migrations, or clone repositories.
 
 - **Sources discovered** (`ready`) means discovery succeeded, not that memories are indexed.
 - **Index now / Search memory** are admin actions over derived data. Search never synchronously ingests or rebuilds a project and has no date-window UI.
@@ -49,9 +49,9 @@ Approved baseline:
 
 Notes:
 
-- Native Generic platform + Voyage request client are used only as the **local BGE protocol** adapter. No hosted Voyage provider is selected.
+- Native Generic platform handles CodeRank embeddings; the Voyage request client is used only as the **local BGE protocol** adapter. No hosted Voyage provider is selected.
 - Embeddings/source reads happen outside the short atomic PostgreSQL transaction that upserts/removes chunks and commits the relational manifest.
-- No private Chroma service, separate SQLite FTS files, CombinedStore/RRF adapters, or cross-store pending protocol.
+- All derived index data and checkpoints share PostgreSQL; there is no cross-store recovery protocol.
 - Journals support exact recall later; they are not embedded in the initial corpus.
 
 Admin detail shows latest/active generation status, source/committed revision, parent/chunk counts, sanitized errors, and last successful index time. Pending/stale status is honest: discovery is not indexing. Detail uses the existing bounded meta refresh while work is in progress.

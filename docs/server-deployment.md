@@ -6,7 +6,7 @@ This guide assumes `compose.yaml` + `compose.prod.yaml`. Prefer Castor productio
 
 Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 because stable 8.2 was unavailable. The framework requires PHP 8.4.1+; this project uses PHP 8.5. See [framework upgrade notes](framework-upgrade.md) for dependency pins.
 
-The production compose topology, data mounts, project name, and ports are preserved where possible. Plans 03/04 replace the Git/Vera library product with local project registration, read-only source discovery, and Librarian-owned hybrid indexing on shared PostgreSQL + pgvector; see [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). Postgres image: `pgvector/pgvector:pg17-bookworm` (digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). Production/dev Postgres publish no host ports.
+Librarian registers local projects, discovers sources read-only, and builds its hybrid indexes on shared PostgreSQL + pgvector; see [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). Postgres image: `pgvector/pgvector:pg17-bookworm` (digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). PostgreSQL publishes no host ports.
 
 ## Default mode (recommended)
 
@@ -137,7 +137,7 @@ Then publish host 443 with a local compose override.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
 - Symfony environment is baked by `composer dump-env prod` during image build.
 - Castor loads `.env` and `.env.prod` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
-- Production image no longer embeds Vera; project sources are mounted read-only.
+- Project sources are mounted read-only.
 - Postgres stays on the private network with no host ports. Worker consumes Messenger `async` and `scheduler_default`.
 - Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
 - Registration deletion removes owned derived indexes only; never source trees.

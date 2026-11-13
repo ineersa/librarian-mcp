@@ -1,5 +1,5 @@
 doctrine:
     dbal:
-        # Browser PHPUnit connects through the printed loopback Postgres port.
+        # Browser PHPUnit joins the checkout-private PostgreSQL network.
         # Castor injects DATABASE_URL / LOCK_DSN; never fall back to ambient URLs.
         url: '%env(resolve:DATABASE_URL)%'

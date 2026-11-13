@@ -1,6 +1,6 @@
 # Librarian MCP
 
-Librarian MCP is a Symfony 8.2.0-BETA1 application that registers local Hatfield projects, discovers their observational-memory / session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. This prerelease was explicitly owner-approved; see [upgrade notes](docs/framework-upgrade.md). The current product path is project registration, source discovery, and derived indexing ([project sources](docs/project-sources.md), [indexing design](docs/indexing-design.md)); that supersedes the earlier Git/Vera library workflow described historically in the upgrade notes.
+Librarian MCP is a Symfony 8.2.0-BETA1 application that registers local Hatfield projects, discovers their observational-memory / session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. This prerelease was explicitly owner-approved; see [framework compatibility](docs/framework-upgrade.md). The product path is project registration, source discovery, and derived indexing ([project sources](docs/project-sources.md), [indexing design](docs/indexing-design.md)).
 
 It provides:
 
@@ -10,7 +10,7 @@ It provides:
 - Index now / Search memory over the committed active generation
 - HTTP MCP at `/_mcp` (token optional; memory tools arrive in plan 05)
 
-Under the hood it does **not** clone repositories or run Vera/Vektor. Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its shared PostgreSQL + pgvector database (Doctrine metadata and official Symfony AI Postgres store tables).
+Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its shared PostgreSQL + pgvector database (Doctrine metadata and official Symfony AI Postgres store tables). It does not clone repositories.
 
 ## Table of contents
 
@@ -239,7 +239,7 @@ Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover tasks 
 
 ### Framework upgrade gate
 
-On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions and recorded checks. Product behavior after plans 03/04 is project registration, source discovery, and derived hybrid indexing on the official Symfony AI Postgres store — not the historical Git/Vera library path. See [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
+On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [framework compatibility](docs/framework-upgrade.md) for dependency decisions, [indexing design](docs/indexing-design.md) for the architecture, and [indexing validation](docs/indexing-validation.md) for recorded checks.
 
 ---
 

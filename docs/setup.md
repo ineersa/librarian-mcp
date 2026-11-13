@@ -20,9 +20,9 @@ Librarian runs on FrankenPHP with Symfony worker mode, built-in Mercure, and sha
 
 Owner-approved on 2026-11-12: proceed with **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) using package-scoped stability allowances. See [framework upgrade notes](framework-upgrade.md) for locked dependencies.
 
-Selected packages: MCP 0.15 / sdk 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, UX Stimulus/Turbo 3.7, official Symfony AI Postgres store 0.15.0. The tooling runtime is pinned FrankenPHP 1.13.5 / PHP 8.5. A repository-shared Caddy proxy provides checkout-specific `*.librarian.localhost:8082` development and browser URLs; PostgreSQL stays on private checkout networks.
+Selected packages: MCP 0.15 / sdk 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, UX Stimulus/Turbo 3.7, official Symfony AI Postgres store 0.15.0. The tooling runtime is pinned FrankenPHP 1.13.5 / PHP 8.5. A repository-shared Caddy proxy provides checkout-specific development and browser URLs; PostgreSQL stays on private checkout networks.
 
-Plans 03/04 product path: local project registration, read-only Hatfield source discovery, and Librarian-owned hybrid indexing via the official Symfony AI Postgres store. See [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). This supersedes the historical Git/Vera library workflow. Validation status: [indexing-validation.md](indexing-validation.md).
+The product path is local project registration, read-only Hatfield source discovery, and Librarian-owned hybrid indexing via the official Symfony AI Postgres store. See [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). Validation status: [indexing-validation.md](indexing-validation.md).
 
 ## First-time local setup
 
@@ -40,10 +40,9 @@ Plans 03/04 product path: local project registration, read-only Hatfield source 
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix mappings
-   - `DATABASE_URL`
    - `CODERANK_URL` / `CODERANK_MODEL` / `CODERANK_ARTIFACT`
    - `BGE_URL` / `BGE_MODEL`
-   - `INDEX_INTERVAL` / `LOCK_DSN`
+   - `INDEX_INTERVAL`
    - optional ignored `compose.sources.yaml` for additional read-only user/global/custom mounts (dev/prod via Castor; never imported by the browser stack)
 
 3. Start the development stack and Messenger consumer:
@@ -52,7 +51,7 @@ Plans 03/04 product path: local project registration, read-only Hatfield source 
    vendor/bin/castor dev:stack:up
    ```
 
-   Default `app:console` executes inside the running development `php` service. Read the printed `*.librarian.localhost:8082` URL; use `dev:stack:status` to rediscover it later. The worker consumes `async` and `scheduler_default`.
+   Default `app:console` executes inside the running development `php` service. Use the printed development URL; use `dev:stack:status` to rediscover it later. The worker consumes `async` and `scheduler_default`.
 
 4. Migrate the development database and create a local admin when needed:
 
@@ -67,7 +66,7 @@ Plans 03/04 product path: local project registration, read-only Hatfield source 
    vendor/bin/castor app:console -- tailwind:build --watch
    ```
 
-6. Open the printed development / browser URL from the stack status task (`LIBRARIAN_BROWSER_URL` for Playwright). Caddy binds loopback on port 8082, leaving finance's port 80 untouched. The proxy and route registry are shared across this repository's worktrees; app/worker/PostgreSQL remain checkout-scoped.
+6. Open the printed development / browser URL from the stack status task (`LIBRARIAN_BROWSER_URL` for Playwright). Caddy binds loopback on the repository-wide proxy port (initial default 8082), leaving finance untouched. The proxy and route registry are shared across this repository's worktrees; app/worker/PostgreSQL remain checkout-scoped.
 
 The proxy port is repository-wide, not checkout-local. For override/conflict behavior and explicit proxy recreation, follow the [Castor proxy instructions](castor.md#isolated-browser-stack). Production retains its existing `APP_HTTP_BIND` / `APP_HTTP_PORT` configuration. Prefer stack status output over inventing hostnames. PostgreSQL publishes no host ports, including for the native-network browser harness.
 
@@ -87,7 +86,7 @@ vendor/bin/castor browser:stack:up
 vendor/bin/castor browser:stack:status
 ```
 
-Use the printed `*.browser.librarian.localhost:8082` URL for host exploration. The browser database is `librarian_browser` in the checkout-scoped Postgres Docker volume. The browser stack maps synthetic `/project-sources` fixtures, keeps Postgres private, and never imports operator `compose.sources.yaml` overlays. Details: [TESTING.md](../TESTING.md).
+Use the printed browser URL for host exploration. The browser database is `librarian_browser` in the checkout-scoped Postgres Docker volume. The browser stack maps synthetic `/project-sources` fixtures, keeps Postgres private, and never imports operator `compose.sources.yaml` overlays. Details: [TESTING.md](../TESTING.md).
 
 ## Production-like local run
 

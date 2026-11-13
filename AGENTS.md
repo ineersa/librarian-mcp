@@ -1,6 +1,6 @@
 # Librarian MCP
 
-Librarian registers local Hatfield projects, discovers their OM/session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. It is a Symfony web/admin application with EasyAdmin, Messenger, Scheduler, Mercure, MCP HTTP transport, Castor, and Docker/FrankenPHP. Librarian-owned Doctrine metadata and generation-scoped store tables share PostgreSQL + pgvector through the official Symfony AI Postgres store. Preserve current deployment topology unless a later plan explicitly replaces it. The Git/Vera library product path is retired; see [docs/project-sources.md](docs/project-sources.md) and [docs/indexing-design.md](docs/indexing-design.md).
+Librarian registers local Hatfield projects, discovers their OM/session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. It is a Symfony web/admin application with EasyAdmin, Messenger, Scheduler, Mercure, MCP HTTP transport, Castor, and Docker/FrankenPHP. Librarian-owned Doctrine metadata and generation-scoped store tables share PostgreSQL + pgvector through the official Symfony AI Postgres store. Preserve current deployment topology unless a later plan explicitly replaces it. See [docs/project-sources.md](docs/project-sources.md) and [docs/indexing-design.md](docs/indexing-design.md).
 
 ## Framework upgrade note (plan 01)
 
@@ -45,7 +45,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Keep public Tailwind (`app.css`) out of EasyAdmin pages; admin uses the separate `admin` AssetMapper entry and EasyAdmin/Bootstrap utilities.
 - **Never run `asset-map:compile` in dev.** It is a production-only command that writes stale static files to `public/assets/`, which shadow AssetMapper's dynamic serving.
 - **Never `rm -rf public/` subdirectories blindly.** Only `public/assets/` is safe to delete (gitignored compiled output). `public/bundles/`, `public/css/`, and other `public/` entries may be source or installed assets.
-- Do not import generated `*.toon` code indexes, retired Vera/Vektor library workflows, speculative EmbeddingGemma backends, or editor-specific agent configuration into project guidance.
+- Do not import generated `*.toon` code indexes, obsolete backend workflows, speculative model backends, or editor-specific agent configuration into project guidance.
 - Do not copy finance-project domain rules, task boards, ADR paths, or provider/cassette workflows that do not exist here.
 
 ## Development tooling

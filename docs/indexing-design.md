@@ -9,7 +9,7 @@ Reuse Symfony AI facilities and keep Librarian-owned state in one database:
 - Doctrine registration / generation / parent metadata
 - Generation-scoped store tables created by the official Postgres bridge
 
-No private Chroma service, no separate SQLite FTS files, no CombinedStore/RRF adapters, and no cross-store pending protocol.
+Chunks, manifests and checkpoints share the same PostgreSQL transaction.
 
 ## Store and retrieval (as provided)
 
@@ -41,7 +41,7 @@ Application entities:
 - `IndexGeneration`: project relation, signature, source identity/path/root binding, active flag, state, scan cursor/round, committed revision, parent/chunk counts, timestamps, sanitized error
 - `IndexedMemory`: generation relation, canonical kind/ID, content/metadata signature, chunk ID list, last-seen scan round
 
-PostgreSQL migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author migration classes or schema SQL. The checkout's SQLite/Chroma replacement is complete; see [replacement verification](indexing-validation.md#actual-checkout-replacement).
+PostgreSQL migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author migration classes or schema SQL. See [runtime validation](indexing-validation.md#development-runtime).
 
 ## Source changes
 

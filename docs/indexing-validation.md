@@ -11,17 +11,15 @@ Validated on 2026-11-13 after switching to the unmodified Symfony AI Postgres st
 - A throwaway in-memory SQLite `EXPLAIN QUERY PLAN` confirmed subsequent source pages use primary-key `SEARCH … (observation_id>?)`; the first page scans in primary-key order. This is query-plan evidence, not a corpus benchmark.
 - `vendor/bin/castor dev:stack:up` passed after removing development Compose model overrides, recreating the running development services with the corrected environment configuration.
 
-## Actual checkout replacement
+## Development runtime
 
-The development application now runs PostgreSQL, not just the browser/test stack. Use `vendor/bin/castor dev:stack:status` for its current shared-proxy URL; see [Castor operations](castor.md#isolated-browser-stack). Applied the same Doctrine-generated baseline through `app:console`; schema validation passed. Transferred the existing admin with pgloader in **data-only** mode and verified every field, including ID, password hash and MCP token fields, unchanged. Aligned its identity sequence using Doctrine-generated SQL. No migration classes or schema SQL were handwritten.
-
-Removed the retired `data/app`, old browser application/lock SQLite databases, retired Vera SQLite indexes, all six SQLite migration classes and the verified checkout-owned Chroma volume. Retired application records were archived privately before removal; obsolete Vera jobs were not replayed. Hatfield/project sources were not changed. Only the generated PostgreSQL migration remains.
+The development application and browser stack both run PostgreSQL with the Doctrine-generated baseline. Use `vendor/bin/castor dev:stack:status` for the current shared-proxy URL; see [Castor operations](castor.md#isolated-browser-stack). Schema validation passed. No migration classes or schema SQL were handwritten.
 
 A headless browser verified the actual development homepage → native EasyAdmin login: both HTTP 200, assets loaded, no console errors. This check did not submit credentials. The existing browser journey remains the evidence for authenticated indexing/search behavior.
 
 ## Limits
 
-- Native hybrid uses weighted pgvector similarity and PostgreSQL `ts_rank`, requires a lexical match, and has no date-filter UI. Prior Chroma/RRF/BM25 results are not evidence for this backend; relevance/performance tuning is deferred.
+- Native hybrid uses weighted pgvector similarity and PostgreSQL `ts_rank`, requires a lexical match, and has no date-filter UI. Relevance/performance tuning is deferred.
 - The bridge creates no full-text index, and HNSW cannot satisfy hybrid's weighted ordering. The 100-candidate limit bounds returned results and reranking, not database scanning. Realistic-corpus search performance is unestablished; a matching GIN expression index is a future upstream improvement, not part of this change.
 - The Scheduler callback is wired, but autonomous periodic pickup is not separately browser-proven: the existing journey explicitly requests indexing after its fixture update.
 - No benchmarks, fault injection, concurrency or isolation matrix were added or run.

@@ -18,7 +18,7 @@ Core runtime pieces:
 - **Source discovery:** read-only Hatfield settings / OM / session inspection
 - **MCP transport:** Symfony MCP bundle HTTP endpoint
 
-The earlier Git clone + Vera indexing product path is retired. Historical notes remain in [framework-upgrade.md](framework-upgrade.md). Current product behavior: [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md).
+Source and indexing contracts: [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md).
 
 ---
 
@@ -104,7 +104,7 @@ Librarian-owned:
 
 - Shared PostgreSQL + pgvector database for Doctrine metadata and generation-scoped store tables
 - Generated PostgreSQL migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
-- Actual development and browser stacks use PostgreSQL; the retired SQLite/Chroma storage was removed after preserving application records
+- Development and browser stacks use separate checkout-owned PostgreSQL storage
 
 Source-owned (read-only mounts):
 
@@ -122,11 +122,10 @@ Do not commit private project settings, OM databases, session journals, or deriv
 - Source access is strictly read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport remains available; public tools are empty until plan 05
-- Browser database is `librarian_browser` in the checkout-scoped Postgres volume; browser-only Postgres publishes a dynamic `127.0.0.1` host port for the saved harness; production/dev Postgres publish no host ports
+- Browser database is `librarian_browser` in the checkout-scoped Postgres volume. Native browser tooling joins the private network; PostgreSQL publishes no host ports in any stack
 
-## 8) Framework / MCP upgrade notes (plan 01, historical infrastructure)
+## 8) Framework / MCP compatibility
 
 - Owner-approved Symfony **8.2.0-BETA1** (2026-11-12); stable 8.2 was unavailable.
 - MCP HTTP remains on `/_mcp`; bundle 0.15 uses `mcp.servers.librarian` + explicit registry.
 - Dependency decisions are recorded in [framework upgrade notes](framework-upgrade.md).
-- Plans 03/04 supersede the Git/Vera library product path described there; keep that document as historical upgrade evidence only.

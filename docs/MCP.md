@@ -55,8 +55,6 @@ MCP callers still cannot register projects or supply arbitrary filesystem paths.
 
 ## 3) Tool surface (current)
 
-Plan 03 retires the old library tools (`search-libraries`, `semantic-search`, `grep`, `read`) and Vera/TOON library result path.
-
 Until plan 05 lands the memory tools:
 
 - the registry is explicit and empty of public tools
@@ -68,13 +66,11 @@ Future public tools (plan 05, not implemented here):
 - `memory_search`
 - `recall`
 
-Do not reintroduce library/Vera tools as a compatibility layer.
-
 ---
 
 ## 4) Output / readiness notes
 
-There is no library readiness or readable-file sandbox in the current product path. Project source discovery health lives in admin (`pending` / `scanning` / `ready` / `error`) and means **sources discovered**, not indexed. Admin Index now / Search memory operate on Librarian-owned derived indexes in shared PostgreSQL + pgvector; they are not MCP tools and Search memory has no date-window UI.
+Project source discovery health lives in admin (`pending` / `scanning` / `ready` / `error`) and means **sources discovered**, not indexed. Admin Index now / Search memory operate on Librarian-owned derived indexes in shared PostgreSQL + pgvector; they are not MCP tools and Search memory has no date-window UI.
 
 Public memory tool payloads remain plan 05. See [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md) for registration/discovery/indexing semantics.
 
