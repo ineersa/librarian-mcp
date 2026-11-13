@@ -1,10 +1,10 @@
 # Plan 04 — implementation design
 
-Status: implementation design, not acceptance evidence. The model/backend choice is approved by plan 02; the concrete integration below still requires runtime verification. Production cutover and memory MCP tools remain plans 06 and 05 respectively.
+Status: implemented; populated-corpus acceptance measurements are in progress. The model/backend choice is approved by plan 02. Production cutover and memory MCP tools remain plans 06 and 05 respectively.
 
 ## Versioned integration and framework reuse
 
-Candidate dependency set: Symfony AI Store, Generic/Voyage platform components, ChromaDB bridge and SQLite bridge **0.15.0**, PHP Chroma client **1.0.0**, Chroma server **1.0.21**. Keep the existing Symfony 8.2 prerelease constraints and global stable stability policy. Add Symfony Lock and Scheduler from the same approved 8.2 minor.
+Locked dependency set: Symfony AI Store, Generic/Voyage platform components, ChromaDB bridge (`symfony/ai-chroma-db-store`) and SQLite bridge **0.15.0**, PHP Chroma client **1.0.0**, Chroma image **1.0.21**. Symfony Lock and Scheduler use the existing approved **8.2.0-BETA1** line; global minimum stability remains stable. The selected server image reports **1.0.0** from its version API; that is not its image tag.
 
 The 0.15 Chroma bridge requires PHP client `^1.0`; that client's tagged README requires Chroma >=1.0 and uses the v2 API. The bridge's test Compose still names 0.6.3: this is not a compatible-version proof. Verify the proposed 1.0.21 combination against an isolated service before claiming compatibility.
 
@@ -25,11 +25,11 @@ Read retained `om_observation` and `om_reflection` only. Canonical projection:
 - observation: `observation_id`, `run_id`, `content`, `timestamp`, `relevance`;
 - reflection: `reflection_id`, `run_id`, `content`, `created_at` (no synthetic importance).
 
-Keep the full canonical ID and session/run ID. Normalize dates to UTC epoch seconds for native numeric filters in both branches; retain canonical date/provenance for recall. Journals are not embedded.
+Keep the full canonical ID and session/run ID. Normalize dates to UTC epoch seconds for native numeric filters in both branches; retain canonical date/provenance for recall. Reuse discovery's schema/version validation and read-only PDO opener; indexing does not migrate source schemas. Journals are not embedded.
 
 Preserve the existing UTF-8 chunker: 1,200 bytes, overlap 192 bytes, at most 80 lines; embedding batches at most four. Do not replace byte boundaries with character or token boundaries during the storage comparison. Chunk keys are deterministic SHA-256 business identifiers over project ID, canonical kind/ID, generation signature, position and chunk content, not UUIDs or database primary keys.
 
-All application-owned entities use generated integer primary keys. Proposed minimal entities:
+All application-owned entities use generated integer primary keys. The two new entities are:
 
 - `IndexGeneration`: project relation, signature, source identity/path, active flag, state, durable scan cursor/round and committed source revision, counts, timestamps and sanitized error;
 - `IndexedMemory`: generation relation, canonical kind/ID, session/date, content/metadata signature, bounded-per-parent chunk key list and last-seen scan round.
@@ -40,7 +40,7 @@ The SQLite bridge's derived document/FTS tables are vendor-managed index structu
 
 Use a separate collection per project and generated generation ID, e.g. `librarian_p<project-id>_g<generation-id>`. The embedding signature covers exact artifact identity, dimensions, document preprocessing, normalization and chunking settings. Never reuse a collection for an incompatible signature. Require explicit artifact identity rather than silently equating a mutable model alias with an immutable artifact.
 
-Source identity includes canonical database path and filesystem identity; root rebinding, source replacement, revision rollback or embedding-signature change starts a separate generation. Keep the previous active generation usable during a replacement build. Publish the new active pointer only after complete acknowledged vector/lexical work, with a short relational transaction that rechecks the current project binding. Retired generations and registration deletion may remove only Librarian-owned collections/rows/files.
+Source identity includes canonical database path and filesystem identity; root rebinding, source replacement, revision rollback or embedding-signature change starts a separate generation. Keep the previous active pointer during a replacement build. Search uses it only while its source binding/identity and embedding signature remain compatible; otherwise it reports the mismatch instead of querying the wrong source or representation. Publish the new active pointer only after complete acknowledged vector/lexical work, with a short relational transaction that rechecks the current project binding. Retired generations and registration deletion may remove only Librarian-owned collections/rows/files.
 
 A vector query is constrained natively by project, generation and optional inclusive/exclusive normalized date bounds. The lexical query uses the same bounds before LIMIT. Never compensate with corpus-sized PHP overfetch. Hydrate only committed relational parent references; a vector hit alone does not establish recall provenance.
 
@@ -63,6 +63,8 @@ Failure leaves the checkpoint behind the failed work, so Messenger's existing re
 
 Source restore detection needs explicit verification: replacement filesystem identity and lower revisions are clear reset signals; an in-place restore with an identical revision cannot be distinguished by revision alone. Verify available bounded file/change witnesses and document remaining limitations before acceptance. Do not silently claim all restores are detected or perform full corpus verification on every unchanged poll.
 
+The implementation records bounded database/WAL headers, sizes and modification/change times as a cheap mutable witness. Same-revision drift restarts reconciliation; a late rollback does not publish the obsolete boundary. Restores preserving every bounded witness field remain undetectable without full verification. No fault-injection or restore matrix has been run.
+
 ## Scheduling and bounded work
 
 Use Symfony Scheduler to periodically dispatch project indexing work at a configurable interval, consumed through Messenger. Use framework deduplication for queue admission and the project lock for execution. Queue-only deduplication is needed when a batch enqueues its continuation: holding the deduplication lock until handler exit would otherwise suppress that continuation. Bound each source/cleanup batch, embedding batch and HTTP request duration. Do not retain a full corpus/vector cache in PHP or introduce a custom polling daemon.
@@ -76,6 +78,12 @@ Vector100 + lexical100 -> Symfony RRF k60 -> at most 200 fused chunks -> BGE on 
 ## Evidence required before acceptance
 
 Runtime compatibility and cosine/create/upsert/update/delete/filter/result-budget evidence; existing happy-path browser/QA gate; repeated full/incremental/unchanged populated-corpus build/search measurements; PHP live/allocated/peak and settled PHP/Chroma process memory; final parent/chunk counts; frozen50 plus five-identifier comparison on the same consistent corpus. Keep private questions, source snapshots, texts, vectors and raw provider responses out of Git and logs. Record process counts, model memory separately, and known validation gaps. Special-case fault/concurrency tests still require owner permission.
+
+Integration checks already performed: isolated generated migration/schema validation; production image build; static checks; five headless browser journeys (**43 assertions**), with exactly one Projects journey covering ordinary registration/index/search/update/rebinding/removal. A browser independently verified dark EasyAdmin styling and the search form's bundled Bootstrap 5 theme at the normal 1280×720 viewport, with no Tailwind collision or console errors. Final validation will be repeated after the acceptance measurements.
+
+The frozen battery contains **38 positive targets and 12 intentional negatives**, not 12 missing-target drift cases. All 50 questions plus the original five identifier questions must be requested. The private evaluation uses a separate database/storage tree and a disjoint range of auto-generated integer IDs on the owned private backend. Original snapshots and vectors are hashed before/after; private payloads and harness artifacts stay ignored under `var/`.
+
+The first populated build segment reached 11,800 parents before the generic diagnostic's 600-second limit stopped it. Across 590 bounded units, PHP live memory stayed approximately 18.4 MiB and peak allocation 20 MiB. This is partial evidence, not a completed-build result. The bounded diagnostic timeout is now explicitly selectable up to 3,600 seconds. Remote Docker-host model RSS/GPU allocations are not observable from the current tooling namespace; do not report them as zero or fold them into PHP/Chroma memory.
 
 ## Sources inspected
 

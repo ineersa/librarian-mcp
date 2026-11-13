@@ -16,6 +16,7 @@ Task definitions live in `.castor/`, imported by `castor.php`. Discover live com
 | Area | Examples | Use for |
 |---|---|---|
 | Tooling | `tooling:prepare`, `tooling:build` | Build QA/runtime image, install deps, prepare Chromium |
+| Native diagnostics | `tooling:run -- [argv...]`, optionally `--networked` / `--timeout=3600` | Bounded commands without another dedicated task; network selection does not select the browser database/environment; timeout defaults to 600 seconds |
 | Application | `app:composer`, `app:console` | Composer and Symfony console via Castor runtime; pass native args after `--` |
 | Quality | `cs:fix`, `cs:check`, `phpstan`, `lsp:check`, `qa:static`, `check` | Style, static analysis, combined gate |
 | Tests | `test`, `browser:stack:*` | Playwright suite and isolated browser stack |
@@ -52,6 +53,18 @@ Dev/browser stacks include a private `chromadb/chroma:1.0.21` service (no publis
 ```bash
 vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
 ```
+
+### Indexing diagnostics
+
+Use the existing browser console task for isolated application commands:
+
+```bash
+vendor/bin/castor browser:stack:console -- app:indexing:capabilities --models
+vendor/bin/castor browser:stack:console -- app:index-project <project-id> --queue-only
+vendor/bin/castor browser:stack:console -- app:index-project <project-id> --drain
+```
+
+Replace `<project-id>` with a registration in that isolated stack. The capability command uses public synthetic documents and removes its temporary collection. `--models` additionally contacts the configured local CodeRank/BGE endpoints. `--drain` processes the same bounded indexing units synchronously and clears Doctrine's identity map between units; ordinary operation uses Messenger plus `scheduler_default`. It does not make source writes or turn search into ingestion. See [indexing design and evidence](indexing-design.md).
 
 ### Mate diagnostics
 

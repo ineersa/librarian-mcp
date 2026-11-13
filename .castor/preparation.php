@@ -41,13 +41,16 @@ function toolingPrepare(): int
 
 /** @param list<string> $arguments */
 #[AsTask(namespace: 'tooling', name: 'run', description: 'Run native diagnostic argv in the authoritative tooling image; optionally join the owned browser network.')]
-function toolingRun(#[AsArgsAfterOptionEnd] array $arguments = [], bool $networked = false): int
+function toolingRun(#[AsArgsAfterOptionEnd] array $arguments = [], bool $networked = false, int $timeout = 600): int
 {
     if ([] === $arguments) {
         throw new \InvalidArgumentException('Pass the native command and its arguments after --.');
     }
+    if ($timeout < 1 || $timeout > 3600) {
+        throw new \InvalidArgumentException('Diagnostic timeout must be between 1 and 3600 seconds.');
+    }
 
-    return report('tooling:run', $arguments, networked: $networked);
+    return report('tooling:run', $arguments, networked: $networked, timeout: $timeout);
 }
 
 #[AsTask(namespace: 'dev', name: 'cache:warmup', description: 'Prepare compiled container metadata for Mate.')]
