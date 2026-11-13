@@ -10,8 +10,7 @@ use Playwright\Assertions\Expect;
 use Playwright\Page\PageInterface;
 
 /**
- * Shared Playwright helpers for plan 03 project registration journeys.
- * Does not modify LibrarianNetworkBrowserTest; parent owns dashboard heading updates.
+ * Shared Playwright helpers for project registration and indexing journeys.
  */
 trait ProjectSourceBrowserHelpers
 {
@@ -107,6 +106,11 @@ trait ProjectSourceBrowserHelpers
         $this->page->getByRole('button', ['name' => 'Scan sources'])->click();
     }
 
+    protected function triggerIndexNow(): void
+    {
+        $this->page->getByRole('button', ['name' => 'Index now'])->click();
+    }
+
     protected function waitForProjectHealth(ProjectHealth $health): void
     {
         Expect::locator($this->page->locator('[data-project-health]'))
@@ -117,9 +121,49 @@ trait ProjectSourceBrowserHelpers
         }
     }
 
+    protected function waitForCommittedIndex(int $minParentCount = 1, int $timeoutMs = 180_000): void
+    {
+        Expect::locator($this->page->locator('[data-index-generation-id]'))
+            ->toBeVisible(new AssertionOptions(timeoutMs: $timeoutMs));
+        Expect::locator($this->page->locator('#project-index-status'))
+            ->toHaveAttribute('data-index-pending', '0', new AssertionOptions(timeoutMs: $timeoutMs));
+        Expect::locator($this->page->locator('[data-index-parent-count-value]'))
+            ->not()->toHaveText('0', new AssertionOptions(timeoutMs: $timeoutMs));
+        $parentCount = trim((string) $this->page->locator('[data-index-parent-count-value]')->textContent());
+        self::assertGreaterThanOrEqual($minParentCount, (int) $parentCount);
+        $committed = trim((string) $this->page->locator('[data-index-committed-revision-value]')->textContent());
+        self::assertNotSame('Not committed', $committed);
+        self::assertNotSame('', $committed);
+        Expect::locator($this->page->locator('[data-index-last-success]'))
+            ->not()->toHaveText('Never indexed', new AssertionOptions(timeoutMs: 10_000));
+    }
+
+    protected function openSearchMemory(): PageInterface
+    {
+        $this->page->getByRole('link', ['name' => 'Search memory'])->click();
+        $this->page->waitForURL('**/search-memory**');
+        $this->page->locator('#project-memory-search')->waitFor();
+
+        return $this->page;
+    }
+
+    protected function searchMemory(string $question): void
+    {
+        $this->page->getByLabel('Question', ['exact' => true])->fill($question);
+        $this->page->getByRole('button', ['name' => 'Search', 'exact' => true])->click();
+        $this->page->locator('#project-memory-search')->waitFor();
+    }
+
+    protected function assertSearchHitContains(string $sourceId, string $snippetFragment): void
+    {
+        $hit = $this->page->locator('[data-search-hit][data-source-id="'.$sourceId.'"]');
+        Expect::locator($hit)->toBeVisible(new AssertionOptions(timeoutMs: 30_000));
+        Expect::locator($hit)->toContainText($snippetFragment, new AssertionOptions(timeoutMs: 10_000));
+    }
+
     protected function assertSourceCount(string $label, int $expected): void
     {
         $value = $this->page->locator('.field-group:has(.field-label > :text-is("'.$label.'")) .field-value')->textContent();
-        self::assertSame((string) $expected, trim($value));
+        self::assertSame((string) $expected, trim((string) $value));
     }
 }
