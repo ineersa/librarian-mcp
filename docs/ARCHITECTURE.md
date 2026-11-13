@@ -89,7 +89,7 @@ Search remains available against the last committed usable index while newer wor
 
 - EasyAdmin dashboard shows registered-project counts and recent health
 - Project CRUD at `/admin/projects` with inlined actions
-- Directory picker browses service-visible directories starting at `PROJECT_BROWSE_ROOT`
+- Project registration uses an editable absolute directory path visible to the service
 - Explicit **Scan sources**, **Index now**, and **Search memory** actions (no date-window UI)
 - Detail page exposes source health (`#project-source-status`) and index status (`#project-index-status`) with bounded meta refresh while pending
 - Admin uses the separate `admin` AssetMapper entry (no public Tailwind reset)

@@ -87,7 +87,7 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             // Explicit path rebinding and rename keep the same stable registration ID.
             $this->visit('/admin/projects/'.$projectId.'/edit');
             $this->fillProjectName('Rebound OM Fixture');
-            $this->chooseProjectDirectory(ProjectSourceFixture::visibleProjectPath('custom-relative'));
+            $this->page->getByLabel('Project directory', ['exact' => true])->fill(ProjectSourceFixture::visibleProjectPath('custom-relative'));
             $this->submitRegisterOrEditForm();
             $this->page->waitForURL('**/admin/projects');
             $this->openProjectDetail($projectId);

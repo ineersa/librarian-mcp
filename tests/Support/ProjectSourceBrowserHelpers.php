@@ -57,22 +57,6 @@ trait ProjectSourceBrowserHelpers
         $this->page->getByLabel('Name', ['exact' => true])->fill($name);
     }
 
-    protected function chooseProjectDirectory(string $visibleAbsolutePath): void
-    {
-        $page = $this->page;
-        $page->getByRole('button', ['name' => 'Choose directory', 'exact' => true])->click();
-        $dialog = $page->getByRole('dialog');
-        $dialog->waitFor();
-        // Wait for the initial listing before editing its async-populated location.
-        Expect::locator($dialog->getByRole('button', ['name' => 'Select this directory', 'exact' => true]))->toBeEnabled();
-        $dialog->getByRole('textbox', ['name' => 'Directory location', 'exact' => true])->fill($visibleAbsolutePath);
-        $dialog->getByRole('textbox', ['name' => 'Directory location', 'exact' => true])->press('Enter');
-        Expect::locator($dialog->locator('[data-project-directory-target="currentPath"]'))->toHaveText($visibleAbsolutePath);
-        $dialog->getByRole('button', ['name' => 'Select this directory', 'exact' => true])->click();
-        Expect::locator($page->getByLabel('Project directory', ['exact' => true]))
-            ->toHaveValue($visibleAbsolutePath, new AssertionOptions(timeoutMs: 10_000));
-    }
-
     protected function submitRegisterOrEditForm(): void
     {
         $this->submitEasyAdminForm();
@@ -82,7 +66,7 @@ trait ProjectSourceBrowserHelpers
     {
         $this->openRegisterProjectForm();
         $this->fillProjectName($name);
-        $this->chooseProjectDirectory($visibleDirectory);
+        $this->page->getByLabel('Project directory', ['exact' => true])->fill($visibleDirectory);
         $this->submitRegisterOrEditForm();
         $this->page->waitForURL('**/admin/projects');
         $id = $this->page->locator('tr[data-project-id]')->filter(['hasText' => $name])->getAttribute('data-project-id');

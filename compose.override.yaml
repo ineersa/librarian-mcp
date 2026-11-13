@@ -36,7 +36,6 @@ services:
           path /app/var/mercure-dev.db
         }
       FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
-      PROJECT_BROWSE_ROOT: '${PROJECT_BROWSE_ROOT}'
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
@@ -85,7 +84,6 @@ services:
       MERCURE_URL: http://php:8080/.well-known/mercure
       MERCURE_PUBLIC_URL: /.well-known/mercure
       MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
-      PROJECT_BROWSE_ROOT: '${PROJECT_BROWSE_ROOT}'
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'

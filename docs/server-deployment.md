@@ -32,7 +32,6 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - `HATFIELD_PATH_MAPPINGS` when host/service path prefixes differ
-   - `PROJECT_BROWSE_ROOT` (picker start path inside the service)
    - `DATABASE_URL` (shared Doctrine + official Postgres store)
    - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` (must match `DATABASE_URL`; password is needed for host Compose interpolation; do not commit secrets)
    - `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`

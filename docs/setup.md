@@ -35,7 +35,6 @@ Plans 03/04 product path: local project registration, read-only Hatfield source 
 2. Configure project/source context (typical local values):
 
    - `PROJECTS_HOST_PATH` (default `.`) mounted read-only as `/projects`
-   - `PROJECT_BROWSE_ROOT` picker start path inside the service
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix mappings

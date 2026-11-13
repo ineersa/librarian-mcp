@@ -61,7 +61,6 @@ Edit `.env.prod.local` and set at least:
 - `MCP_ALLOWED_HOSTS` (CSV; include the external hostname without scheme or port)
 - `HATFIELD_USER_HOME` (required logical Hatfield home context)
 - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
-- `PROJECT_BROWSE_ROOT` for the picker start path
 - `DATABASE_URL` (shared Doctrine + store Postgres)
 - `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
 - `BGE_URL`, `BGE_MODEL`
@@ -131,7 +130,7 @@ See [docs/project-sources.md](docs/project-sources.md) for the registration cont
 
 Summary:
 
-- Register a service-visible project directory from admin (directory picker starts at `PROJECT_BROWSE_ROOT`)
+- Register a project by entering its absolute, service-visible directory path in admin
 - Unique case-insensitive trimmed names, canonical directories, and normalized Git origins
 - Explicit admin path changes rebind the same project ID; they do not merge by name/origin
 - Discovery is read-only; removing a registration deletes owned derived indexes but never source trees, `.hatfield`, OM databases, or journals
@@ -153,8 +152,6 @@ Summary:
   DNS override for container resolution reliability.
 - `PROJECTS_HOST_PATH`  
   Host path mounted read-only into the service as `/projects` (default `.`).
-- `PROJECT_BROWSE_ROOT`  
-  Starting directory for the admin directory picker (not a security allowlist).
 
 ### Symfony / app
 

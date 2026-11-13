@@ -15,7 +15,7 @@ final class ProjectRegistration extends Constraint
 {
     public string $blankNameMessage = 'Project name is required.';
     public string $blankRootMessage = 'Project directory is required.';
-    public string $invalidRootMessage = 'Project directory must be an existing readable directory.';
+    public string $invalidRootMessage = 'Project directory must be an absolute path to an existing readable directory.';
 
     #[HasNamedArguments]
     public function __construct(

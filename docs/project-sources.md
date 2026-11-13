@@ -32,7 +32,7 @@ Associative maps merge recursively; lists/scalars/null replace. Missing optional
 - OM override: `observational_memory.storage.database`.
 - Session override: `sessions.path` with `~` / `%kernel.project_dir%` expansion only.
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
-- `PROJECT_BROWSE_ROOT` is the picker start path only. There is no security root allowlist for this local single-admin utility.
+- Enter an absolute directory path visible to the Librarian service, e.g. `/projects/my-project`. There is no directory picker or security root allowlist for this local single-admin utility.
 
 Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
 

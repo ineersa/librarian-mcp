@@ -8,7 +8,6 @@ use App\Entity\IndexGeneration;
 use App\Entity\IndexState;
 use App\Entity\Project;
 use App\Entity\ProjectHealth;
-use App\Form\Type\ProjectDirectoryType;
 use App\Form\Type\ProjectMemorySearchType;
 use App\Index\IndexException;
 use App\Index\ProjectIndexManager;
@@ -37,7 +36,6 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Exception\InvalidCsrfTokenException;
 
 /**
@@ -60,7 +58,6 @@ class ProjectCrudController extends AbstractCrudController
         private readonly ProjectIndexManager $projectIndexManager,
         private readonly IndexGenerationRepository $indexGenerationRepository,
         private readonly HybridSearch $hybridSearch,
-        private readonly UrlGeneratorInterface $urlGenerator,
         private readonly ClockInterface $clock,
     ) {
     }
@@ -101,12 +98,10 @@ class ProjectCrudController extends AbstractCrudController
 
         yield TextField::new('rootPath')
             ->setLabel('Project directory')
-            ->setFormType(ProjectDirectoryType::class)
             ->setFormTypeOptions([
-                'browse_url' => $this->urlGenerator->generate('admin_project_directories'),
+                'attr' => ['placeholder' => '/projects/my-project', 'autocomplete' => 'off'],
             ])
-            ->addFormTheme('admin/project/form_theme.html.twig')
-            ->setHelp('Choose a service-visible directory. Changing the path rebinds this project ID; it does not merge by name or Git origin. Host directories require a deliberate Docker mount and PROJECT_BROWSE_ROOT.');
+            ->setHelp('Absolute directory path inside the container, e.g. /projects/my-project.');
 
         yield TextField::new('repositoryOrigin', 'Repository origin')
             ->hideOnForm()

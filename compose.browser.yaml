@@ -8,7 +8,6 @@ services:
       APP_SECRET: browser-synthetic-only
       DATABASE_URL: '${DATABASE_URL}'
       LOCK_DSN: '${LOCK_DSN}'
-      PROJECT_BROWSE_ROOT: /project-sources
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
@@ -41,7 +40,6 @@ services:
       APP_SECRET: browser-synthetic-only
       DATABASE_URL: '${DATABASE_URL}'
       LOCK_DSN: '${LOCK_DSN}'
-      PROJECT_BROWSE_ROOT: /project-sources
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
