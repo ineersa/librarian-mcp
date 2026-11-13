@@ -104,7 +104,7 @@ Librarian-owned:
 
 - Shared PostgreSQL + pgvector database for Doctrine metadata and generation-scoped store tables
 - Prior SQLite migration history retained; new baseline migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
-- No automatic transfer or reset of owner registrations from the prior SQLite file (plan 06)
+- Actual development and browser stacks use PostgreSQL; the retired SQLite/Chroma storage was removed after preserving application records
 
 Source-owned (read-only mounts):
 
@@ -122,7 +122,6 @@ Do not commit private project settings, OM databases, session journals, or deriv
 - Source access is strictly read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport remains available; public tools are empty until plan 05
-- No production cutover/migration authorization is implied by plan 04 implementation
 - Browser database is `librarian_browser` in the checkout-scoped Postgres volume; browser-only Postgres publishes a dynamic `127.0.0.1` host port for the saved harness; production/dev Postgres publish no host ports
 
 ## 8) Framework / MCP upgrade notes (plan 01, historical infrastructure)

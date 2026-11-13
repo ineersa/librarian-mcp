@@ -6,7 +6,7 @@ This guide assumes `compose.yaml` + `compose.prod.yaml`. Prefer Castor productio
 
 Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 because stable 8.2 was unavailable. The framework requires PHP 8.4.1+; this project uses PHP 8.5. See [framework upgrade notes](framework-upgrade.md) for dependency pins.
 
-The production compose topology, data mounts, project name, and ports are preserved where possible. Plans 03/04 replace the Git/Vera library product with local project registration, read-only source discovery, and Librarian-owned hybrid indexing on shared PostgreSQL + pgvector; see [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). No production cutover authorization is implied by that product change. Postgres image: `pgvector/pgvector:pg17-bookworm` (digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). Production/dev Postgres publish no host ports.
+The production compose topology, data mounts, project name, and ports are preserved where possible. Plans 03/04 replace the Git/Vera library product with local project registration, read-only source discovery, and Librarian-owned hybrid indexing on shared PostgreSQL + pgvector; see [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). Postgres image: `pgvector/pgvector:pg17-bookworm` (digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). Production/dev Postgres publish no host ports.
 
 ## Default mode (recommended)
 
@@ -71,7 +71,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
 Optional: maintain an ignored `compose.sources.yaml` for additional read-only mounts of user/global/custom Hatfield settings or data. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production use service name `messenger`, not development's `worker`; see [source mounts](project-sources.md#docker-source-mounts).
 
-Prior SQLite file/history is retained. There is no automatic transfer or reset of owner registrations; plan 06 owns any owner-approved cutover.
+Historical SQLite migration classes remain on disk but are not registered for PostgreSQL. Use the generated PostgreSQL baseline, never replay SQLite migrations against it. The actual local checkout replacement is recorded in [indexing validation](indexing-validation.md#actual-checkout-replacement).
 
 ## Nginx example (host machine)
 

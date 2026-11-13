@@ -1,6 +1,6 @@
 # Plan 04 — indexing design
 
-Status: official Symfony AI **Postgres** store on shared PostgreSQL + pgvector. Checks and remaining gaps: [indexing validation](indexing-validation.md). Production cutover and MCP memory tools remain plans 06 and 05.
+Status: official Symfony AI **Postgres** store on shared PostgreSQL + pgvector, active in the actual development application and browser stack. Checks and remaining gaps: [indexing validation](indexing-validation.md). MCP memory tools remain plan 05.
 
 ## Goal
 
@@ -41,7 +41,7 @@ Application entities:
 - `IndexGeneration`: project relation, signature, source identity/path/root binding, active flag, state, scan cursor/round, committed revision, parent/chunk counts, timestamps, sanitized error
 - `IndexedMemory`: generation relation, canonical kind/ID, content/metadata signature, chunk ID list, last-seen scan round
 
-Prior SQLite migration history is retained. New PostgreSQL baseline migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author SQL. There is no automatic transfer or reset of owner registrations from the prior SQLite file; plan 06 owns any owner-approved cutover.
+Prior SQLite migration history is retained, but is not an active backend or migration path. PostgreSQL baseline migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author migration classes or schema SQL. The checkout's SQLite/Chroma replacement is complete; see [replacement verification](indexing-validation.md#actual-checkout-replacement).
 
 ## Source changes
 

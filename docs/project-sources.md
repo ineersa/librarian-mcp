@@ -6,7 +6,7 @@ Librarian registers **local directories**, not GitHub libraries. It discovers Ha
 
 - **Sources discovered** (`ready`) means discovery succeeded, not that memories are indexed.
 - **Index now / Search memory** are admin actions over derived data. Search never synchronously ingests or rebuilds a project and has no date-window UI.
-- Public MCP memory tools remain **plan 05**. Production cutover/migration authorization remains **plan 06**.
+- Public MCP memory tools remain **plan 05**.
 - Design and validation status live in [indexing-design.md](indexing-design.md) and [indexing-validation.md](indexing-validation.md).
 
 ## Identity and removal
@@ -17,7 +17,7 @@ Librarian registers **local directories**, not GitHub libraries. It discovers Ha
 - Editing the directory rebinds the **same registration ID**. Nothing infers identity from a basename, session number, name, or origin.
 - A scan publishes results only if the registration still refers to its scanned directory. Filesystem discovery runs outside the short Doctrine write transaction.
 - Deletion removes the Librarian registration and **owned derived indexes** (generation rows and generation-scoped Postgres store tables). It never removes the project directory, `.hatfield`, OM database, journals, or external/symlink destinations.
-- Generated migrations add Librarian-owned tables only. Prior SQLite migration history is retained; new PostgreSQL baseline migrations live under `migrations/postgres`. There is no automatic transfer or reset of owner registrations from the prior SQLite file.
+- Generated migrations add Librarian-owned tables only. Prior SQLite migration history is retained as inactive history; PostgreSQL baseline migrations live under `migrations/postgres`. The actual development application uses PostgreSQL, not the retired SQLite backend.
 
 ## Source settings contract
 

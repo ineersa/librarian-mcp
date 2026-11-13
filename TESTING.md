@@ -117,4 +117,4 @@ Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, 
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
 - Speculative Symfony AI backends beyond the approved CodeRank + official Postgres store + local BGE baseline
-- Production cutover, data backup, Hatfield semantic removal, and MCP memory-tool plan 05
+- Remote deployments, data backup, Hatfield semantic removal, and MCP memory-tool plan 05

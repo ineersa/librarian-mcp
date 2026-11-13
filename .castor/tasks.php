@@ -177,8 +177,10 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         $hostLockDsn = postgresLockDsn('browser', forHostNetwork: true);
         assertOwnedBrowserDatabaseUrl($hostDatabaseUrl);
 
-        // Clear stale compiled containers before migrations/fixture setup.
+        // Release worker/web PostgreSQL sessions before dropping the browser DB.
         stackRun('browser', ['stop', 'worker']);
+        stackRun('browser', ['restart', 'php']);
+        // Clear stale compiled containers before migrations/fixture setup.
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
         // Only this verified checkout-owned browser database is disposable.
         stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:database:drop', '--force', '--if-exists', '--env=test', '--no-interaction']);
