@@ -1,6 +1,6 @@
 # Plan 04 — implementation design
 
-Status: implemented; populated-corpus acceptance measurements are in progress. The model/backend choice is approved by plan 02. Production cutover and memory MCP tools remain plans 06 and 05 respectively.
+Status: implemented; completed checks and remaining validation gaps are recorded in [indexing validation](indexing-validation.md). The model/backend choice is approved by plan 02. Production cutover and memory MCP tools remain plans 06 and 05 respectively.
 
 ## Versioned integration and framework reuse
 
@@ -79,11 +79,11 @@ Vector100 + lexical100 -> Symfony RRF k60 -> at most 200 fused chunks -> BGE on 
 
 Runtime compatibility and cosine/create/upsert/update/delete/filter/result-budget evidence; existing happy-path browser/QA gate; repeated full/incremental/unchanged populated-corpus build/search measurements; PHP live/allocated/peak and settled PHP/Chroma process memory; final parent/chunk counts; frozen50 plus five-identifier comparison on the same consistent corpus. Keep private questions, source snapshots, texts, vectors and raw provider responses out of Git and logs. Record process counts, model memory separately, and known validation gaps. Special-case fault/concurrency tests still require owner permission.
 
-Integration checks already performed: isolated generated migration/schema validation; production image build; static checks; five headless browser journeys (**43 assertions**), with exactly one Projects journey covering ordinary registration/index/search/update/rebinding/removal. A browser independently verified dark EasyAdmin styling and the search form's bundled Bootstrap 5 theme at the normal 1280×720 viewport, with no Tailwind collision or console errors. Final validation will be repeated after the acceptance measurements.
+Integration checks already performed: isolated generated migration/schema validation; production image build; static checks; five headless browser journeys (**43 assertions**), with exactly one Projects journey covering ordinary registration/index/search/update/rebinding/removal. A browser independently verified dark EasyAdmin styling and the search form's bundled Bootstrap 5 theme at the normal 1280×720 viewport, with no Tailwind collision or console errors.
 
 The frozen battery contains **38 positive targets and 12 intentional negatives**, not 12 missing-target drift cases. All 50 questions plus the original five identifier questions must be requested. The private evaluation uses a separate database/storage tree and a disjoint range of auto-generated integer IDs on the owned private backend. Original snapshots and vectors are hashed before/after; private payloads and harness artifacts stay ignored under `var/`.
 
-The first populated build segment reached 11,800 parents before the generic diagnostic's 600-second limit stopped it. Across 590 bounded units, PHP live memory stayed approximately 18.4 MiB and peak allocation 20 MiB. This is partial evidence, not a completed-build result. The bounded diagnostic timeout is now explicitly selectable up to 3,600 seconds. Remote Docker-host model RSS/GPU allocations are not observable from the current tooling namespace; do not report them as zero or fold them into PHP/Chroma memory.
+One populated build completed with 26,284 parents and 26,393 chunks. Further benchmarking was stopped at the owner's request; populated incremental measurements remain incomplete. No evaluation harness or benchmark-specific Castor command is part of the deliverable. Remote Docker-host model RSS/GPU allocations are not observable from the current tooling namespace; do not report them as zero or fold them into PHP/Chroma memory.
 
 ## Sources inspected
 

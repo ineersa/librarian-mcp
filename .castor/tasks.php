@@ -12,7 +12,7 @@ use Symfony\Component\Process\Process;
  * @param list<string>           $command
  * @param (\Closure(): int)|null $operation
  */
-function report(string $task, array $command, bool $runtime = true, bool $headed = false, ?\Closure $operation = null, string $artifact = '', bool $networked = false, bool $hostNetwork = false, ?int $timeout = null): int
+function report(string $task, array $command, bool $runtime = true, bool $headed = false, ?\Closure $operation = null, string $artifact = '', bool $networked = false, bool $hostNetwork = false): int
 {
     $root = \dirname(__DIR__);
     $relative = 'var/qa/'.str_replace(':', '-', $task);
@@ -72,7 +72,7 @@ function report(string $task, array $command, bool $runtime = true, bool $headed
                 $result['runtime_container'] = $container;
                 $save();
             }
-            $process = new Process($command, $root, ['NO_COLOR' => '1', 'COMPOSER_NO_INTERACTION' => '1'], timeout: $timeout ?? ('test:browser' === $task ? 300 : 600));
+            $process = new Process($command, $root, ['NO_COLOR' => '1', 'COMPOSER_NO_INTERACTION' => '1'], timeout: 'test:browser' === $task ? 300 : 600);
             $exit = runTaskProcess($process, false, static function (string $type, string $data) use ($directory, $stdout): void {
                 file_put_contents($directory.'/'.(Process::ERR === $type ? 'stderr.log' : $stdout), $data, \FILE_APPEND);
             });

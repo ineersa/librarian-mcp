@@ -16,7 +16,6 @@ Task definitions live in `.castor/`, imported by `castor.php`. Discover live com
 | Area | Examples | Use for |
 |---|---|---|
 | Tooling | `tooling:prepare`, `tooling:build` | Build QA/runtime image, install deps, prepare Chromium |
-| Native diagnostics | `tooling:run -- [argv...]`, optionally `--networked` / `--timeout=3600` | Bounded commands without another dedicated task; network selection does not select the browser database/environment; timeout defaults to 600 seconds |
 | Application | `app:composer`, `app:console` | Composer and Symfony console via Castor runtime; pass native args after `--` |
 | Quality | `cs:fix`, `cs:check`, `phpstan`, `lsp:check`, `qa:static`, `check` | Style, static analysis, combined gate |
 | Tests | `test`, `browser:stack:*` | Playwright suite and isolated browser stack |
