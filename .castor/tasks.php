@@ -233,7 +233,11 @@ function appConsole(#[AsArgsAfterOptionEnd] array $arguments = [], string $isola
         return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments], networked: true);
     }
 
-    return report('app:console', ['php', 'bin/console', ...$arguments]);
+    return report('app:console', ['php', 'bin/console', ...$arguments], runtime: false, operation: static function () use ($arguments): int {
+        stackRun('dev', ['exec', '-T', 'php', 'php', 'bin/console', ...$arguments]);
+
+        return 0;
+    });
 }
 
 /** @param array<string, callable(): int> $tasks */
