@@ -81,6 +81,133 @@ function allocatePublishedPort(string $mode): string
     return $port;
 }
 
+function browserPublishedPostgresPort(): string
+{
+    return allocatePublishedPort('browser-postgres');
+}
+
+/**
+ * @return array{db: string, user: string, password: string}
+ */
+function postgresCredentials(string $mode): array
+{
+    $directory = \dirname(__DIR__).'/var/tooling';
+    if (is_link($directory)) {
+        throw new \RuntimeException('Refusing symlinked runtime secrets.');
+    }
+    if (!is_dir($directory)) {
+        mkdir($directory, 0700, true);
+    }
+
+    if ('browser' === $mode) {
+        return [
+            'db' => 'librarian_browser',
+            'user' => 'librarian',
+            'password' => 'browser-synthetic-only',
+        ];
+    }
+
+    $secret = $directory.'/postgres-'.$mode.'.password';
+    if (is_link($secret)) {
+        throw new \RuntimeException('Refusing symlinked Postgres secret.');
+    }
+    if (!is_file($secret)) {
+        $file = fopen($secret, 'xb');
+        if (false === $file) {
+            throw new \RuntimeException('Cannot create Postgres secret.');
+        }
+        chmod($secret, 0600);
+        fwrite($file, bin2hex(random_bytes(24)));
+        fclose($file);
+    }
+    $password = trim((string) file_get_contents($secret));
+    if ('' === $password) {
+        throw new \RuntimeException('Invalid Postgres secret.');
+    }
+
+    return [
+        'db' => 'librarian',
+        'user' => 'librarian',
+        'password' => $password,
+    ];
+}
+
+function postgresDatabaseUrl(string $mode, bool $forHostNetwork): string
+{
+    $credentials = postgresCredentials($mode);
+    $host = 'postgres';
+    $port = '5432';
+    if ($forHostNetwork) {
+        if ('browser' !== $mode) {
+            throw new \InvalidArgumentException('Host-network Postgres URLs are only for the browser stack.');
+        }
+        $host = '127.0.0.1';
+        $port = browserPublishedPostgresPort();
+    }
+
+    return sprintf(
+        'postgresql://%s:%s@%s:%s/%s?serverVersion=17&charset=utf8',
+        rawurlencode($credentials['user']),
+        rawurlencode($credentials['password']),
+        $host,
+        $port,
+        rawurlencode($credentials['db']),
+    );
+}
+
+function postgresLockDsn(string $mode, bool $forHostNetwork): string
+{
+    return postgresDatabaseUrl($mode, $forHostNetwork);
+}
+
+function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
+{
+    $credentials = postgresCredentials('browser');
+    $parts = parse_url($databaseUrl);
+    if (!is_array($parts) || 'postgresql' !== ($parts['scheme'] ?? null)) {
+        throw new \RuntimeException('Browser fixtures require a PostgreSQL DATABASE_URL.');
+    }
+    $user = rawurldecode((string) ($parts['user'] ?? ''));
+    $pass = rawurldecode((string) ($parts['pass'] ?? ''));
+    $path = ltrim((string) ($parts['path'] ?? ''), '/');
+    $host = (string) ($parts['host'] ?? '');
+    $port = (string) ($parts['port'] ?? '5432');
+    $expectedPort = browserPublishedPostgresPort();
+    if (
+        $credentials['user'] !== $user
+        || $credentials['password'] !== $pass
+        || $credentials['db'] !== $path
+        || !\in_array($host, ['127.0.0.1', 'localhost'], true)
+        || $expectedPort !== $port
+    ) {
+        throw new \RuntimeException('Browser fixtures require the exact isolated checkout-owned Postgres URL.');
+    }
+}
+
+function isolatedPostgresDatabaseName(string $identifier): string
+{
+    return 'librarian_iso_'.str_replace('-', '_', $identifier);
+}
+
+function isolatedPostgresDatabaseUrl(string $identifier): string
+{
+    $credentials = postgresCredentials('dev');
+    $db = isolatedPostgresDatabaseName($identifier);
+
+    return sprintf(
+        'postgresql://%s:%s@postgres:5432/%s?serverVersion=17&charset=utf8',
+        rawurlencode($credentials['user']),
+        rawurlencode($credentials['password']),
+        rawurlencode($db),
+    );
+}
+
+function isolatedPostgresLockDsn(string $identifier): string
+{
+    return isolatedPostgresDatabaseUrl($identifier);
+}
+
+
 /** @return list<string> */
 function stackCommand(string $mode): array
 {
@@ -114,12 +241,22 @@ function stackEnvironment(string $mode): array
     $url = stackUrl($mode);
     $jwt = trim((string) file_get_contents($secret));
 
+    $credentials = postgresCredentials($mode);
+    $databaseUrl = postgresDatabaseUrl($mode, forHostNetwork: false);
+    $lockDsn = postgresLockDsn($mode, forHostNetwork: false);
+
     return [
         'LIBRARIAN_CHECKOUT_ID' => checkoutId(),
         'LIBRARIAN_PROJECT' => stackProject($mode),
         'LIBRARIAN_NETWORK' => stackNetwork($mode),
         'LIBRARIAN_PUBLIC_URL' => $url,
         'HTTP_PORT' => 'browser' === $mode ? browserPublishedPort() : developmentPublishedPort(),
+        'POSTGRES_PORT' => 'browser' === $mode ? browserPublishedPostgresPort() : '',
+        'POSTGRES_DB' => $credentials['db'],
+        'POSTGRES_USER' => $credentials['user'],
+        'POSTGRES_PASSWORD' => $credentials['password'],
+        'DATABASE_URL' => $databaseUrl,
+        'LOCK_DSN' => $lockDsn,
         'MERCURE_JWT_SECRET' => $jwt,
         'MERCURE_PUBLISHER_JWT_KEY' => $jwt,
         'MERCURE_SUBSCRIBER_JWT_KEY' => $jwt,
@@ -245,7 +382,10 @@ function browserLiveTest(#[AsArgsAfterOptionEnd] array $arguments = [], bool $he
         throw new \InvalidArgumentException('Pass the PHPUnit test selection after --.');
     }
 
-    return report('browser:live:test', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, hostNetwork: true);
+    $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: true);
+    $lockDsn = postgresLockDsn('browser', forHostNetwork: true);
+
+    return report('browser:live:test', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, hostNetwork: true);
 }
 
 #[AsTask(namespace: 'browser', name: 'stack:up', description: 'Build and start only the isolated browser-test application.')]
@@ -266,11 +406,11 @@ function browserStackStop(): int
     return developmentStack('browser', 'stop');
 }
 
-#[AsTask(namespace: 'browser', name: 'stack:restart', description: 'Restart one verified service in this checkout\'s isolated browser stack: php, worker, or chroma.')]
+#[AsTask(namespace: 'browser', name: 'stack:restart', description: 'Restart one verified service in this checkout\'s isolated browser stack: php, worker, or postgres.')]
 function browserStackRestart(string $service = 'php', bool $force = false): int
 {
-    if (!\in_array($service, ['php', 'worker', 'chroma'], true)) {
-        throw new \InvalidArgumentException('Choose a verified browser service: php, worker, or chroma.');
+    if (!\in_array($service, ['php', 'worker', 'postgres'], true)) {
+        throw new \InvalidArgumentException('Choose a verified browser service: php, worker, or postgres.');
     }
 
     return report('browser:stack:restart', [...stackCommand('browser'), 'restart', $service], runtime: false, operation: static function () use ($service, $force): int {

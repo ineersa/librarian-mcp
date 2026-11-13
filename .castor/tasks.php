@@ -163,8 +163,7 @@ function lspCheck(): int
 function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $arguments = []): int
 {
     return report('test', ['vendor/bin/castor', 'test', ...($headed ? ['--headed'] : []), '--', ...$arguments], runtime: false, operation: static function () use ($headed, $arguments): int {
-        $database = \dirname(__DIR__).'/var/browser-live/application.db';
-        foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live', $database] as $storage) {
+        foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live'] as $storage) {
             if (is_link($storage)) {
                 throw new \RuntimeException('Refusing symlinked browser storage.');
             }
@@ -173,24 +172,27 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         if (0 !== $started) {
             return $started;
         }
+        $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: false);
+        $hostDatabaseUrl = postgresDatabaseUrl('browser', forHostNetwork: true);
+        $hostLockDsn = postgresLockDsn('browser', forHostNetwork: true);
+        assertOwnedBrowserDatabaseUrl($hostDatabaseUrl);
+
         // Clear stale compiled containers before migrations/fixture setup.
         stackRun('browser', ['stop', 'worker']);
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
         // Only this verified checkout-owned browser database is disposable.
-        stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:database:drop', '--force', '--env=test', '--no-interaction']);
-        // SQLite is recreated when migrations open the connection.
-        stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
+        stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:database:drop', '--force', '--if-exists', '--env=test', '--no-interaction']);
+        stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:database:create', '--env=test', '--no-interaction']);
+        stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
         // FrankenPHP workers retain loaded classes; use current application code.
         stackRun('browser', ['restart', 'php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
-        // Linux host networking reaches the printed loopback URL; fixture setup
-        // does not need private Chroma DNS. No silent php:8080 fallback.
-        return report('test:browser', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, hostNetwork: true);
+        // Linux host networking reaches the printed loopback URL and Postgres port.
+        return report('test:browser', ['env', 'DATABASE_URL='.$hostDatabaseUrl, 'LOCK_DSN='.$hostLockDsn, 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, hostNetwork: true);
     });
 }
 
-/** @param list<string> $arguments */
 #[AsTask(namespace: 'app', name: 'composer', description: 'Run application Composer in the project runtime; pass its arguments after --.')]
 function appComposer(#[AsArgsAfterOptionEnd] array $arguments = []): int
 {
@@ -205,35 +207,30 @@ function appConsole(#[AsArgsAfterOptionEnd] array $arguments = [], string $isola
         throw new \InvalidArgumentException('Choose either the fixed browser database or a diagnostic database.');
     }
     if ($browserDatabase || '' !== $isolatedDatabase) {
-        if (!$browserDatabase && 1 !== preg_match('/\A[a-z0-9-]+\z/D', $isolatedDatabase)) {
-            throw new \InvalidArgumentException('Use a lowercase diagnostic database identifier.');
-        }
         if ($browserDatabase) {
-            $relative = 'var/browser-live';
-            $database = $relative.'/application.db';
-            foreach (['var', $relative, $database] as $path) {
+            foreach (['var', 'var/browser-live'] as $path) {
                 if (is_link(\dirname(__DIR__).'/'.$path)) {
                     throw new \RuntimeException('Refusing symlinked diagnostic storage.');
                 }
             }
-            if (!is_dir(\dirname(__DIR__).'/'.$relative)) {
-                mkdir(\dirname(__DIR__).'/'.$relative, 0700, true);
-            }
+            $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: false);
+            $lockDsn = postgresLockDsn('browser', forHostNetwork: false);
 
-            return report('app:console', ['env', 'DATABASE_URL=sqlite:////app/'.$database, 'php', 'bin/console', '--env=dev', ...$arguments]);
+            return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments]);
         }
 
-        $relative = 'var/browser/'.$isolatedDatabase;
-        foreach (['var', 'var/browser', $relative, $relative.'/application.db'] as $path) {
+        if (1 !== preg_match('/\A[a-z0-9-]+\z/D', $isolatedDatabase)) {
+            throw new \InvalidArgumentException('Use a lowercase diagnostic database identifier.');
+        }
+        foreach (['var', 'var/browser'] as $path) {
             if (is_link(\dirname(__DIR__).'/'.$path)) {
                 throw new \RuntimeException('Refusing symlinked diagnostic storage.');
             }
         }
-        if (!is_dir(\dirname(__DIR__).'/'.$relative)) {
-            mkdir(\dirname(__DIR__).'/'.$relative, 0700, true);
-        }
+        $databaseUrl = isolatedPostgresDatabaseUrl($isolatedDatabase);
+        $lockDsn = isolatedPostgresLockDsn($isolatedDatabase);
 
-        return report('app:console', ['env', 'DATABASE_URL=sqlite:////app/'.$relative.'/application.db', 'php', 'bin/console', '--env=dev', ...$arguments]);
+        return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments]);
     }
 
     return report('app:console', ['php', 'bin/console', ...$arguments]);

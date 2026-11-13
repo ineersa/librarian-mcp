@@ -54,13 +54,25 @@ function testDatabaseFresh(): int
             throw new \RuntimeException('Refusing symlinked diagnostic storage.');
         }
     }
-    $relative = 'var/browser/migrations-'.bin2hex(random_bytes(8));
-    mkdir($root.'/'.$relative, 0700, true);
-    $command = ['env', 'DATABASE_URL=sqlite:////app/'.$relative.'/application.db', 'php', 'bin/console'];
-    $exit = report('test:database:fresh-migrate', [...$command, 'doctrine:migrations:migrate', '--env=dev', '--no-interaction']);
+    if (!is_dir($root.'/var/browser')) {
+        mkdir($root.'/var/browser', 0700, true);
+    }
+
+    $identifier = 'migrations-'.bin2hex(random_bytes(8));
+    $databaseUrl = isolatedPostgresDatabaseUrl($identifier);
+    $lockDsn = isolatedPostgresLockDsn($identifier);
+    $command = ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console'];
+
+    // Ensure the task-owned diagnostic database exists on the private Postgres service.
+    $create = report('test:database:fresh-create', [...$command, 'doctrine:database:create', '--if-not-exists', '--env=dev', '--no-interaction'], networked: true);
+    if (0 !== $create) {
+        return $create;
+    }
+
+    $exit = report('test:database:fresh-migrate', [...$command, 'doctrine:migrations:migrate', '--env=dev', '--no-interaction'], networked: true);
     if (0 !== $exit) {
         return $exit;
     }
 
-    return report('test:database:fresh-schema', [...$command, 'doctrine:schema:validate', '--env=dev']);
+    return report('test:database:fresh-schema', [...$command, 'doctrine:schema:validate', '--env=dev'], networked: true);
 }

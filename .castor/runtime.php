@@ -27,11 +27,11 @@ function runtimeCommand(array $command, string $container, bool $headed, bool $n
     if ($hostNetwork) {
         // Linux-only: share the host network namespace so the harness reaches the
         // printed loopback-published stack URL (127.0.0.1:PORT). Do not combine
-        // with private Compose networking; Chroma remains unpublished.
+        // with private Compose networking; Postgres remains private except the browser loopback port.
         $docker = [...$docker, '--network', 'host'];
     }
     if ($networked) {
-        // Join the private browser/dev stack network for chroma/php, and keep
+        // Join the private browser/dev stack network for postgres/php, and keep
         // host-gateway for 0.0.0.0-published host model listeners (8059/8060).
         // Loopback-published stack ports are NOT reachable via host-gateway.
         $docker = [...$docker, '--network', stackNetwork(), '--add-host', 'host.docker.internal:host-gateway'];

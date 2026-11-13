@@ -7,11 +7,10 @@ x-indexing-env: &indexing-env
   CODERANK_ARTIFACT: '${CODERANK_ARTIFACT}'
   BGE_URL: '${BGE_URL}'
   BGE_MODEL: '${BGE_MODEL}'
-  CHROMA_HOST: '${CHROMA_HOST}'
-  CHROMA_PORT: '${CHROMA_PORT}'
   INDEX_STORAGE_DIR: '${INDEX_STORAGE_DIR}'
   INDEX_INTERVAL: '${INDEX_INTERVAL}'
   LOCK_DSN: '${LOCK_DSN}'
+  DATABASE_URL: '${DATABASE_URL}'
 
 services:
   php:
@@ -41,6 +40,9 @@ services:
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
       <<: *indexing-env
     volumes: !override
       - ./:/app
@@ -63,7 +65,7 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     depends_on:
-      chroma:
+      postgres:
         condition: service_healthy
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
@@ -84,6 +86,9 @@ services:
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
       <<: *indexing-env
     volumes:
       - ./:/app
@@ -100,7 +105,7 @@ services:
     depends_on:
       php:
         condition: service_healthy
-      chroma:
+      postgres:
         condition: service_healthy
     networks:
       default: {}
@@ -111,13 +116,17 @@ services:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
-  chroma:
+  postgres:
+    environment:
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+    # Dev keeps Postgres private. Browser overlay publishes a checkout-scoped loopback port.
     networks:
       default: {}
       librarian:
         aliases:
-          - chroma
-    # No published host port; app/worker reach chroma:8000 on the private network.
+          - postgres
 
 networks:
   librarian:

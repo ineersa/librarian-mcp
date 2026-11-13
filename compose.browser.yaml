@@ -6,7 +6,8 @@ services:
       APP_DEBUG: '1'
       APP_SHARE_DIR: var/browser-live/share
       APP_SECRET: browser-synthetic-only
-      DATABASE_URL: 'sqlite:////app/var/browser-live/application.db'
+      DATABASE_URL: '${DATABASE_URL}'
+      LOCK_DSN: '${LOCK_DSN}'
       PROJECT_BROWSE_ROOT: /project-sources
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
@@ -18,7 +19,9 @@ services:
         }
       INDEX_STORAGE_DIR: var/browser-live/indexes
       INDEX_INTERVAL: '2'
-      LOCK_DSN: 'sqlite:%kernel.project_dir%/var/browser-live/indexing-locks.db'
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
     volumes: !override
       - .:/app:ro
       - ./var/browser-live:/app/var/browser-live
@@ -36,7 +39,8 @@ services:
       APP_DEBUG: '1'
       APP_SHARE_DIR: var/browser-live/share
       APP_SECRET: browser-synthetic-only
-      DATABASE_URL: 'sqlite:////app/var/browser-live/application.db'
+      DATABASE_URL: '${DATABASE_URL}'
+      LOCK_DSN: '${LOCK_DSN}'
       PROJECT_BROWSE_ROOT: /project-sources
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
@@ -44,7 +48,9 @@ services:
       MCP_ALLOWED_HOSTS: 'localhost,127.0.0.1,php,server'
       INDEX_STORAGE_DIR: var/browser-live/indexes
       INDEX_INTERVAL: '2'
-      LOCK_DSN: 'sqlite:%kernel.project_dir%/var/browser-live/indexing-locks.db'
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
     volumes: !override
       - .:/app:ro
       - ./var/browser-live:/app/var/browser-live
@@ -52,3 +58,11 @@ services:
       - ./var/browser-live/log:/app/var/log
       - ./var/browser-live/indexes:/app/var/browser-live/indexes
       - ./var/browser-live/project-sources:/project-sources:ro
+  postgres:
+    environment:
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
+    ports: !override
+      # Host-networked PHPUnit reaches Postgres through the printed loopback port.
+      - "127.0.0.1:${POSTGRES_PORT}:5432"

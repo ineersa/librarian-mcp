@@ -1,6 +1,9 @@
 doctrine_migrations:
     migrations_paths:
-        # namespace is arbitrary but should be different from App\Migrations
-        # as migrations classes should NOT be autoloaded
+        # Preserve historical SQLite migrations untouched under DoctrineMigrations.
+        # Default path for new work is the PostgreSQL baseline namespace.
+        'DoctrineMigrations\Postgres': '%kernel.project_dir%/migrations/postgres'
         'DoctrineMigrations': '%kernel.project_dir%/migrations'
+    # Prefer the PostgreSQL path for new diffs; main generates the baseline.
+    # Historical SQLite classes remain available but are not the active path.
     enable_profiler: false

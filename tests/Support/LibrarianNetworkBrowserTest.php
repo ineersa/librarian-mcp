@@ -32,11 +32,12 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
     {
         parent::setUp();
         $root = \dirname(__DIR__, 2);
-        $database = $root.'/var/browser-live/application.db';
-        if ('test' !== ($_SERVER['APP_ENV'] ?? getenv('APP_ENV')) || 'sqlite:///'.$database !== getenv('DATABASE_URL')) {
-            throw new \LogicException('Browser fixtures require the exact isolated test database.');
+        $databaseUrl = (string) getenv('DATABASE_URL');
+        if ('test' !== ($_SERVER['APP_ENV'] ?? getenv('APP_ENV'))) {
+            throw new \LogicException('Browser fixtures require the test environment.');
         }
-        foreach ([$root.'/var', \dirname($database), $database] as $path) {
+        $this->assertOwnedBrowserDatabaseUrl($databaseUrl);
+        foreach ([$root.'/var', $root.'/var/browser-live'] as $path) {
             if (is_link($path)) {
                 throw new \LogicException('Refusing symlinked browser fixture storage.');
             }
@@ -118,6 +119,45 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
         $this->page->locator('.action-delete')->click();
         $this->page->getByRole('button', ['name' => 'Confirm', 'exact' => true])->click();
         $this->page->locator('body.ea-index')->waitFor();
+    }
+
+    private function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
+    {
+        $parts = parse_url($databaseUrl);
+        if (!\is_array($parts) || 'postgresql' !== ($parts['scheme'] ?? null)) {
+            throw new \LogicException('Browser fixtures require a PostgreSQL DATABASE_URL.');
+        }
+
+        $user = rawurldecode((string) ($parts['user'] ?? ''));
+        $pass = rawurldecode((string) ($parts['pass'] ?? ''));
+        $path = ltrim((string) ($parts['path'] ?? ''), '/');
+        $host = (string) ($parts['host'] ?? '');
+        $port = (string) ($parts['port'] ?? '5432');
+        $expectedPort = $this->browserPublishedPostgresPort();
+
+        if (
+            'librarian' !== $user
+            || 'browser-synthetic-only' !== $pass
+            || 'librarian_browser' !== $path
+            || !\in_array($host, ['127.0.0.1', 'localhost'], true)
+            || $expectedPort !== $port
+        ) {
+            throw new \LogicException('Browser fixtures require the exact isolated checkout-owned Postgres URL.');
+        }
+    }
+
+    private function browserPublishedPostgresPort(): string
+    {
+        $portFile = \dirname(__DIR__, 2).'/var/tooling/http-browser-postgres.port';
+        if (is_link($portFile) || !is_file($portFile)) {
+            throw new \LogicException('Missing checkout-owned browser Postgres published port.');
+        }
+        $port = trim((string) file_get_contents($portFile));
+        if (!ctype_digit($port) || (int) $port < 1024 || (int) $port > 65535) {
+            throw new \LogicException('Invalid checkout-owned browser Postgres published port.');
+        }
+
+        return $port;
     }
 
     private function closeBrowser(): void
