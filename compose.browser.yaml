@@ -12,7 +12,7 @@ services:
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
-      MCP_ALLOWED_HOSTS: 'localhost,127.0.0.1,php,server'
+      MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       MERCURE_EXTRA_DIRECTIVES: |-
         transport bolt {
           path /app/var/browser-live/mercure.db
@@ -45,7 +45,7 @@ services:
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
-      MCP_ALLOWED_HOSTS: 'localhost,127.0.0.1,php,server'
+      MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       INDEX_STORAGE_DIR: var/browser-live/indexes
       INDEX_INTERVAL: '2'
       POSTGRES_DB: '${POSTGRES_DB}'
@@ -63,6 +63,4 @@ services:
       POSTGRES_DB: '${POSTGRES_DB}'
       POSTGRES_USER: '${POSTGRES_USER}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
-    ports: !override
-      # Host-networked PHPUnit reaches Postgres through the printed loopback port.
-      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    ports: !override []

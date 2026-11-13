@@ -51,11 +51,14 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
         // Commit it before real HTTP so fixture data is visible outside PHPUnit.
         self::getContainer()->get('doctrine')->getConnection()->commit();
         $this->url = rtrim((string) getenv('LIBRARIAN_BROWSER_URL'), '/');
-        self::assertMatchesRegularExpression('~^https?://.+~D', $this->url);
+        self::assertMatchesRegularExpression('~^http://[a-z0-9-]+\.browser\.librarian\.localhost(?::\d+)?$~D', $this->url);
+        $address = getenv('LIBRARIAN_PROXY_IP');
+        self::assertNotFalse(filter_var($address, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV4));
         $headed = 'false' === getenv('PLAYWRIGHT_HEADLESS');
         $this->client = PlaywrightFactory::create();
         try {
             $builder = $this->client->chromium()->withHeadless(!$headed)->withArgs([
+                '--host-resolver-rules=MAP *.librarian.localhost '.$address,
                 '--window-size=2560,1440',
             ]);
             if ($headed) {
@@ -133,31 +136,16 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
         $path = ltrim((string) ($parts['path'] ?? ''), '/');
         $host = (string) ($parts['host'] ?? '');
         $port = (string) ($parts['port'] ?? '5432');
-        $expectedPort = $this->browserPublishedPostgresPort();
 
         if (
             'librarian' !== $user
             || 'browser-synthetic-only' !== $pass
             || 'librarian_browser' !== $path
-            || !\in_array($host, ['127.0.0.1', 'localhost'], true)
-            || $expectedPort !== $port
+            || 'postgres' !== $host
+            || '5432' !== $port
         ) {
-            throw new \LogicException('Browser fixtures require the exact isolated checkout-owned Postgres URL.');
+            throw new \LogicException('Browser fixtures require the exact isolated checkout-owned private Postgres URL.');
         }
-    }
-
-    private function browserPublishedPostgresPort(): string
-    {
-        $portFile = \dirname(__DIR__, 2).'/var/tooling/http-browser-postgres.port';
-        if (is_link($portFile) || !is_file($portFile)) {
-            throw new \LogicException('Missing checkout-owned browser Postgres published port.');
-        }
-        $port = trim((string) file_get_contents($portFile));
-        if (!ctype_digit($port) || (int) $port < 1024 || (int) $port > 65535) {
-            throw new \LogicException('Invalid checkout-owned browser Postgres published port.');
-        }
-
-        return $port;
     }
 
     private function closeBrowser(): void

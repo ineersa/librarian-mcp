@@ -1,4 +1,4 @@
-# Castor supplies checkout identity and the private compose network.
+# Castor supplies checkout identity, private Postgres network, and shared proxy network.
 name: "${LIBRARIAN_PROJECT:?Run vendor/bin/castor dev:stack:up}"
 
 x-indexing-env: &indexing-env
@@ -40,6 +40,7 @@ services:
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
+      MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       POSTGRES_DB: '${POSTGRES_DB}'
       POSTGRES_USER: '${POSTGRES_USER}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
@@ -55,13 +56,15 @@ services:
         read_only: true
         bind:
           create_host_path: false
-    ports: !override
-      - "127.0.0.1:${HTTP_PORT}:8080"
+    ports: !override []
     networks:
       default: {}
       librarian:
         aliases:
           - php
+      development:
+        aliases:
+          - "${LIBRARIAN_PROJECT}"
     extra_hosts:
       - host.docker.internal:host-gateway
     depends_on:
@@ -86,6 +89,7 @@ services:
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
+      MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       POSTGRES_DB: '${POSTGRES_DB}'
       POSTGRES_USER: '${POSTGRES_USER}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
@@ -121,7 +125,7 @@ services:
       POSTGRES_DB: '${POSTGRES_DB}'
       POSTGRES_USER: '${POSTGRES_USER}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
-    # Dev keeps Postgres private. Browser overlay publishes a checkout-scoped loopback port.
+    # Dev/browser keep Postgres private on the checkout-owned network.
     networks:
       default: {}
       librarian:
@@ -132,3 +136,6 @@ networks:
   librarian:
     external: true
     name: "${LIBRARIAN_NETWORK:?Run vendor/bin/castor dev:stack:up}"
+  development:
+    external: true
+    name: "${LIBRARIAN_DEVELOPMENT_NETWORK:?Run vendor/bin/castor dev:stack:up}"

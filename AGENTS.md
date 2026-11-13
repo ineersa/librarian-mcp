@@ -16,7 +16,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Tooling-only `symfony/tui` stays at **8.1.11**: Castor 1.9.1 does not implement the new 8.2 terminal interface. This is not a framework downgrade.
 - MCP 0.15 config uses `mcp.servers.librarian` plus an explicit registry; the old TraceableRegistry reset compiler-pass workaround is removed because the new bundle no longer exposes that service
 - `MCP_ALLOWED_HOSTS` CSV env (default `localhost,127.0.0.1,php,server,192.168.2.38`); production external hostnames override via env
-- Dev/browser runtime: **no shared proxy** — private app/Postgres network; Linux harness prints a loopback URL via host networking / `LIBRARIAN_BROWSER_URL`
+- Dev/browser runtime: repository-shared Caddy proxy with checkout-specific `*.librarian.localhost` URLs; `LIBRARIAN_PROXY_PORT` defaults to **8082**, leaving finance on port 80. PostgreSQL stays private; native browser tooling uses `LIBRARIAN_BROWSER_URL` and `LIBRARIAN_PROXY_IP`.
 
 ## Mandatory Symfony documentation search
 

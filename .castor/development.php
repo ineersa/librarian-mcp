@@ -6,6 +6,7 @@ namespace AppTasks;
 
 use Castor\Attribute\AsArgsAfterOptionEnd;
 use Castor\Attribute\AsTask;
+use Symfony\Component\Dotenv\Dotenv;
 use Symfony\Component\Process\Process;
 
 function checkoutId(): string
@@ -14,6 +15,24 @@ function checkoutId(): string
     $slug = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower(basename($root))), '-');
 
     return substr($slug, 0, 36).'-'.substr(hash('sha256', $root), 0, 10);
+}
+
+function repositoryState(): string
+{
+    $process = new Process(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], \dirname(__DIR__));
+    runTaskProcess($process);
+
+    return trim($process->getOutput());
+}
+
+function developmentNetwork(): string
+{
+    return 'librarian-development-'.posix_getuid().'-'.substr(hash('sha256', repositoryState()), 0, 10);
+}
+
+function proxyName(): string
+{
+    return 'librarian-proxy-'.posix_getuid().'-'.substr(hash('sha256', repositoryState()), 0, 10);
 }
 
 function stackNetwork(string $mode = 'browser'): string
@@ -26,64 +45,46 @@ function stackProject(string $mode): string
     return 'librarian-'.checkoutId().'-'.$mode;
 }
 
-function stackUrl(string $mode): string
+function proxyPort(): string
 {
-    $port = 'browser' === $mode ? browserPublishedPort() : developmentPublishedPort();
-
-    return 'http://127.0.0.1:'.$port;
-}
-
-function developmentPublishedPort(): string
-{
-    return allocatePublishedPort('dev');
-}
-
-function browserPublishedPort(): string
-{
-    return allocatePublishedPort('browser');
-}
-
-function allocatePublishedPort(string $mode): string
-{
-    $directory = \dirname(__DIR__).'/var/tooling';
-    if (is_link($directory)) {
-        throw new \RuntimeException('Refusing symlinked runtime secrets.');
-    }
-    if (!is_dir($directory)) {
-        mkdir($directory, 0700, true);
-    }
-    $portFile = $directory.'/http-'.$mode.'.port';
-    if (is_link($portFile)) {
-        throw new \RuntimeException('Refusing symlinked published port file.');
-    }
-    if (!is_file($portFile)) {
-        $socket = stream_socket_server('tcp://127.0.0.1:0');
-        if (false === $socket) {
-            throw new \RuntimeException('Cannot allocate a local published port.');
+    $port = getenv('LIBRARIAN_PROXY_PORT');
+    if (false === $port || '' === $port) {
+        $port = null;
+        foreach (['.env.local', '.env'] as $file) {
+            $path = \dirname(__DIR__).'/'.$file;
+            if (is_link($path) || !is_file($path)) {
+                continue;
+            }
+            $values = new Dotenv()->parse((string) file_get_contents($path), $path);
+            if (isset($values['LIBRARIAN_PROXY_PORT'])) {
+                $port = $values['LIBRARIAN_PROXY_PORT'];
+                break;
+            }
         }
-        $address = stream_socket_get_name($socket, false);
-        fclose($socket);
-        if (false === $address) {
-            throw new \RuntimeException('Cannot inspect local published port.');
+        if (null === $port || '' === $port) {
+            $port = '8082';
         }
-        $separator = strrpos($address, ':');
-        if (false === $separator) {
-            throw new \RuntimeException('Invalid local published address.');
-        }
-        file_put_contents($portFile, substr($address, $separator + 1));
-        chmod($portFile, 0600);
     }
-    $port = trim((string) file_get_contents($portFile));
     if (!ctype_digit($port) || (int) $port < 1024 || (int) $port > 65535) {
-        throw new \RuntimeException('Invalid local published port.');
+        throw new \RuntimeException('Invalid LIBRARIAN_PROXY_PORT.');
     }
 
     return $port;
 }
 
-function browserPublishedPostgresPort(): string
+function stackUrl(string $mode): string
 {
-    return allocatePublishedPort('browser-postgres');
+    return 'http://'.checkoutId().('browser' === $mode ? '.browser' : '').'.librarian.localhost:'.proxyPort();
+}
+
+/** @param list<string> $command */
+function developmentProcess(array $command): string
+{
+    $process = new Process($command, \dirname(__DIR__), timeout: 600);
+    runTaskProcess($process);
+    echo $process->getErrorOutput();
+
+    return $process->getOutput();
 }
 
 /**
@@ -132,32 +133,21 @@ function postgresCredentials(string $mode): array
     ];
 }
 
-function postgresDatabaseUrl(string $mode, bool $forHostNetwork): string
+function postgresDatabaseUrl(string $mode): string
 {
     $credentials = postgresCredentials($mode);
-    $host = 'postgres';
-    $port = '5432';
-    if ($forHostNetwork) {
-        if ('browser' !== $mode) {
-            throw new \InvalidArgumentException('Host-network Postgres URLs are only for the browser stack.');
-        }
-        $host = '127.0.0.1';
-        $port = browserPublishedPostgresPort();
-    }
 
     return \sprintf(
-        'postgresql://%s:%s@%s:%s/%s?serverVersion=17&charset=utf8',
+        'postgresql://%s:%s@postgres:5432/%s?serverVersion=17&charset=utf8',
         rawurlencode($credentials['user']),
         rawurlencode($credentials['password']),
-        $host,
-        $port,
         rawurlencode($credentials['db']),
     );
 }
 
-function postgresLockDsn(string $mode, bool $forHostNetwork): string
+function postgresLockDsn(string $mode): string
 {
-    return postgresDatabaseUrl($mode, $forHostNetwork);
+    return postgresDatabaseUrl($mode);
 }
 
 function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
@@ -172,15 +162,14 @@ function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
     $path = ltrim((string) ($parts['path'] ?? ''), '/');
     $host = (string) ($parts['host'] ?? '');
     $port = (string) ($parts['port'] ?? '5432');
-    $expectedPort = browserPublishedPostgresPort();
     if (
         $credentials['user'] !== $user
         || $credentials['password'] !== $pass
         || $credentials['db'] !== $path
-        || !\in_array($host, ['127.0.0.1', 'localhost'], true)
-        || $expectedPort !== $port
+        || 'postgres' !== $host
+        || '5432' !== $port
     ) {
-        throw new \RuntimeException('Browser fixtures require the exact isolated checkout-owned Postgres URL.');
+        throw new \RuntimeException('Browser fixtures require the exact isolated checkout-owned private Postgres URL.');
     }
 }
 
@@ -226,6 +215,7 @@ function ensureBrowserPostgresService(): void
     }
 
     ensureStackNetwork('browser');
+    ensureDevelopmentNetwork();
     stackRun('browser', ['up', '-d', '--wait', 'postgres']);
 }
 
@@ -261,18 +251,19 @@ function stackEnvironment(string $mode): array
 
     $url = stackUrl($mode);
     $jwt = trim((string) file_get_contents($secret));
-
     $credentials = postgresCredentials($mode);
-    $databaseUrl = postgresDatabaseUrl($mode, forHostNetwork: false);
-    $lockDsn = postgresLockDsn($mode, forHostNetwork: false);
+    $databaseUrl = postgresDatabaseUrl($mode);
+    $lockDsn = postgresLockDsn($mode);
+    $hostname = (string) parse_url($url, \PHP_URL_HOST);
 
     return [
         'LIBRARIAN_CHECKOUT_ID' => checkoutId(),
         'LIBRARIAN_PROJECT' => stackProject($mode),
         'LIBRARIAN_NETWORK' => stackNetwork($mode),
+        'LIBRARIAN_DEVELOPMENT_NETWORK' => developmentNetwork(),
         'LIBRARIAN_PUBLIC_URL' => $url,
-        'HTTP_PORT' => 'browser' === $mode ? browserPublishedPort() : developmentPublishedPort(),
-        'POSTGRES_PORT' => 'browser' === $mode ? browserPublishedPostgresPort() : '',
+        'LIBRARIAN_PROXY_PORT' => proxyPort(),
+        'MCP_ALLOWED_HOSTS' => implode(',', ['localhost', '127.0.0.1', 'php', 'server', $hostname]),
         'POSTGRES_DB' => $credentials['db'],
         'POSTGRES_USER' => $credentials['user'],
         'POSTGRES_PASSWORD' => $credentials['password'],
@@ -314,6 +305,90 @@ function ensureStackNetwork(string $mode): void
     runTaskProcess($create);
 }
 
+function proxyState(): string
+{
+    $directory = repositoryState().'/librarian-development';
+    if (is_link($directory)) {
+        throw new \RuntimeException('Refusing symlinked proxy state.');
+    }
+    if (!is_dir($directory)) {
+        mkdir($directory, 0700, true);
+    }
+
+    return $directory;
+}
+
+function assertProxyOwner(string $kind, string $name): bool
+{
+    $inspect = new Process(['docker', $kind, 'inspect', '--format', '{{index .Labels "librarian.proxy.owner"}}', $name]);
+    if ('container' === $kind) {
+        $inspect = new Process(['docker', 'inspect', '--format', '{{index .Config.Labels "librarian.proxy.owner"}}', $name]);
+    }
+    if (0 !== runTaskProcess($inspect, false)) {
+        if (false === stripos($inspect->getErrorOutput(), 'no such') && false === stripos($inspect->getErrorOutput(), 'not found')) {
+            throw new \RuntimeException('Cannot inspect development proxy resource: '.$inspect->getErrorOutput());
+        }
+
+        return false;
+    }
+    if ((string) posix_getuid() !== trim($inspect->getOutput())) {
+        throw new \RuntimeException('Refusing foreign development proxy resource: '.$name);
+    }
+
+    return true;
+}
+
+function proxyAddress(): string
+{
+    if (!assertProxyOwner('container', proxyName())) {
+        throw new \RuntimeException('Start a development or browser stack before running live routing scenarios.');
+    }
+    $address = trim(developmentProcess(['docker', 'inspect', '--format', '{{with index .NetworkSettings.Networks "'.developmentNetwork().'"}}{{.IPAddress}}{{end}}', proxyName()]));
+    if (false === filter_var($address, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV4)) {
+        throw new \RuntimeException('The development proxy has no network address.');
+    }
+
+    return $address;
+}
+
+function ensureDevelopmentNetwork(): void
+{
+    if (!assertProxyOwner('network', developmentNetwork())) {
+        developmentProcess(['docker', 'network', 'create', '--label', 'librarian.proxy.owner='.posix_getuid(), developmentNetwork()]);
+    }
+}
+
+function ensureProxy(string $state): void
+{
+    ensureDevelopmentNetwork();
+    if (assertProxyOwner('container', proxyName())) {
+        developmentProcess(['docker', 'start', proxyName()]);
+
+        return;
+    }
+    // Reuse the application image's Caddy binary; no application or Docker socket is mounted.
+    $port = proxyPort();
+    developmentProcess(['docker', 'run', '-d', '--name', proxyName(), '--label', 'librarian.proxy.owner='.posix_getuid(), '--network', developmentNetwork(), '--publish', '127.0.0.1:'.$port.':'.$port, '--volume', $state.':/etc/librarian:ro', '--env', 'XDG_CONFIG_HOME=/tmp/config', '--env', 'XDG_DATA_HOME=/tmp/data', '--no-healthcheck', 'librarian-'.checkoutId().'-php:dev', 'frankenphp', 'run', '--config', '/etc/librarian/Caddyfile']);
+}
+
+/** @param array<string, string> $routes */
+function writeProxyConfig(string $state, array $routes): void
+{
+    TaskExecution::$current?->throwIfInterrupted();
+    $port = proxyPort();
+    $config = "{\n\tadmin localhost:2019\n\tauto_https off\n}\n:{$port} {\n\trespond \"No development route registered\" 404\n}\n";
+    ksort($routes);
+    foreach ($routes as $hostname => $upstream) {
+        if (1 !== preg_match('/^[a-z0-9.-]+\.librarian\.localhost$/D', $hostname) || 1 !== preg_match('/^librarian-[a-z0-9-]+:(8080)$/D', $upstream)) {
+            throw new \RuntimeException('Invalid development proxy route.');
+        }
+        $config .= "http://{$hostname}:{$port} {\n\treverse_proxy {$upstream}\n}\n";
+    }
+    file_put_contents($state.'/Caddyfile.next', $config);
+    TaskExecution::$current?->throwIfInterrupted();
+    rename($state.'/Caddyfile.next', $state.'/Caddyfile');
+}
+
 function developmentStack(string $mode, string $action): int
 {
     $exit = report($mode.':stack:'.$action, ['docker', 'compose', $action], runtime: false, operation: static function () use ($mode, $action): int {
@@ -323,50 +398,85 @@ function developmentStack(string $mode, string $action): int
 
             return 0;
         }
-
-        if ('up' === $action) {
-            TaskExecution::$current?->throwIfInterrupted();
-            $secret = \dirname(__DIR__).'/.env.local';
-            if ('dev' === $mode && !file_exists($secret)) {
-                $file = fopen($secret, 'xb');
-                if (false === $file) {
-                    throw new \RuntimeException('Cannot create the private development environment file.');
+        $state = proxyState();
+        $lock = fopen($state.'/lock', 'cb');
+        if (false === $lock || !flock($lock, \LOCK_EX)) {
+            throw new \RuntimeException('Cannot lock the shared development proxy.');
+        }
+        try {
+            $routes = [];
+            if (is_file($state.'/routes.json')) {
+                $stored = json_decode((string) file_get_contents($state.'/routes.json'), true, flags: \JSON_THROW_ON_ERROR);
+                if (!\is_array($stored)) {
+                    throw new \RuntimeException('Invalid development route registry.');
                 }
-                chmod($secret, 0600);
-                fwrite($file, 'APP_SECRET='.bin2hex(random_bytes(32))."\n");
-                fclose($file);
-            }
-            foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live'] as $storage) {
-                if (is_link($storage)) {
-                    throw new \RuntimeException('Refusing symlinked application storage.');
+                foreach ($stored as $host => $target) {
+                    if (!\is_string($host) || !\is_string($target)) {
+                        throw new \RuntimeException('Invalid development route registration.');
+                    }
+                    $routes[$host] = $target;
                 }
             }
-            if ('browser' === $mode) {
-                foreach ([
-                    '/var/browser-live',
-                    '/var/browser-live/cache',
-                    '/var/browser-live/log',
-                    '/var/browser-live/mcp-sessions',
-                    '/var/browser-live/indexes',
-                    '/var/browser-live/indexes/locks',
-                ] as $relative) {
-                    $path = \dirname(__DIR__).$relative;
-                    if (!is_dir($path)) {
-                        mkdir($path, 0700, true);
+            $hostname = (string) parse_url(stackUrl($mode), \PHP_URL_HOST);
+            if ('up' === $action) {
+                TaskExecution::$current?->throwIfInterrupted();
+                $secret = \dirname(__DIR__).'/.env.local';
+                if ('dev' === $mode && !file_exists($secret)) {
+                    $file = fopen($secret, 'xb');
+                    if (false === $file) {
+                        throw new \RuntimeException('Cannot create the private development environment file.');
+                    }
+                    chmod($secret, 0600);
+                    fwrite($file, 'APP_SECRET='.bin2hex(random_bytes(32))."\n");
+                    fclose($file);
+                }
+                foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live'] as $storage) {
+                    if (is_link($storage)) {
+                        throw new \RuntimeException('Refusing symlinked application storage.');
                     }
                 }
-                $fixtures = report('test:sources:prepare', ['php', 'tests/Support/prepare_project_sources.php']);
-                if (0 !== $fixtures) {
-                    return $fixtures;
+                if ('browser' === $mode) {
+                    foreach ([
+                        '/var/browser-live',
+                        '/var/browser-live/cache',
+                        '/var/browser-live/log',
+                        '/var/browser-live/mcp-sessions',
+                        '/var/browser-live/indexes',
+                        '/var/browser-live/indexes/locks',
+                    ] as $relative) {
+                        $path = \dirname(__DIR__).$relative;
+                        if (!is_dir($path)) {
+                            mkdir($path, 0700, true);
+                        }
+                    }
+                    $fixtures = report('test:sources:prepare', ['php', 'tests/Support/prepare_project_sources.php']);
+                    if (0 !== $fixtures) {
+                        return $fixtures;
+                    }
                 }
+                ensureStackNetwork($mode);
+                stackRun($mode, ['build']);
+                writeProxyConfig($state, $routes);
+                ensureProxy($state);
+                stackRun($mode, ['up', '-d', '--wait']);
+                $routes[$hostname] = stackProject($mode).':8080';
+            } else {
+                stackRun($mode, ['down']);
+                unset($routes[$hostname]);
             }
-            ensureStackNetwork($mode);
-            stackRun($mode, ['build']);
-            stackRun($mode, ['up', '-d', '--wait']);
-        } else {
-            stackRun($mode, ['down']);
+            writeProxyConfig($state, $routes);
+            if (assertProxyOwner('container', proxyName()) && 'true' === trim(developmentProcess(['docker', 'inspect', '--format', '{{.State.Running}}', proxyName()]))) {
+                developmentProcess(['docker', 'exec', proxyName(), 'frankenphp', 'reload', '--config', '/etc/librarian/Caddyfile']);
+            }
+            TaskExecution::$current?->throwIfInterrupted();
+            file_put_contents($state.'/routes.json.next', json_encode($routes, \JSON_THROW_ON_ERROR)."\n");
+            TaskExecution::$current?->throwIfInterrupted();
+            rename($state.'/routes.json.next', $state.'/routes.json');
+            echo stackUrl($mode)."\n";
+        } finally {
+            flock($lock, \LOCK_UN);
+            fclose($lock);
         }
-        echo stackUrl($mode)."\n";
 
         return 0;
     });
@@ -377,7 +487,7 @@ function developmentStack(string $mode, string $action): int
     return $exit;
 }
 
-#[AsTask(namespace: 'dev', name: 'stack:up', description: 'Build and start this checkout on a private published URL.')]
+#[AsTask(namespace: 'dev', name: 'stack:up', description: 'Build and start this checkout behind its local hostname.')]
 function developmentStackUp(): int
 {
     return developmentStack('dev', 'up');
@@ -389,7 +499,7 @@ function developmentStackStatus(): int
     return developmentStack('dev', 'status');
 }
 
-#[AsTask(namespace: 'dev', name: 'stack:stop', description: 'Stop this checkout only, preserving data.')]
+#[AsTask(namespace: 'dev', name: 'stack:stop', description: 'Stop this checkout only, preserving data and the shared proxy.')]
 function developmentStackStop(): int
 {
     return developmentStack('dev', 'stop');
@@ -403,10 +513,40 @@ function browserLiveTest(#[AsArgsAfterOptionEnd] array $arguments = [], bool $he
         throw new \InvalidArgumentException('Pass the PHPUnit test selection after --.');
     }
 
-    $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: true);
-    $lockDsn = postgresLockDsn('browser', forHostNetwork: true);
+    $databaseUrl = postgresDatabaseUrl('browser');
+    $lockDsn = postgresLockDsn('browser');
+    assertOwnedBrowserDatabaseUrl($databaseUrl);
 
-    return report('browser:live:test', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, hostNetwork: true);
+    return report('browser:live:test', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'LIBRARIAN_PROXY_IP='.proxyAddress(), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
+}
+
+#[AsTask(namespace: 'dev', name: 'proxy:stop', description: 'Stop the shared proxy; --for-upgrade permits registered routes and removes only its owned container.')]
+function developmentProxyStop(bool $forUpgrade = false): int
+{
+    return report('dev:proxy:stop', ['docker', 'stop', proxyName()], runtime: false, operation: static function () use ($forUpgrade): int {
+        $state = proxyState();
+        $lock = fopen($state.'/lock', 'cb');
+        if (false === $lock || !flock($lock, \LOCK_EX)) {
+            throw new \RuntimeException('Cannot lock the shared development proxy.');
+        }
+        try {
+            if (!$forUpgrade && is_file($state.'/routes.json') && [] !== json_decode((string) file_get_contents($state.'/routes.json'), true, flags: \JSON_THROW_ON_ERROR)) {
+                throw new \RuntimeException('Stop registered checkout stacks before stopping the shared proxy.');
+            }
+            if (assertProxyOwner('container', proxyName())) {
+                developmentProcess(['docker', 'stop', proxyName()]);
+                if ($forUpgrade) {
+                    developmentProcess(['docker', 'rm', proxyName()]);
+                    echo "Shared proxy removed for upgrade; registered routes and application stacks are preserved. Run dev:stack:up from the prepared checkout to restore all preview URLs.\n";
+                }
+            }
+        } finally {
+            flock($lock, \LOCK_UN);
+            fclose($lock);
+        }
+
+        return 0;
+    });
 }
 
 #[AsTask(namespace: 'browser', name: 'stack:up', description: 'Build and start only the isolated browser-test application.')]

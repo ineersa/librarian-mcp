@@ -16,7 +16,7 @@ This document does **not** claim that validation has already passed.
 
 ## Native-network suite
 
-Browser journeys use Playwright against the isolated stack URL supplied as `LIBRARIAN_BROWSER_URL`. On Linux the harness prints/uses a loopback URL via host networking; app and Postgres remain private (no public DB port, no shared proxy). Only fixture preparation boots a test kernel; browser requests are real HTTP, not intercepted in-process. PHPUnit cannot roll back web/worker writes for cross-process isolation.
+Browser journeys use Playwright against the isolated stack's checkout-specific `*.browser.librarian.localhost:8082` URL supplied as `LIBRARIAN_BROWSER_URL`. The repository-shared Caddy proxy binds loopback; `LIBRARIAN_PROXY_IP` lets Chromium resolve that same hostname inside Docker. Native tooling joins the proxy and private browser PostgreSQL networks, without host networking or a published database port. Only fixture preparation boots a test kernel; browser requests are real HTTP, not intercepted in-process. PHPUnit cannot roll back web/worker writes for cross-process isolation.
 
 Each scenario opens and closes its own browser/context and signs in through the real login form. Headed launches request a 2560×1440 window with native 1000ms slow motion and `viewport: null`. Headless launches use a 1920×1080 viewport without slow motion.
 
@@ -101,7 +101,7 @@ Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
-The upgraded runtime uses a **private app/Postgres network** and a printed loopback checkout URL (host networking on Linux), not a shared multi-checkout development proxy. Browser-only Postgres publishes a dynamic host port on `127.0.0.1` for the saved host-networked harness; production/dev Postgres publish no host ports. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
+Development and browser stacks share this repository's Caddy proxy and route registry across worktrees, following the finance setup. `LIBRARIAN_PROXY_PORT` defaults to **8082** so finance's port 80 remains untouched; set it in the environment or `.env.local` before starting stacks if needed. App/worker/PostgreSQL remain checkout-scoped and no database ports are published. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
 
 ## Diagnostics and evidence
 

@@ -12,7 +12,7 @@ use Symfony\Component\Process\Process;
  * @param list<string>           $command
  * @param (\Closure(): int)|null $operation
  */
-function report(string $task, array $command, bool $runtime = true, bool $headed = false, ?\Closure $operation = null, string $artifact = '', bool $networked = false, bool $hostNetwork = false): int
+function report(string $task, array $command, bool $runtime = true, bool $headed = false, ?\Closure $operation = null, string $artifact = '', bool $networked = false): int
 {
     $root = \dirname(__DIR__);
     $relative = 'var/qa/'.str_replace(':', '-', $task);
@@ -67,7 +67,7 @@ function report(string $task, array $command, bool $runtime = true, bool $headed
             }
         } else {
             if (null !== $container) {
-                $command = runtimeCommand($command, $container, $headed, $networked, $hostNetwork);
+                $command = runtimeCommand($command, $container, $headed, $networked);
                 $result['command'] = $command;
                 $result['runtime_container'] = $container;
                 $save();
@@ -172,10 +172,9 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         if (0 !== $started) {
             return $started;
         }
-        $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: false);
-        $hostDatabaseUrl = postgresDatabaseUrl('browser', forHostNetwork: true);
-        $hostLockDsn = postgresLockDsn('browser', forHostNetwork: true);
-        assertOwnedBrowserDatabaseUrl($hostDatabaseUrl);
+        $databaseUrl = postgresDatabaseUrl('browser');
+        $lockDsn = postgresLockDsn('browser');
+        assertOwnedBrowserDatabaseUrl($databaseUrl);
 
         // Release worker/web PostgreSQL sessions before dropping the browser DB.
         stackRun('browser', ['stop', 'worker']);
@@ -190,8 +189,8 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         stackRun('browser', ['restart', 'php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
-        // Linux host networking reaches the printed loopback URL and Postgres port.
-        return report('test:browser', ['env', 'DATABASE_URL='.$hostDatabaseUrl, 'LOCK_DSN='.$hostLockDsn, 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, hostNetwork: true);
+        // Native-network tooling reaches private Postgres and the shared proxy hostname.
+        return report('test:browser', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'LIBRARIAN_PROXY_IP='.proxyAddress(), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
     });
 }
 
@@ -217,8 +216,8 @@ function appConsole(#[AsArgsAfterOptionEnd] array $arguments = [], string $isola
                 }
             }
             ensureBrowserPostgresService();
-            $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: false);
-            $lockDsn = postgresLockDsn('browser', forHostNetwork: false);
+            $databaseUrl = postgresDatabaseUrl('browser');
+            $lockDsn = postgresLockDsn('browser');
 
             return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments], networked: true);
         }
