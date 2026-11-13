@@ -117,6 +117,10 @@ final class ProjectIndexer
         $generation = $this->selectOrCreateGeneration($project, $snapshot, $signature, $rootBinding);
 
         if (!$this->needsWork($generation, $snapshot)) {
+            if ($generation->active) {
+                $this->removeObsoleteGenerations($projectId, (int) $generation->id);
+            }
+
             return false;
         }
 
@@ -603,7 +607,23 @@ final class ProjectIndexer
             return false;
         }
 
+        // Activation has committed; HTTP/filesystem work must not extend that
+        // transaction. The project execution lock still excludes other indexers.
+        $this->removeObsoleteGenerations($projectId, $generationId);
+
         return $continuationPending;
+    }
+
+    private function removeObsoleteGenerations(int $projectId, int $keepGenerationId): void
+    {
+        foreach ($this->generationRepository->findObsoleteForProject($projectId, $keepGenerationId) as $obsolete) {
+            $this->storeFactory->removeGeneration($projectId, (int) $obsolete->id);
+            // Keep the row until both stores acknowledge removal. Its manifest
+            // rows are deleted by the existing database foreign-key cascade.
+            $this->entityManager->wrapInTransaction(function () use ($obsolete): void {
+                $this->entityManager->remove($obsolete);
+            });
+        }
     }
 
     private function commitCursor(
