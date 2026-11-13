@@ -539,9 +539,29 @@ final class ProjectIndexer
             return false;
         }
 
-        $commitWitness = $generation->scanWitness ?? $freshSnapshot->witness;
+        if (null === $freshSnapshot->revision) {
+            throw IndexException::sanitized('Observational memory source revision is missing.');
+        }
 
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $commitWitness, $expectedRoot, $expectedSourceIdentity, &$activated): void {
+        // Rollback arriving during the last batch must not publish a known-obsolete
+        // boundary; the next bounded process creates a separate generation.
+        if ($freshSnapshot->revision < $scanRevision) {
+            return true;
+        }
+
+        // Same revision with a changed witness: restart reconciliation without
+        // activating a Ready boundary that is already known incomplete.
+        if ($freshSnapshot->revision === $scanRevision
+            && $freshSnapshot->witness !== ($generation->scanWitness ?? '')) {
+            $this->beginRound($generation, $freshSnapshot->revision, $freshSnapshot->witness);
+
+            return true;
+        }
+
+        $commitWitness = $generation->scanWitness ?? $freshSnapshot->witness;
+        $continuationPending = $freshSnapshot->revision > $scanRevision;
+
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $commitWitness, $continuationPending, $expectedRoot, $expectedSourceIdentity, &$activated): void {
             $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
 
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
@@ -558,7 +578,13 @@ final class ProjectIndexer
                 $this->memoryRepository->sumChunkCount($generationId),
                 $now,
             );
-            $generation->markReady($now);
+            if ($continuationPending) {
+                // Prior boundary is committed and searchable, but the UI must not
+                // claim the index is fully current while another round is queued.
+                $generation->markUpdating($now);
+            } else {
+                $generation->markReady($now);
+            }
 
             if (!$generation->active) {
                 $active = $this->generationRepository->findActiveForProject($projectId);
@@ -577,7 +603,7 @@ final class ProjectIndexer
             return false;
         }
 
-        return null !== $freshSnapshot->revision && $freshSnapshot->revision > $scanRevision;
+        return $continuationPending;
     }
 
     private function commitCursor(
