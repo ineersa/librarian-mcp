@@ -26,10 +26,10 @@ class IndexedMemory
     #[ORM\Column(type: 'string', length: 32)]
     public private(set) string $kind;
 
-    #[ORM\Column(name: 'source_id', type: 'string', length: 255)]
+    #[ORM\Column(name: 'source_id', type: 'text')]
     public private(set) string $sourceId;
 
-    #[ORM\Column(name: 'session_id', type: 'string', length: 255)]
+    #[ORM\Column(name: 'session_id', type: 'text')]
     public private(set) string $sessionId;
 
     /**

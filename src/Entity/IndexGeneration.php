@@ -43,7 +43,7 @@ class IndexGeneration
     /**
      * Keyset cursor: last processed kind|source_id during the current scan round.
      */
-    #[ORM\Column(name: 'source_cursor', type: 'string', length: 512, nullable: true)]
+    #[ORM\Column(name: 'source_cursor', type: 'text', nullable: true)]
     public private(set) ?string $sourceCursor = null;
 
     #[ORM\Column(name: 'scan_round')]

@@ -7,14 +7,16 @@ namespace App\Index\Source;
 /**
  * Bounded filesystem/source identity snapshot for one OM database.
  *
- * Identical-revision in-place restores without filesystem identity change remain
- * undetectable by revision alone; callers must not claim that case is solved.
+ * Stable identity is path+device+inode only. Mutable witness covers size/mtime/
+ * revision for cheap same-revision restore signals. An in-place restore that
+ * preserves path/dev/ino/size/mtime/revision remains undetectable.
  */
 final readonly class SourceSnapshot
 {
     public function __construct(
         public string $path,
         public string $identity,
+        public string $witness,
         public ?int $revision,
         public int $observationCount,
         public int $reflectionCount,

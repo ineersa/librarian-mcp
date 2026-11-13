@@ -1,44 +1,25 @@
 # yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 #
-# Domain-owned indexing services. Main must import this file after generic App\
-# registration, provide IndexStoreFactory, and wire INDEX_INTERVAL /
-# INDEX_EMBEDDING_SIGNATURE / LOCK_DSN (SQLite PdoStore for queue dedupe).
+# Domain-owned indexing services only. Store/runtime owns IndexSettings,
+# MemoryChunker, IndexStoreFactory, and index_execution_lock_factory.
 
 parameters:
     app.index_interval_seconds: '%env(int:INDEX_INTERVAL)%'
-    app.index_execution_lock_path: '%kernel.project_dir%/var/index-locks'
-    # Store/runtime owner replaces this with the real embedding artifact digest.
-    app.index_embedding_signature: '%env(INDEX_EMBEDDING_SIGNATURE)%'
 
 services:
     _defaults:
         autowire: true
         autoconfigure: true
 
-    App\Index\IndexSettings:
-        arguments:
-            $embeddingSignature: '%app.index_embedding_signature%'
-
-    App\Index\MemoryChunker: ~
-
     App\Index\Source\CanonicalSourceReader: ~
 
-    App\Index\ProjectIndexManager: ~
-
-    lock.index_execution.store:
-        class: Symfony\Component\Lock\Store\FlockStore
+    App\Index\ProjectIndexManager:
         arguments:
-            $lockPath: '%app.index_execution_lock_path%'
-            $removeOnRelease: true
-
-    lock.index_execution.factory:
-        class: Symfony\Component\Lock\LockFactory
-        arguments:
-            $store: '@lock.index_execution.store'
+            $indexExecutionLockFactory: '@index_execution_lock_factory'
 
     App\Index\ProjectIndexer:
         arguments:
-            $indexExecutionLockFactory: '@lock.index_execution.factory'
+            $indexExecutionLockFactory: '@index_execution_lock_factory'
 
     App\MessageHandler\IndexProjectMessageHandler: ~
 

@@ -10,18 +10,18 @@ namespace App\Index\Source;
 final readonly class CanonicalMemory
 {
     public function __construct(
-        public string $kind,
+        public MemoryKind $kind,
         public string $sourceId,
         public string $sessionId,
         public string $content,
         public int $occurredAt,
-        public ?float $relevance,
+        public ?string $relevance,
         public string $contentSignature,
     ) {
     }
 
     public function cursorKey(): string
     {
-        return $this->kind.'|'.$this->sourceId;
+        return $this->kind->value.'|'.$this->sourceId;
     }
 }

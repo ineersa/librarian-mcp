@@ -14,7 +14,6 @@ use App\Index\Source\CanonicalSourceReader;
 use App\Index\Source\SourceSnapshot;
 use App\Index\Store\IndexStoreFactory;
 use App\Index\Store\IndexStores;
-use App\Project\ProjectSourceException;
 use App\Repository\IndexGenerationRepository;
 use App\Repository\IndexedMemoryRepository;
 use App\Repository\ProjectRepository;
@@ -35,6 +34,10 @@ use Symfony\Component\Lock\LockFactory;
  */
 final class ProjectIndexer
 {
+    public const int SOURCE_BATCH_SIZE = 20;
+    public const int CLEANUP_BATCH_SIZE = 20;
+    public const int EMBEDDING_BATCH_SIZE = 4;
+
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly IndexGenerationRepository $generationRepository,
@@ -68,9 +71,13 @@ final class ProjectIndexer
 
         try {
             return $this->processLocked($projectId);
-        } catch (\Throwable $exception) {
+        } catch (IndexException $exception) {
             $this->persistSafeFailure($projectId, $exception);
             throw $exception;
+        } catch (\Throwable $exception) {
+            $safe = IndexException::sanitized('Indexing failed.', $exception);
+            $this->persistSafeFailure($projectId, $safe);
+            throw $safe;
         } finally {
             $lock->release();
         }
@@ -98,13 +105,13 @@ final class ProjectIndexer
 
         $databasePath = $project->databasePath;
         if (null === $databasePath || '' === $databasePath) {
-            throw new \RuntimeException('Project has no observational memory database path.');
+            throw IndexException::sanitized('Project has no observational memory database path.');
         }
 
-        $rootBinding = '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
+        $rootBinding = $this->rootBinding($project);
         $snapshot = $this->sourceReader->snapshot($databasePath);
         if (null === $snapshot->revision) {
-            throw new \RuntimeException('Observational memory source revision is missing.');
+            throw IndexException::sanitized('Observational memory source revision is missing.');
         }
 
         $signature = $this->settings->signature();
@@ -117,17 +124,18 @@ final class ProjectIndexer
         if (!$this->roundOpen($generation) && $this->shouldStartRound($generation, $snapshot)) {
             $this->beginRound($generation, $snapshot->revision);
             $generation = $this->requireGeneration((int) $generation->id);
+            $this->initializeFreshStoresIfNeeded($generation);
         }
 
         if (null !== $generation->sourceCursor) {
-            if ($this->processSourceBatch($generation, $snapshot)) {
+            if ($this->processSourceBatch($generation, $snapshot, $rootBinding)) {
                 return true;
             }
             $generation = $this->requireGeneration((int) $generation->id);
         }
 
         if ($this->hasUnseenParents($generation)) {
-            if ($this->cleanupUnseen($generation)) {
+            if ($this->cleanupUnseen($generation, $rootBinding)) {
                 return true;
             }
             $generation = $this->requireGeneration((int) $generation->id);
@@ -221,28 +229,39 @@ final class ProjectIndexer
         $this->entityManager->wrapInTransaction(function () use ($generationId, $revision): void {
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
             if (null === $generation) {
-                throw new \RuntimeException('Index generation disappeared before scan round start.');
+                throw IndexException::sanitized('Index generation disappeared before scan round start.');
             }
             $generation->beginScanRound($revision, $this->clock->now());
         });
     }
 
-    private function processSourceBatch(IndexGeneration $generation, SourceSnapshot $snapshot): bool
+    private function initializeFreshStoresIfNeeded(IndexGeneration $generation): void
+    {
+        // Fresh generation with no committed parents/cursor work yet: clear any
+        // orphaned Chroma/lexical state left after browser DB recreation.
+        if (null !== $generation->committedRevision || 0 !== $generation->parentCount || 0 !== $generation->chunkCount) {
+            return;
+        }
+        if ('' !== ($generation->sourceCursor ?? '')) {
+            return;
+        }
+        if ($generation->active) {
+            return;
+        }
+
+        $stores = $this->storeFactory->forGeneration((int) $generation->project->id, (int) $generation->id);
+        $stores->combined->clear(['batch_size' => 100]);
+    }
+
+    private function processSourceBatch(IndexGeneration $generation, SourceSnapshot $snapshot, string $expectedRoot): bool
     {
         $generationId = (int) $generation->id;
         $projectId = (int) $generation->project->id;
         $cursor = $generation->sourceCursor;
-        $batch = $this->sourceReader->fetchBatch($snapshot->path, $cursor, $this->settings->sourceBatchSize);
+        $batch = $this->sourceReader->fetchBatch($snapshot->path, $cursor, self::SOURCE_BATCH_SIZE);
 
         if ([] === $batch) {
-            $this->entityManager->wrapInTransaction(function () use ($generationId): void {
-                $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-                if (null === $generation) {
-                    return;
-                }
-                // End of keyset: clear cursor so cleanup/finish can run.
-                $generation->advanceCursor(null, $this->clock->now());
-            });
+            $this->commitCursor($generationId, $projectId, $expectedRoot, $snapshot->identity, null);
 
             return false;
         }
@@ -250,38 +269,47 @@ final class ProjectIndexer
         $stores = $this->storeFactory->forGeneration($projectId, $generationId);
         $lastCursor = $cursor;
         foreach ($batch as $memory) {
-            $this->reconcileParent($generation, $memory, $stores);
+            $this->reconcileParent($generation, $memory, $stores, $expectedRoot, $snapshot->identity);
             $lastCursor = $memory->cursorKey();
         }
 
-        $morePages = \count($batch) >= $this->settings->sourceBatchSize;
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $lastCursor, $morePages): void {
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation) {
-                return;
-            }
-            // Keep a cursor only while more source pages remain. Final page clears
-            // it so cleanup can detect unseen parents for this round.
-            $generation->advanceCursor($morePages ? $lastCursor : null, $this->clock->now());
-            $generation->refreshCounts(
-                $this->memoryRepository->countParents($generationId),
-                $this->memoryRepository->sumChunkCount($generationId),
-                $this->clock->now(),
-            );
-        });
+        $morePages = \count($batch) >= self::SOURCE_BATCH_SIZE;
+        $this->commitCursor(
+            $generationId,
+            $projectId,
+            $expectedRoot,
+            $snapshot->identity,
+            $morePages ? $lastCursor : null,
+        );
 
         return $morePages;
     }
 
-    private function reconcileParent(IndexGeneration $generation, CanonicalMemory $memory, IndexStores $stores): void
-    {
+    private function reconcileParent(
+        IndexGeneration $generation,
+        CanonicalMemory $memory,
+        IndexStores $stores,
+        string $expectedRoot,
+        string $expectedSourceIdentity,
+    ): void {
         $generationId = (int) $generation->id;
-        $existing = $this->memoryRepository->findCommitted($generationId, $memory->kind, $memory->sourceId);
+        $projectId = (int) $generation->project->id;
+        $existing = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
         $now = $this->clock->now();
 
         if (null !== $existing && $existing->contentSignature === $memory->contentSignature) {
-            $existing->markSeen($generation->scanRound, $now);
-            $this->entityManager->flush();
+            $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $now): void {
+                $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+                $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
+                if (null === $managed) {
+                    return;
+                }
+                $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
+                if (null === $generation) {
+                    return;
+                }
+                $managed->markSeen($generation->scanRound, $now);
+            });
 
             return;
         }
@@ -293,7 +321,7 @@ final class ProjectIndexer
         $chunkIds = $this->buildChunkIds($generation, $memory, $chunks);
         $documents = $this->buildDocuments($generation, $memory, $chunks, $chunkIds);
         if ([] !== $documents) {
-            $stores->indexer->index($documents, ['chunk_size' => $this->settings->embeddingBatchSize]);
+            $stores->indexer->index($documents, ['chunk_size' => self::EMBEDDING_BATCH_SIZE]);
         }
 
         $obsolete = [];
@@ -304,18 +332,19 @@ final class ProjectIndexer
             $stores->combined->remove($obsolete);
         }
 
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $memory, $chunkIds): void {
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $chunkIds): void {
+            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
             if (null === $generation) {
-                throw new \RuntimeException('Index generation disappeared during parent commit.');
+                throw IndexException::sanitized('Index generation disappeared during parent commit.');
             }
 
             $now = $this->clock->now();
-            $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind, $memory->sourceId);
+            $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
             if (null === $managed) {
                 $row = new IndexedMemory(
                     generation: $generation,
-                    kind: $memory->kind,
+                    kind: $memory->kind->value,
                     sourceId: $memory->sourceId,
                     sessionId: $memory->sessionId,
                     occurredAt: $memory->occurredAt,
@@ -340,6 +369,7 @@ final class ProjectIndexer
 
     /**
      * @param list<string> $chunks
+     *
      * @return list<string>
      */
     private function buildChunkIds(IndexGeneration $generation, CanonicalMemory $memory, array $chunks): array
@@ -350,7 +380,7 @@ final class ProjectIndexer
                 (int) $generation->project->id,
                 $generation->sourceIdentity,
                 $generation->signature,
-                $memory->kind,
+                $memory->kind->value,
                 $memory->sourceId,
                 $position,
                 hash('sha256', $chunk),
@@ -369,7 +399,7 @@ final class ProjectIndexer
     private function buildDocuments(IndexGeneration $generation, CanonicalMemory $memory, array $chunks, array $chunkIds): array
     {
         if (\count($chunks) !== \count($chunkIds)) {
-            throw new \RuntimeException('Chunk identity count diverged from chunk text count.');
+            throw IndexException::sanitized('Chunk identity count diverged from chunk text count.');
         }
 
         $documents = [];
@@ -377,7 +407,7 @@ final class ProjectIndexer
             $metadata = new Metadata([
                 IndexFields::PROJECT_ID => (int) $generation->project->id,
                 IndexFields::GENERATION_ID => (int) $generation->id,
-                IndexFields::KIND => $memory->kind,
+                IndexFields::KIND => $memory->kind->value,
                 IndexFields::SOURCE_ID => $memory->sourceId,
                 IndexFields::SESSION_ID => $memory->sessionId,
                 IndexFields::OCCURRED_AT => $memory->occurredAt,
@@ -401,11 +431,12 @@ final class ProjectIndexer
         return [] !== $this->memoryRepository->findUnseen((int) $generation->id, $generation->scanRound, 1);
     }
 
-    private function cleanupUnseen(IndexGeneration $generation): bool
+    private function cleanupUnseen(IndexGeneration $generation, string $expectedRoot): bool
     {
         $generationId = (int) $generation->id;
         $projectId = (int) $generation->project->id;
-        $unseen = $this->memoryRepository->findUnseen($generationId, $generation->scanRound, $this->settings->cleanupBatchSize);
+        $expectedSourceIdentity = $generation->sourceIdentity;
+        $unseen = $this->memoryRepository->findUnseen($generationId, $generation->scanRound, self::CLEANUP_BATCH_SIZE);
         if ([] === $unseen) {
             return false;
         }
@@ -424,13 +455,18 @@ final class ProjectIndexer
             $stores->combined->remove($chunkIds);
         }
 
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $memoryIds): void {
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memoryIds): void {
+            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+
             foreach ($memoryIds as $memoryId) {
                 $memory = $this->entityManager->find(IndexedMemory::class, $memoryId, LockMode::PESSIMISTIC_WRITE);
                 if (null !== $memory) {
                     $this->entityManager->remove($memory);
                 }
             }
+
+            // Flush removals before counting so parent/chunk totals are current.
+            $this->entityManager->flush();
 
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
             if (null !== $generation) {
@@ -442,7 +478,7 @@ final class ProjectIndexer
             }
         });
 
-        return \count($unseen) >= $this->settings->cleanupBatchSize;
+        return \count($unseen) >= self::CLEANUP_BATCH_SIZE;
     }
 
     private function finishRound(IndexGeneration $generation, SourceSnapshot $snapshot, string $expectedRoot): bool
@@ -454,22 +490,26 @@ final class ProjectIndexer
         }
 
         $scanRevision = $generation->scanRevision;
+        $expectedSourceIdentity = $generation->sourceIdentity;
         $activated = false;
 
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $expectedRoot, &$activated): void {
+        // Source reads stay outside the short relational publish transaction.
+        $freshSnapshot = $this->sourceReader->snapshot($snapshot->path);
+        if ($freshSnapshot->identity !== $expectedSourceIdentity) {
+            $this->logger->info('Discarding obsolete index publish after source identity replacement.', [
+                'projectId' => $projectId,
+                'generationId' => $generationId,
+            ]);
+
+            return false;
+        }
+
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $expectedRoot, $expectedSourceIdentity, &$activated): void {
+            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
             $project = $this->entityManager->find(Project::class, $projectId, LockMode::PESSIMISTIC_WRITE);
             if (null === $generation || null === $project) {
-                return;
-            }
-
-            $currentRoot = '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
-            if ($currentRoot !== $expectedRoot) {
-                $this->logger->info('Discarding obsolete index publish after directory rebinding.', [
-                    'projectId' => $projectId,
-                    'generationId' => $generationId,
-                ]);
-
                 return;
             }
 
@@ -499,10 +539,61 @@ final class ProjectIndexer
             return false;
         }
 
-        // Current source may have advanced while this round was open.
-        $fresh = $this->sourceReader->snapshot($snapshot->path);
+        return null !== $freshSnapshot->revision && $freshSnapshot->revision > $scanRevision;
+    }
 
-        return null !== $fresh->revision && $fresh->revision > $scanRevision;
+    private function commitCursor(
+        int $generationId,
+        int $projectId,
+        string $expectedRoot,
+        string $expectedSourceIdentity,
+        ?string $cursor,
+    ): void {
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $cursor): void {
+            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
+            if (null === $generation) {
+                return;
+            }
+            $generation->advanceCursor($cursor, $this->clock->now());
+            $generation->refreshCounts(
+                $this->memoryRepository->countParents($generationId),
+                $this->memoryRepository->sumChunkCount($generationId),
+                $this->clock->now(),
+            );
+        });
+    }
+
+    private function assertCurrentBinding(
+        int $projectId,
+        int $generationId,
+        string $expectedRoot,
+        string $expectedSourceIdentity,
+    ): void {
+        // find(..., PESSIMISTIC_WRITE) does not refresh an already-managed Project
+        // after external store/model work. Clear first so root/source checks see
+        // the latest committed binding before publish.
+        $this->entityManager->clear();
+
+        $project = $this->entityManager->find(Project::class, $projectId, LockMode::PESSIMISTIC_WRITE);
+        $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
+        if (null === $project || null === $generation) {
+            throw IndexException::sanitized('Project or index generation disappeared during commit.');
+        }
+
+        $currentRoot = $this->rootBinding($project);
+        if ($currentRoot !== $expectedRoot) {
+            throw IndexException::sanitized('Project directory rebinding invalidated this index checkpoint.');
+        }
+
+        if ($generation->sourceIdentity !== $expectedSourceIdentity) {
+            throw IndexException::sanitized('Source identity replacement invalidated this index checkpoint.');
+        }
+    }
+
+    private function rootBinding(Project $project): string
+    {
+        return '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
     }
 
     private function requireGeneration(int $generationId): IndexGeneration
@@ -510,13 +601,13 @@ final class ProjectIndexer
         $this->entityManager->clear();
         $generation = $this->generationRepository->find($generationId);
         if (null === $generation) {
-            throw new \RuntimeException('Index generation disappeared during processing.');
+            throw IndexException::sanitized('Index generation disappeared during processing.');
         }
 
         return $generation;
     }
 
-    private function persistSafeFailure(int $projectId, \Throwable $exception): void
+    private function persistSafeFailure(int $projectId, IndexException $exception): void
     {
         try {
             $this->entityManager->clear();
@@ -525,19 +616,11 @@ final class ProjectIndexer
                 return;
             }
 
-            $message = 'Indexing failed.';
-            if ($exception instanceof ProjectSourceException) {
-                $message = $exception->getMessage();
-            } elseif ($exception instanceof \InvalidArgumentException) {
-                $message = 'Indexing rejected invalid input.';
-            }
-
-            $generation->markError($this->clock->now(), $message);
+            $generation->markError($this->clock->now(), $exception->getMessage());
             $this->entityManager->flush();
-        } catch (\Throwable $nested) {
+        } catch (\Throwable) {
             $this->logger->error('Unable to persist sanitized index failure state.', [
                 'projectId' => $projectId,
-                'error' => $nested->getMessage(),
             ]);
         }
     }

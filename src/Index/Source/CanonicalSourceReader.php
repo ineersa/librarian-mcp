@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Index\Source;
 
-use App\Index\IndexFields;
+use App\Index\IndexException;
 use App\Project\OmSourceReader;
 use App\Project\ProjectSourceException;
-use App\Project\ProjectSourceIssueCode;
 
 /**
  * Reads retained OM observations/reflections in bounded keyset batches.
@@ -18,6 +17,8 @@ use App\Project\ProjectSourceIssueCode;
  */
 final class CanonicalSourceReader
 {
+    private const array OBSERVATION_RELEVANCE = ['low', 'medium', 'high', 'critical'];
+
     public function __construct(
         private readonly OmSourceReader $omSourceReader,
     ) {
@@ -25,7 +26,11 @@ final class CanonicalSourceReader
 
     public function snapshot(string $databasePath): SourceSnapshot
     {
-        $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
+        try {
+            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
+        } catch (ProjectSourceException $exception) {
+            throw IndexException::sanitized($exception->getMessage(), $exception);
+        }
 
         try {
             $pdo->beginTransaction();
@@ -45,7 +50,8 @@ final class CanonicalSourceReader
 
             return new SourceSnapshot(
                 path: $databasePath,
-                identity: $this->identityFor($databasePath, $revision),
+                identity: $this->identityFor($databasePath),
+                witness: $this->witnessFor($databasePath, $revision),
                 revision: $revision,
                 observationCount: $observationCount,
                 reflectionCount: $reflectionCount,
@@ -65,7 +71,11 @@ final class CanonicalSourceReader
             throw new \InvalidArgumentException('Source batch limit must be positive.');
         }
 
-        $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
+        try {
+            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
+        } catch (ProjectSourceException $exception) {
+            throw IndexException::sanitized($exception->getMessage(), $exception);
+        }
 
         try {
             $pdo->beginTransaction();
@@ -92,44 +102,65 @@ final class CanonicalSourceReader
     private function queryBatch(\PDO $pdo, ?string $cursor, int $limit): array
     {
         [$cursorKind, $cursorId] = $this->parseCursor($cursor);
+        $memories = [];
+        $started = false;
 
-        $sql = <<<'SQL'
-            SELECT kind, source_id, session_id, content, occurred_at, relevance
-            FROM (
-                SELECT
-                    'observation' AS kind,
-                    observation_id AS source_id,
-                    run_id AS session_id,
-                    content AS content,
-                    CAST(strftime('%s', timestamp) AS INTEGER) AS occurred_at,
-                    relevance AS relevance
-                FROM om_observation
-                UNION ALL
-                SELECT
-                    'reflection' AS kind,
-                    reflection_id AS source_id,
-                    run_id AS session_id,
-                    content AS content,
-                    CAST(strftime('%s', created_at) AS INTEGER) AS occurred_at,
-                    NULL AS relevance
-                FROM om_reflection
-            ) AS memories
-            WHERE (:cursor_kind IS NULL)
-               OR (kind > :cursor_kind)
-               OR (kind = :cursor_kind AND source_id > :cursor_id)
-            ORDER BY kind ASC, source_id ASC
-            LIMIT :limit
-            SQL;
+        foreach (MemoryKind::keysetOrder() as $kind) {
+            if (null !== $cursorKind && !$started) {
+                if ($kind->value < $cursorKind->value) {
+                    continue;
+                }
+                $started = true;
+            } else {
+                $started = true;
+            }
+
+            $remaining = $limit - \count($memories);
+            if ($remaining < 1) {
+                break;
+            }
+
+            $afterId = (null !== $cursorKind && $kind === $cursorKind) ? $cursorId : null;
+            foreach ($this->queryKind($pdo, $kind, $afterId, $remaining) as $memory) {
+                $memories[] = $memory;
+            }
+        }
+
+        return $memories;
+    }
+
+    /**
+     * @return list<CanonicalMemory>
+     */
+    private function queryKind(\PDO $pdo, MemoryKind $kind, ?string $afterId, int $limit): array
+    {
+        $idColumn = $kind->idColumn();
+        $dateColumn = $kind->dateColumn();
+        $relevanceSelect = MemoryKind::Observation === $kind ? 'relevance' : 'NULL AS relevance';
+
+        // Per-table PK keyset. Avoid sorting a full UNION for every page.
+        $sql = \sprintf(
+            'SELECT %s AS source_id, run_id AS session_id, content, %s AS occurred_raw, %s
+             FROM %s
+             WHERE (:after_id IS NULL OR %s > :after_id)
+             ORDER BY %s ASC
+             LIMIT :limit',
+            $idColumn,
+            $dateColumn,
+            $relevanceSelect,
+            $kind->table(),
+            $idColumn,
+            $idColumn,
+        );
 
         $statement = $pdo->prepare($sql);
-        $statement->bindValue(':cursor_kind', $cursorKind);
-        $statement->bindValue(':cursor_id', $cursorId);
+        $statement->bindValue(':after_id', $afterId);
         $statement->bindValue(':limit', $limit, \PDO::PARAM_INT);
         $statement->execute();
 
         $memories = [];
         foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
-            $memories[] = $this->hydrate($row);
+            $memories[] = $this->hydrate($kind, $row);
         }
 
         return $memories;
@@ -138,42 +169,41 @@ final class CanonicalSourceReader
     /**
      * @param array<string, mixed> $row
      */
-    private function hydrate(array $row): CanonicalMemory
+    private function hydrate(MemoryKind $kind, array $row): CanonicalMemory
     {
-        $kind = $row['kind'] ?? null;
         $sourceId = $row['source_id'] ?? null;
         $sessionId = $row['session_id'] ?? null;
         $content = $row['content'] ?? null;
-        $occurredAt = $row['occurred_at'] ?? null;
+        $occurredRaw = $row['occurred_raw'] ?? null;
         $relevance = $row['relevance'] ?? null;
 
-        if (!\is_string($kind) || (IndexFields::KIND_OBSERVATION !== $kind && IndexFields::KIND_REFLECTION !== $kind)) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Canonical memory kind is invalid.');
-        }
         if (!\is_string($sourceId) || '' === $sourceId) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Canonical memory identity is missing.');
+            throw IndexException::sanitized('Canonical memory identity is missing.');
         }
         if (!\is_string($sessionId) || '' === $sessionId) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Canonical memory session identity is missing.');
+            throw IndexException::sanitized('Canonical memory session identity is missing.');
         }
         if (!\is_string($content)) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Canonical memory content is missing.');
-        }
-        if (!\is_int($occurredAt) && !(is_numeric($occurredAt) && (string) (int) $occurredAt === (string) $occurredAt)) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Canonical memory date is missing or invalid.');
-        }
-        if (null !== $relevance && !\is_int($relevance) && !\is_float($relevance)) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Canonical memory relevance is invalid.');
+            throw IndexException::sanitized('Canonical memory content is missing.');
         }
 
-        $occurred = (int) $occurredAt;
-        $relevanceValue = null === $relevance ? null : (float) $relevance;
+        $occurredAt = $this->normalizeOccurredAt($occurredRaw);
+        $relevanceValue = null;
+        if (MemoryKind::Observation === $kind) {
+            if (!\is_string($relevance) || !\in_array($relevance, self::OBSERVATION_RELEVANCE, true)) {
+                throw IndexException::sanitized('Canonical observation relevance is missing or invalid.');
+            }
+            $relevanceValue = $relevance;
+        } elseif (null !== $relevance) {
+            throw IndexException::sanitized('Canonical reflection relevance must be null.');
+        }
+
         $signature = hash('sha256', json_encode([
-            $kind,
+            $kind->value,
             $sourceId,
             $sessionId,
             $content,
-            $occurred,
+            $occurredAt,
             $relevanceValue,
         ], \JSON_THROW_ON_ERROR));
 
@@ -182,14 +212,35 @@ final class CanonicalSourceReader
             sourceId: $sourceId,
             sessionId: $sessionId,
             content: $content,
-            occurredAt: $occurred,
+            occurredAt: $occurredAt,
             relevance: $relevanceValue,
             contentSignature: $signature,
         );
     }
 
+    private function normalizeOccurredAt(mixed $raw): int
+    {
+        if (!\is_string($raw) || '' === trim($raw)) {
+            throw IndexException::sanitized('Canonical memory date is missing or invalid.');
+        }
+
+        // OM stores local-looking timestamps without timezone; treat as UTC.
+        $normalized = str_replace('T', ' ', trim($raw));
+        if (1 === preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $normalized)) {
+            $normalized .= ':00';
+        }
+
+        try {
+            $date = new \DateTimeImmutable($normalized, new \DateTimeZone('UTC'));
+        } catch (\Exception $exception) {
+            throw IndexException::sanitized('Canonical memory date is missing or invalid.', $exception);
+        }
+
+        return $date->getTimestamp();
+    }
+
     /**
-     * @return array{0: ?string, 1: ?string}
+     * @return array{0: ?MemoryKind, 1: ?string}
      */
     private function parseCursor(?string $cursor): array
     {
@@ -202,7 +253,12 @@ final class CanonicalSourceReader
             throw new \InvalidArgumentException('Source cursor must be kind|source_id.');
         }
 
-        return [$parts[0], $parts[1]];
+        $kind = MemoryKind::tryFrom($parts[0]);
+        if (null === $kind) {
+            throw new \InvalidArgumentException('Source cursor kind is unsupported.');
+        }
+
+        return [$kind, $parts[1]];
     }
 
     private function fetchRevision(\PDO $pdo): ?int
@@ -215,37 +271,46 @@ final class CanonicalSourceReader
         return (int) $value;
     }
 
-    private function identityFor(string $databasePath, ?int $revision): string
+    private function identityFor(string $databasePath): string
     {
         clearstatcache(true, $databasePath);
         $stat = @stat($databasePath);
         $dev = \is_array($stat) ? ($stat['dev'] ?? null) : null;
         $ino = \is_array($stat) ? ($stat['ino'] ?? null) : null;
-        $size = \is_array($stat) ? ($stat['size'] ?? null) : null;
-        $mtime = \is_array($stat) ? ($stat['mtime'] ?? null) : null;
 
-        // Revision alone cannot prove an in-place identical-revision restore.
-        // Filesystem identity and bounded size/mtime witnesses detect replacement.
         return hash('sha256', json_encode([
             realpath($databasePath) ?: $databasePath,
             $dev,
             $ino,
+        ], \JSON_THROW_ON_ERROR));
+    }
+
+    private function witnessFor(string $databasePath, ?int $revision): string
+    {
+        clearstatcache(true, $databasePath);
+        $stat = @stat($databasePath);
+        $size = \is_array($stat) ? ($stat['size'] ?? null) : null;
+        $mtime = \is_array($stat) ? ($stat['mtime'] ?? null) : null;
+
+        // Cheap mutable witness only. Same-revision restores that also preserve
+        // size/mtime remain invisible; do not promote this into generation identity.
+        return hash('sha256', json_encode([
             $size,
             $mtime,
             $revision,
         ], \JSON_THROW_ON_ERROR));
     }
 
-    private function wrapReadFailure(\Throwable $exception): ProjectSourceException
+    private function wrapReadFailure(\Throwable $exception): IndexException
     {
-        if ($exception instanceof ProjectSourceException) {
+        if ($exception instanceof IndexException) {
             return $exception;
         }
 
-        return new ProjectSourceException(
-            ProjectSourceIssueCode::OmDatabaseUnreadable,
-            'Unable to read observational memory source batch.',
-            previous: $exception,
-        );
+        if ($exception instanceof ProjectSourceException) {
+            return IndexException::sanitized($exception->getMessage(), $exception);
+        }
+
+        return IndexException::sanitized('Unable to read observational memory source batch.', $exception);
     }
 }
