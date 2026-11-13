@@ -132,6 +132,27 @@
             "ref": "e805aba9eff5372e2d149a9ff56566769e22819d"
         }
     },
+    "symfony/ai-chroma-db-store": {
+        "version": "0.15",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "0.1",
+            "ref": "e99fe77e913e0047db0377846e0cabf0c023895c"
+        }
+    },
+    "symfony/ai-generic-platform": {
+        "version": "0.15",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "0.1",
+            "ref": "a3919116f59f52377b59cfffe889711f8351d472"
+        },
+        "files": [
+            "config/packages/ai_generic_platform.yaml"
+        ]
+    },
     "symfony/asset-mapper": {
         "version": "8.0",
         "recipe": {
@@ -214,6 +235,18 @@
             "src/Controller/.gitignore",
             "src/Kernel.php",
             ".editorconfig"
+        ]
+    },
+    "symfony/lock": {
+        "version": "8.2",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "8.2",
+            "ref": "472277fb1c5d4445a9f474a9c2dd66c9b59a3167"
+        },
+        "files": [
+            "config/packages/lock.yaml"
         ]
     },
     "symfony/maker-bundle": {
@@ -299,6 +332,18 @@
         "files": [
             "config/packages/routing.yaml",
             "config/routes.yaml"
+        ]
+    },
+    "symfony/scheduler": {
+        "version": "8.2",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "8.2",
+            "ref": "b77083bd73a4da995d904c6dda1b290aa582c02f"
+        },
+        "files": [
+            "config/packages/scheduler.yaml"
         ]
     },
     "symfony/security-bundle": {
