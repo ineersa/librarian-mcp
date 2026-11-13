@@ -18,6 +18,8 @@ use App\Project\ProjectSourceException;
 final class CanonicalSourceReader
 {
     private const array OBSERVATION_RELEVANCE = ['low', 'medium', 'high', 'critical'];
+    private const int DATABASE_HEADER_BYTES = 100;
+    private const int WAL_HEADER_BYTES = 32;
 
     public function __construct(
         private readonly OmSourceReader $omSourceReader,
@@ -277,9 +279,13 @@ final class CanonicalSourceReader
         $stat = @stat($databasePath);
         $dev = \is_array($stat) ? ($stat['dev'] ?? null) : null;
         $ino = \is_array($stat) ? ($stat['ino'] ?? null) : null;
+        $resolved = realpath($databasePath);
+        if (false === $resolved) {
+            $resolved = $databasePath;
+        }
 
         return hash('sha256', json_encode([
-            realpath($databasePath) ?: $databasePath,
+            $resolved,
             $dev,
             $ino,
         ], \JSON_THROW_ON_ERROR));
@@ -291,14 +297,55 @@ final class CanonicalSourceReader
         $stat = @stat($databasePath);
         $size = \is_array($stat) ? ($stat['size'] ?? null) : null;
         $mtime = \is_array($stat) ? ($stat['mtime'] ?? null) : null;
+        $ctime = \is_array($stat) ? ($stat['ctime'] ?? null) : null;
+        $databaseHeader = $this->boundedHeaderHash($databasePath, self::DATABASE_HEADER_BYTES);
+
+        $walPath = $databasePath.'-wal';
+        $walHeader = null;
+        $walSize = null;
+        $walMtime = null;
+        $walCtime = null;
+        if (is_file($walPath)) {
+            clearstatcache(true, $walPath);
+            $walStat = @stat($walPath);
+            $walSize = \is_array($walStat) ? ($walStat['size'] ?? null) : null;
+            $walMtime = \is_array($walStat) ? ($walStat['mtime'] ?? null) : null;
+            $walCtime = \is_array($walStat) ? ($walStat['ctime'] ?? null) : null;
+            $walHeader = $this->boundedHeaderHash($walPath, self::WAL_HEADER_BYTES);
+        }
 
         // Cheap mutable witness only. Same-revision restores that also preserve
-        // size/mtime remain invisible; do not promote this into generation identity.
+        // every bounded witness field remain invisible without full verification.
         return hash('sha256', json_encode([
             $size,
             $mtime,
+            $ctime,
+            $databaseHeader,
+            $walSize,
+            $walMtime,
+            $walCtime,
+            $walHeader,
             $revision,
         ], \JSON_THROW_ON_ERROR));
+    }
+
+    private function boundedHeaderHash(string $path, int $bytes): ?string
+    {
+        $handle = @fopen($path, 'rb');
+        if (false === $handle) {
+            return null;
+        }
+
+        try {
+            $payload = fread($handle, $bytes);
+            if (!\is_string($payload) || '' === $payload) {
+                return null;
+            }
+
+            return hash('sha256', $payload);
+        } finally {
+            fclose($handle);
+        }
     }
 
     private function wrapReadFailure(\Throwable $exception): IndexException

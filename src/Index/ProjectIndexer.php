@@ -120,11 +120,19 @@ final class ProjectIndexer
             return false;
         }
 
-        if (!$this->roundOpen($generation) && $this->shouldStartRound($generation, $snapshot)) {
-            $this->beginRound($generation, $snapshot->revision);
+        if ($this->shouldRestartOpenRound($generation, $snapshot)) {
+            // Same scan revision with a changed witness: restart canonical pass
+            // from the beginning using the next scanRound for unseen cleanup.
+            $this->beginRound($generation, $snapshot->revision, $snapshot->witness);
             $generation = $this->requireGeneration((int) $generation->id);
-            $this->initializeFreshStoresIfNeeded($generation);
+        } elseif (!$this->roundOpen($generation) && $this->shouldStartRound($generation, $snapshot)) {
+            $this->beginRound($generation, $snapshot->revision, $snapshot->witness);
+            $generation = $this->requireGeneration((int) $generation->id);
         }
+
+        // Empty never-active first generation must clear orphaned stores even when
+        // the round was already open after a failure before the first write.
+        $this->initializeFreshStoresIfNeeded($generation);
 
         if (null !== $generation->sourceCursor) {
             if ($this->processSourceBatch($generation, $snapshot, $rootBinding)) {
@@ -153,7 +161,12 @@ final class ProjectIndexer
             return true;
         }
 
-        return $snapshot->revision > $generation->committedRevision;
+        if ($snapshot->revision > $generation->committedRevision) {
+            return true;
+        }
+
+        return $snapshot->revision === $generation->committedRevision
+            && $snapshot->witness !== $generation->committedSourceWitness;
     }
 
     private function shouldStartRound(IndexGeneration $generation, SourceSnapshot $snapshot): bool
@@ -162,7 +175,27 @@ final class ProjectIndexer
             return true;
         }
 
-        return $snapshot->revision > $generation->committedRevision;
+        if ($snapshot->revision > $generation->committedRevision) {
+            return true;
+        }
+
+        // Equal revision with a changed witness reconciles in the same generation.
+        return $snapshot->revision === $generation->committedRevision
+            && $snapshot->witness !== $generation->committedSourceWitness;
+    }
+
+    private function shouldRestartOpenRound(IndexGeneration $generation, SourceSnapshot $snapshot): bool
+    {
+        if (!$this->roundOpen($generation) || null === $generation->scanRevision) {
+            return false;
+        }
+
+        // A higher revision arriving mid-pass must finish the current boundary first.
+        if ($snapshot->revision !== $generation->scanRevision) {
+            return false;
+        }
+
+        return $snapshot->witness !== $generation->scanWitness;
     }
 
     private function roundOpen(IndexGeneration $generation): bool
@@ -188,9 +221,10 @@ final class ProjectIndexer
         if (null !== $latest && $latest->matchesBinding($rootBinding, $snapshot->identity, $signature)) {
             // Revision rollback against the same filesystem identity still needs a
             // fresh generation so committed parents cannot mix eras.
-            if (null !== $latest->committedRevision
-                && null !== $snapshot->revision
-                && $snapshot->revision < $latest->committedRevision) {
+            if (null !== $snapshot->revision && (
+                (null !== $latest->committedRevision && $snapshot->revision < $latest->committedRevision)
+                || (null !== $latest->scanRevision && $snapshot->revision < $latest->scanRevision)
+            )) {
                 return $this->createGeneration($project, $snapshot, $signature, $rootBinding);
             }
 
@@ -222,22 +256,24 @@ final class ProjectIndexer
         return $generation;
     }
 
-    private function beginRound(IndexGeneration $generation, int $revision): void
+    private function beginRound(IndexGeneration $generation, int $revision, string $witness): void
     {
         $generationId = (int) $generation->id;
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $revision): void {
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $revision, $witness): void {
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
             if (null === $generation) {
                 throw IndexException::sanitized('Index generation disappeared before scan round start.');
             }
-            $generation->beginScanRound($revision, $this->clock->now());
+            $generation->beginScanRound($revision, $witness, $this->clock->now());
         });
     }
 
     private function initializeFreshStoresIfNeeded(IndexGeneration $generation): void
     {
         // Fresh generation with no committed parents/cursor work yet: clear any
-        // orphaned Chroma/lexical state left after browser DB recreation.
+        // orphaned Chroma/lexical state left after browser DB recreation. Never
+        // clear after committed parents/cursor, including equal-revision witness
+        // restarts that reuse existing parent rows.
         if (null !== $generation->committedRevision || 0 !== $generation->parentCount || 0 !== $generation->chunkCount) {
             return;
         }
@@ -503,7 +539,9 @@ final class ProjectIndexer
             return false;
         }
 
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $expectedRoot, $expectedSourceIdentity, &$activated): void {
+        $commitWitness = $generation->scanWitness ?? $freshSnapshot->witness;
+
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $commitWitness, $expectedRoot, $expectedSourceIdentity, &$activated): void {
             $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
 
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
@@ -515,6 +553,7 @@ final class ProjectIndexer
             $now = $this->clock->now();
             $generation->commitRevision(
                 $scanRevision,
+                $commitWitness,
                 $this->memoryRepository->countParents($generationId),
                 $this->memoryRepository->sumChunkCount($generationId),
                 $now,

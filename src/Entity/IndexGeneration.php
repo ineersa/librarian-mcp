@@ -56,10 +56,22 @@ class IndexGeneration
     public private(set) ?int $scanRevision = null;
 
     /**
+     * Mutable source witness captured when the current scan round started.
+     */
+    #[ORM\Column(name: 'scan_witness', type: 'string', length: 64, nullable: true)]
+    public private(set) ?string $scanWitness = null;
+
+    /**
      * Last source revision fully committed for this generation.
      */
     #[ORM\Column(name: 'committed_revision', nullable: true)]
     public private(set) ?int $committedRevision = null;
+
+    /**
+     * Mutable source witness captured with the last committed revision.
+     */
+    #[ORM\Column(name: 'committed_source_witness', type: 'string', length: 64, nullable: true)]
+    public private(set) ?string $committedSourceWitness = null;
 
     #[ORM\Column(name: 'parent_count')]
     public private(set) int $parentCount = 0;
@@ -160,10 +172,11 @@ class IndexGeneration
         $this->touch($now);
     }
 
-    public function beginScanRound(int $sourceRevision, \DateTimeImmutable $now): void
+    public function beginScanRound(int $sourceRevision, string $sourceWitness, \DateTimeImmutable $now): void
     {
         ++$this->scanRound;
         $this->scanRevision = $sourceRevision;
+        $this->scanWitness = $sourceWitness;
         // Empty string marks the start of the keyset; null means source pass finished.
         $this->sourceCursor = '';
         if (IndexState::Ready === $this->state || IndexState::Error === $this->state) {
@@ -180,9 +193,15 @@ class IndexGeneration
         $this->touch($now);
     }
 
-    public function commitRevision(int $revision, int $parentCount, int $chunkCount, \DateTimeImmutable $now): void
-    {
+    public function commitRevision(
+        int $revision,
+        string $sourceWitness,
+        int $parentCount,
+        int $chunkCount,
+        \DateTimeImmutable $now,
+    ): void {
         $this->committedRevision = $revision;
+        $this->committedSourceWitness = $sourceWitness;
         $this->parentCount = $parentCount;
         $this->chunkCount = $chunkCount;
         $this->sourceCursor = null;

@@ -54,7 +54,7 @@ final class IndexProjectCommand extends Command
             return Command::FAILURE;
         }
 
-        if ($input->getOption('drain')) {
+        if (true === $input->getOption('drain')) {
             $rounds = 0;
             do {
                 $continue = $this->projectIndexer->process($projectId);
