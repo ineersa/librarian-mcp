@@ -47,29 +47,96 @@ function stackProject(string $mode): string
 
 function proxyPort(): string
 {
-    $port = getenv('LIBRARIAN_PROXY_PORT');
-    if (false === $port || '' === $port) {
-        $port = null;
-        foreach (['.env.local', '.env'] as $file) {
-            $path = \dirname(__DIR__).'/'.$file;
-            if (is_link($path) || !is_file($path)) {
-                continue;
-            }
-            $values = new Dotenv()->parse((string) file_get_contents($path), $path);
-            if (isset($values['LIBRARIAN_PROXY_PORT'])) {
-                $port = $values['LIBRARIAN_PROXY_PORT'];
-                break;
-            }
-        }
-        if (null === $port || '' === $port) {
-            $port = '8082';
-        }
-    }
+    return explicitProxyPort() ?? publishedProxyPort() ?? '8082';
+}
+
+function validateProxyPort(string $port): string
+{
     if (!ctype_digit($port) || (int) $port < 1024 || (int) $port > 65535) {
         throw new \RuntimeException('Invalid LIBRARIAN_PROXY_PORT.');
     }
 
     return $port;
+}
+
+function explicitProxyPort(): ?string
+{
+    $port = getenv('LIBRARIAN_PROXY_PORT');
+    if (false !== $port && '' !== $port) {
+        return validateProxyPort($port);
+    }
+
+    $path = \dirname(__DIR__).'/.env.local';
+    if (is_link($path) || !is_file($path)) {
+        return null;
+    }
+
+    $values = (new Dotenv())->parse((string) file_get_contents($path), $path);
+    if (!isset($values['LIBRARIAN_PROXY_PORT']) || '' === $values['LIBRARIAN_PROXY_PORT']) {
+        return null;
+    }
+
+    return validateProxyPort($values['LIBRARIAN_PROXY_PORT']);
+}
+
+function publishedProxyPort(): ?string
+{
+    if (!assertProxyOwner('container', proxyName())) {
+        return null;
+    }
+
+    $bindings = trim(developmentProcess(['docker', 'inspect', '--format', '{{json .HostConfig.PortBindings}}', proxyName()]));
+    $decoded = json_decode($bindings, true);
+    if (!\is_array($decoded) || [] === $decoded) {
+        throw new \RuntimeException('The shared development proxy has no published port bindings.');
+    }
+
+    $ports = [];
+    foreach ($decoded as $containerPort => $hostBindings) {
+        if (!\is_string($containerPort) || !\is_array($hostBindings) || [] === $hostBindings) {
+            continue;
+        }
+        if (1 !== preg_match('/\A(\d+)\/tcp\z/D', $containerPort, $matches)) {
+            continue;
+        }
+        foreach ($hostBindings as $binding) {
+            if (!\is_array($binding)) {
+                continue;
+            }
+            $hostPort = (string) ($binding['HostPort'] ?? '');
+            if ('' === $hostPort) {
+                continue;
+            }
+            if ($hostPort !== $matches[1]) {
+                throw new \RuntimeException('The shared development proxy publish mapping is not host:container on the same port.');
+            }
+            $ports[$hostPort] = true;
+        }
+    }
+    if (1 !== \count($ports)) {
+        throw new \RuntimeException('The shared development proxy must publish exactly one TCP port.');
+    }
+
+    return validateProxyPort(array_key_first($ports));
+}
+
+function assertProxyPortCompatible(): void
+{
+    $explicit = explicitProxyPort();
+    if (null === $explicit) {
+        return;
+    }
+
+    $published = publishedProxyPort();
+    if (null === $published || $published === $explicit) {
+        return;
+    }
+
+    throw new \RuntimeException(\sprintf(
+        'Explicit LIBRARIAN_PROXY_PORT=%s conflicts with the shared proxy published on %s. Run `vendor/bin/castor dev:proxy:stop --for-upgrade`, then start stacks again to recreate the proxy on the requested port.',
+        $explicit,
+        $published,
+    ));
 }
 
 function stackUrl(string $mode): string
@@ -456,6 +523,7 @@ function developmentStack(string $mode, string $action): int
                 }
                 ensureStackNetwork($mode);
                 stackRun($mode, ['build']);
+                assertProxyPortCompatible();
                 writeProxyConfig($state, $routes);
                 ensureProxy($state);
                 stackRun($mode, ['up', '-d', '--wait']);
@@ -464,6 +532,7 @@ function developmentStack(string $mode, string $action): int
                 stackRun($mode, ['down']);
                 unset($routes[$hostname]);
             }
+            assertProxyPortCompatible();
             writeProxyConfig($state, $routes);
             if (assertProxyOwner('container', proxyName()) && 'true' === trim(developmentProcess(['docker', 'inspect', '--format', '{{.State.Running}}', proxyName()]))) {
                 developmentProcess(['docker', 'exec', proxyName(), 'frankenphp', 'reload', '--config', '/etc/librarian/Caddyfile']);
