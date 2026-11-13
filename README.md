@@ -1,15 +1,16 @@
 # Librarian MCP
 
-Librarian MCP is a Symfony 8.2.0-BETA1 application that registers local Hatfield projects and discovers their observational-memory / session sources read-only for later shared retrieval. This prerelease was explicitly owner-approved; see [upgrade notes](docs/framework-upgrade.md). The current product path is project registration and source discovery ([project sources](docs/project-sources.md)); that supersedes the earlier Git/Vera library workflow described historically in the upgrade notes.
+Librarian MCP is a Symfony 8.2.0-BETA1 application that registers local Hatfield projects, discovers their observational-memory / session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. This prerelease was explicitly owner-approved; see [framework compatibility](docs/framework-upgrade.md). The product path is project registration, source discovery, and derived indexing ([project sources](docs/project-sources.md), [indexing design](docs/indexing-design.md)).
 
 It provides:
 
 - an admin UI (EasyAdmin) to register/manage local projects
 - async read-only source discovery (Messenger worker)
-- project health and discovered source metadata in admin
-- HTTP MCP at `/_mcp` (token optional; tools arrive in plan 05)
+- project health, discovered source metadata, and index status in admin
+- Index now / Search memory over the committed active generation
+- HTTP MCP at `/_mcp` (token optional; memory tools arrive in plan 05)
 
-Under the hood it does **not** clone repositories or run Vera. Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration state in its own database.
+Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its shared PostgreSQL + pgvector database (Doctrine metadata and official Symfony AI Postgres store tables). It does not clone repositories.
 
 ## Table of contents
 
@@ -29,6 +30,7 @@ This is a shared local memory service for registered Hatfield projects:
 
 - **Project catalog + health** (`pending` / `scanning` / `ready` / `error`)
 - **Async read-only discovery** (so scans do not block web requests)
+- **Derived hybrid indexing** (CodeRank 768-dim vectors via the official Symfony AI Postgres store + local BGE; stock weighted hybrid/`ts_rank`, not BM25/RRF)
 - **Stable project identity** (auto-increment ID survives rescans and explicit path rebinds)
 - **Optional MCP token auth** (admin/login remain protected; supplied tokens are still validated)
 - **No public MCP tools yet** — `tools/list` is empty until plan 05
@@ -37,6 +39,7 @@ Architecture docs:
 
 - [Architecture overview](docs/ARCHITECTURE.md)
 - [Project sources](docs/project-sources.md)
+- [Indexing design](docs/indexing-design.md)
 - [MCP contract](docs/MCP.md)
 
 ---
@@ -58,7 +61,10 @@ Edit `.env.prod.local` and set at least:
 - `MCP_ALLOWED_HOSTS` (CSV; include the external hostname without scheme or port)
 - `HATFIELD_USER_HOME` (required logical Hatfield home context)
 - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
-- `PROJECT_BROWSE_ROOT` for the picker start path
+- `DATABASE_URL` (shared Doctrine + store Postgres)
+- `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
+- `BGE_URL`, `BGE_MODEL`
+- `INDEX_INTERVAL`, `LOCK_DSN`
 - `MERCURE_JWT_SECRET`
 - `MERCURE_PUBLISHER_JWT_KEY`
 - `MERCURE_SUBSCRIBER_JWT_KEY`
@@ -124,12 +130,13 @@ See [docs/project-sources.md](docs/project-sources.md) for the registration cont
 
 Summary:
 
-- Register a service-visible project directory from admin (directory picker starts at `PROJECT_BROWSE_ROOT`)
+- Register a project by entering its absolute, service-visible directory path in admin
 - Unique case-insensitive trimmed names, canonical directories, and normalized Git origins
 - Explicit admin path changes rebind the same project ID; they do not merge by name/origin
-- Discovery is read-only; removing a registration never deletes source trees, `.hatfield`, OM databases, or journals
-- `ready` means sources were discovered, not indexed; last index remains “not yet”; source journal counts are not an index backlog
-- Periodic indexing/scheduling is deferred to plan 04
+- Discovery is read-only; removing a registration deletes owned derived indexes but never source trees, `.hatfield`, OM databases, or journals
+- `ready` means sources were discovered, not indexed; source journal counts are not an index backlog
+- Admin Index now / Search memory operate on Librarian-owned derived data; MCP memory tools remain plan 05
+- Design details: [indexing design](docs/indexing-design.md); validation status: [indexing validation](docs/indexing-validation.md)
 
 ---
 
@@ -137,38 +144,44 @@ Summary:
 
 ### Runtime / deployment
 
-- `APP_HTTP_BIND`, `APP_HTTP_PORT`  
+- `APP_HTTP_BIND`, `APP_HTTP_PORT`
   Host bind/port for the app container (from `compose.prod.yaml`).
-- `SERVER_NAME`  
+- `SERVER_NAME`
   Caddy/FrankenPHP server name mode.
-- `DOCKER_DNS_PRIMARY`, `DOCKER_DNS_SECONDARY`  
+- `DOCKER_DNS_PRIMARY`, `DOCKER_DNS_SECONDARY`
   DNS override for container resolution reliability.
-- `PROJECTS_HOST_PATH`  
+- `PROJECTS_HOST_PATH`
   Host path mounted read-only into the service as `/projects` (default `.`).
-- `PROJECT_BROWSE_ROOT`  
-  Starting directory for the admin directory picker (not a security allowlist).
 
 ### Symfony / app
 
 - `APP_ENV` (`prod` in production)
-- `APP_SECRET`  
+- `APP_SECRET`
   Required app secret.
-- `DEFAULT_URI`  
+- `DEFAULT_URI`
   Canonical base URL.
-- `HATFIELD_USER_HOME`  
+- `HATFIELD_USER_HOME`
   Required logical Hatfield user-home context for settings/path resolution.
-- `HATFIELD_APP_ROOT`  
+- `HATFIELD_APP_ROOT`
   Optional unless settings use `%kernel.project_dir%`.
-- `HATFIELD_PATH_MAPPINGS`  
+- `HATFIELD_PATH_MAPPINGS`
   Optional JSON longest-prefix host→service path mappings.
+- `DATABASE_URL`
+  Shared PostgreSQL + pgvector for Doctrine metadata and official store tables.
+- `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
+  Local CodeRankEmbed endpoint, model alias, and immutable artifact digest.
+- `BGE_URL`, `BGE_MODEL`
+  Local BGE reranker endpoint/model (Voyage request client used only as protocol adapter).
+- `INDEX_INTERVAL`, `LOCK_DSN`
+  Scheduler interval (`CallbackMessageProvider` yields indexing jobs) and shared lock DSN.
 
 ### Mercure
 
-- `MERCURE_PUBLIC_URL`  
+- `MERCURE_PUBLIC_URL`
   Browser-facing Mercure URL.
-- `MERCURE_JWT_SECRET`  
+- `MERCURE_JWT_SECRET`
   Symfony Mercure bundle secret.
-- `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`  
+- `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`
   Hub signing keys used by Caddy/Mercure.
 
 ### Security / MCP
@@ -185,7 +198,8 @@ Summary:
 
 ### Storage
 
-- Librarian app DB / derived registration state: `data/app` (dev) / production data mount
+- Shared PostgreSQL + pgvector database for app metadata and generation-scoped store tables
+- Scheduler freshness via Messenger `scheduler_default` (`INDEX_INTERVAL`, default 60s)
 - Registered project sources stay on the mounted project tree (`/projects` and optional `compose.sources.yaml` overlays)
 - Do not commit private project settings, OM databases, or session journals as fixtures
 
@@ -225,7 +239,7 @@ Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover tasks 
 
 ### Framework upgrade gate
 
-On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions and recorded checks. Product behavior after plan 03 is project registration / source discovery, not the historical Git/Vera library path.
+On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [framework compatibility](docs/framework-upgrade.md) for dependency decisions, [indexing design](docs/indexing-design.md) for the architecture, and [indexing validation](docs/indexing-validation.md) for recorded checks.
 
 ---
 
@@ -241,6 +255,8 @@ See [TESTING.md](TESTING.md) for Playwright policy, isolated browser stack (`LIB
 - [Server deployment](docs/server-deployment.md)
 - [Castor command guide](docs/castor.md)
 - [Project sources](docs/project-sources.md)
+- [Indexing design](docs/indexing-design.md)
+- [Indexing validation](docs/indexing-validation.md)
 - [Mercure notes](docs/mercure.md)
 - [Architecture overview](docs/ARCHITECTURE.md)
 - [MCP contract](docs/MCP.md)

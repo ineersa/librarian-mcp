@@ -38,9 +38,7 @@ final class OmSourceReader
             $pdo->beginTransaction();
 
             try {
-                $applied = $this->readAppliedVersions($pdo);
-                $this->assertSupportedSchema($applied);
-                $this->assertRequiredTables($pdo);
+                $applied = $this->validateSchema($pdo);
 
                 $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
                 $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
@@ -73,6 +71,35 @@ final class OmSourceReader
         } finally {
             $pdo = null;
         }
+    }
+
+    /**
+     * Shared read-only PDO opener for indexing and discovery.
+     *
+     * Callers own short read transactions and must close the connection before
+     * model or derived-store work. Never migrates or writes source tables.
+     */
+    public function openReadonlyConnection(string $databasePath): \PDO
+    {
+        if (!is_file($databasePath)) {
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseMissing, 'Observational memory database file is missing.');
+        }
+
+        if (!is_readable($databasePath)) {
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Observational memory database file is unreadable.');
+        }
+
+        return $this->openReadonly($databasePath);
+    }
+
+    /** @return list<string> */
+    public function validateSchema(\PDO $pdo): array
+    {
+        $applied = $this->readAppliedVersions($pdo);
+        $this->assertSupportedSchema($applied);
+        $this->assertRequiredTables($pdo);
+
+        return $applied;
     }
 
     private function openReadonly(string $databasePath): \PDO

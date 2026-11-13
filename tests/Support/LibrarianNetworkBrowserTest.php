@@ -32,11 +32,12 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
     {
         parent::setUp();
         $root = \dirname(__DIR__, 2);
-        $database = $root.'/var/browser-live/application.db';
-        if ('test' !== ($_SERVER['APP_ENV'] ?? getenv('APP_ENV')) || 'sqlite:///'.$database !== getenv('DATABASE_URL')) {
-            throw new \LogicException('Browser fixtures require the exact isolated test database.');
+        $databaseUrl = (string) getenv('DATABASE_URL');
+        if ('test' !== ($_SERVER['APP_ENV'] ?? getenv('APP_ENV'))) {
+            throw new \LogicException('Browser fixtures require the test environment.');
         }
-        foreach ([$root.'/var', \dirname($database), $database] as $path) {
+        $this->assertOwnedBrowserDatabaseUrl($databaseUrl);
+        foreach ([$root.'/var', $root.'/var/browser-live'] as $path) {
             if (is_link($path)) {
                 throw new \LogicException('Refusing symlinked browser fixture storage.');
             }
@@ -50,11 +51,14 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
         // Commit it before real HTTP so fixture data is visible outside PHPUnit.
         self::getContainer()->get('doctrine')->getConnection()->commit();
         $this->url = rtrim((string) getenv('LIBRARIAN_BROWSER_URL'), '/');
-        self::assertMatchesRegularExpression('~^https?://.+~D', $this->url);
+        self::assertMatchesRegularExpression('~^http://[a-z0-9-]+\.browser\.librarian\.localhost(?::\d+)?$~D', $this->url);
+        $address = getenv('LIBRARIAN_PROXY_IP');
+        self::assertNotFalse(filter_var($address, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV4));
         $headed = 'false' === getenv('PLAYWRIGHT_HEADLESS');
         $this->client = PlaywrightFactory::create();
         try {
             $builder = $this->client->chromium()->withHeadless(!$headed)->withArgs([
+                '--host-resolver-rules=MAP *.librarian.localhost '.$address,
                 '--window-size=2560,1440',
             ]);
             if ($headed) {
@@ -118,6 +122,30 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
         $this->page->locator('.action-delete')->click();
         $this->page->getByRole('button', ['name' => 'Confirm', 'exact' => true])->click();
         $this->page->locator('body.ea-index')->waitFor();
+    }
+
+    private function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
+    {
+        $parts = parse_url($databaseUrl);
+        if (!\is_array($parts) || 'postgresql' !== ($parts['scheme'] ?? null)) {
+            throw new \LogicException('Browser fixtures require a PostgreSQL DATABASE_URL.');
+        }
+
+        $user = rawurldecode((string) ($parts['user'] ?? ''));
+        $pass = rawurldecode((string) ($parts['pass'] ?? ''));
+        $path = ltrim((string) ($parts['path'] ?? ''), '/');
+        $host = (string) ($parts['host'] ?? '');
+        $port = (string) ($parts['port'] ?? '5432');
+
+        if (
+            'librarian' !== $user
+            || 'browser-synthetic-only' !== $pass
+            || 'librarian_browser' !== $path
+            || 'postgres' !== $host
+            || '5432' !== $port
+        ) {
+            throw new \LogicException('Browser fixtures require the exact isolated checkout-owned private Postgres URL.');
+        }
     }
 
     private function closeBrowser(): void

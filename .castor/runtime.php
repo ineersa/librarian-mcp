@@ -22,7 +22,18 @@ function runtimeCommand(array $command, string $container, bool $headed, bool $n
     }
     $docker = ['docker', 'run', '--rm', '--init', '--name', $container, '--label', 'librarian.qa.owner='.hash('sha256', $root), '--user', posix_getuid().':'.posix_getgid(), '--volume', $root.':/app', '--env', 'XDG_CONFIG_HOME=/app/var/tooling/home/.config', '--env', 'XDG_CACHE_HOME=/app/var/tooling/home/.cache'];
     if ($networked) {
-        $docker = [...$docker, '--network', stackNetwork()];
+        // Join the private browser Postgres network and the shared development/proxy
+        // network. Docker run supports repeated --network flags. Keep host-gateway
+        // for host-published model listeners (8059/8060).
+        $docker = [...$docker, '--network', stackNetwork('browser'), '--network', developmentNetwork(), '--add-host', 'host.docker.internal:host-gateway'];
+        foreach ($command as $argument) {
+            if (str_starts_with($argument, 'LIBRARIAN_PROXY_IP=')) {
+                // Playwright's Node HTTP client does not use Chromium's resolver rules.
+                $hostname = (string) parse_url(stackUrl('browser'), \PHP_URL_HOST);
+                $docker = [...$docker, '--add-host', $hostname.':'.substr($argument, \strlen('LIBRARIAN_PROXY_IP='))];
+                break;
+            }
+        }
     }
     if ($headed) {
         $display = getenv('DISPLAY');

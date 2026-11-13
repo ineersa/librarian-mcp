@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+#
+# Indexing and Scheduler services.
+
+parameters:
+    app.index_interval_seconds: '%env(int:INDEX_INTERVAL)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\Index\Source\CanonicalSourceReader: ~
+
+    App\Index\ProjectIndexManager:
+        arguments:
+            $indexExecutionLockFactory: '@index_execution_lock_factory'
+
+    App\Index\ProjectIndexer:
+        arguments:
+            $indexExecutionLockFactory: '@index_execution_lock_factory'
+
+    App\MessageHandler\IndexProjectMessageHandler: ~
+
+    App\Scheduler\IndexProjectsSchedule:
+        arguments:
+            $indexIntervalSeconds: '%app.index_interval_seconds%'
+
+    App\Command\IndexProjectCommand: ~

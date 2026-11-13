@@ -1,0 +1,17 @@
+{% types {
+    action: '\\EasyCorp\\Bundle\\EasyAdminBundle\\Dto\\ActionDto',
+    entity?: '\\EasyCorp\\Bundle\\EasyAdminBundle\\Dto\\EntityDto',
+} %}
+
+<form method="post" action="{{ action.linkUrl }}" class="d-inline">
+    <input type="hidden" name="token" value="{{ csrf_token('project-index-now') }}">
+    <button type="submit" class="{{ action.cssClass }}">
+        {% if action.icon %}
+            <i class="{{ action.icon }}"></i>
+        {% endif %}
+        {% set action_label = action.label|trans %}
+        {% if action_label is not empty %}
+            <span class="action-label">{{ action_label }}</span>
+        {% endif %}
+    </button>
+</form>

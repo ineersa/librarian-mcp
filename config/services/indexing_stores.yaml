@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+#
+# Native PostgreSQL store and model services.
+
+parameters:
+    env(CODERANK_URL): 'http://host.docker.internal:8059/v1'
+    env(CODERANK_MODEL): 'CodeRankEmbed'
+    env(CODERANK_ARTIFACT): ''
+    env(BGE_URL): 'http://host.docker.internal:8060/v1'
+    env(BGE_MODEL): 'bge-reranker-base'
+    env(INDEX_STORAGE_DIR): 'data/indexes'
+    app.index_execution_lock_dir: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%/locks'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\Index\IndexSettings:
+        arguments:
+            $embeddingUrl: '%env(CODERANK_URL)%'
+            $embeddingModel: '%env(CODERANK_MODEL)%'
+            $embeddingArtifact: '%env(CODERANK_ARTIFACT)%'
+            $rerankerUrl: '%env(BGE_URL)%'
+            $rerankerModel: '%env(BGE_MODEL)%'
+            $dimensions: 768
+
+    App\Index\MemoryChunker: ~
+
+    App\Index\Store\IndexStoreFactory: ~
+    App\Index\Search\HybridSearch: ~
+
+    # Scoped only to the CodeRank Generic platform dispatcher created below.
+    App\Index\Model\EmbeddingResultValidator:
+        autoconfigure: false
+
+    # Keep private model requests out of the application's traceable HTTP client.
+    App\Index\Model\CodeRankVectorizerFactory:
+        arguments:
+            $httpClient: null
+
+    Symfony\AI\Store\Document\Vectorizer:
+        factory: ['@App\Index\Model\CodeRankVectorizerFactory', 'create']
+
+    Symfony\AI\Store\Document\VectorizerInterface: '@Symfony\AI\Store\Document\Vectorizer'
+
+    App\Index\Model\LocalBgeReranker:
+        arguments:
+            $httpClient: null
+
+    # Separate from the shared PostgreSQL store used by Messenger DeduplicateStamp.
+    # Flock releases on process death and owns one project checkpoint at a time.
+    index_execution_lock.store:
+        class: Symfony\Component\Lock\Store\FlockStore
+        arguments:
+            - '%app.index_execution_lock_dir%'
+
+    index_execution_lock_factory:
+        class: Symfony\Component\Lock\LockFactory
+        arguments:
+            - '@index_execution_lock.store'
+        calls:
+            - setLogger: ['@?logger']
+        tags:
+            - { name: monolog.logger, channel: lock }

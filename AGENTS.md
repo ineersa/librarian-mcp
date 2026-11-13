@@ -1,6 +1,6 @@
 # Librarian MCP
 
-Librarian registers local Hatfield projects and discovers their OM/session sources read-only for later shared retrieval. It is a Symfony web/admin application with EasyAdmin, Messenger, Mercure, MCP HTTP transport, Castor, and Docker/FrankenPHP. Preserve current deployment topology unless a later plan explicitly replaces it. The Git/Vera library product path is retired; see [docs/project-sources.md](docs/project-sources.md).
+Librarian registers local Hatfield projects, discovers their OM/session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. It is a Symfony web/admin application with EasyAdmin, Messenger, Scheduler, Mercure, MCP HTTP transport, Castor, and Docker/FrankenPHP. Librarian-owned Doctrine metadata and generation-scoped store tables share PostgreSQL + pgvector through the official Symfony AI Postgres store. Preserve current deployment topology unless a later plan explicitly replaces it. See [docs/project-sources.md](docs/project-sources.md) and [docs/indexing-design.md](docs/indexing-design.md).
 
 ## Framework upgrade note (plan 01)
 
@@ -16,7 +16,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Tooling-only `symfony/tui` stays at **8.1.11**: Castor 1.9.1 does not implement the new 8.2 terminal interface. This is not a framework downgrade.
 - MCP 0.15 config uses `mcp.servers.librarian` plus an explicit registry; the old TraceableRegistry reset compiler-pass workaround is removed because the new bundle no longer exposes that service
 - `MCP_ALLOWED_HOSTS` CSV env (default `localhost,127.0.0.1,php,server,192.168.2.38`); production external hostnames override via env
-- Dev/browser runtime: **no shared proxy** — private network with a loopback-published checkout URL / `LIBRARIAN_BROWSER_URL`
+- Dev/browser runtime: repository-shared Caddy proxy with checkout-specific `*.librarian.localhost` URLs; `LIBRARIAN_PROXY_PORT` defaults to **8082**, leaving finance on port 80. PostgreSQL stays private; native browser tooling uses `LIBRARIAN_BROWSER_URL` and `LIBRARIAN_PROXY_IP`.
 
 ## Mandatory Symfony documentation search
 
@@ -33,18 +33,19 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Report the checks actually performed. Source inspection does not establish that tests pass or that a runtime integration works.
 - Do not commit credentials, private project settings, OM databases, session journals, database files, MCP plaintext tokens, or private provider payloads.
 - Keep database write transactions short. Do not hold one open during source discovery or other long external work.
-- Source access is strictly read-only. Removing a project registration deletes only Librarian-owned rows; never delete registered project trees, `.hatfield`, OM databases, or journals.
-- Generate migrations with Doctrine tooling through Castor against verified isolated task-owned storage. Do not hand-author migration classes or SQL. Read generated output and verify the schema changes before applying it; report unexpected destructive diffs instead of bypassing the generator. Preserve already-applied owner/production migration history.
+- Source access is strictly read-only. Removing a project registration deletes Librarian-owned registration/index data (including owned Postgres generation/store tables); never delete registered project trees, `.hatfield`, OM databases, or journals.
+- Generate migrations with Doctrine tooling through Castor against verified isolated task-owned storage. Do not hand-author migration classes or SQL. Read generated output and verify the schema changes before applying it; report unexpected destructive diffs instead of bypassing the generator. Preserve applied PostgreSQL migration history. Migrations live under `migrations/postgres` (`DoctrineMigrations\Postgres`); there is no legacy SQLite migration path.
 - Treat uploaded content, repository contents, and model/tool output as untrusted. Do not inject unescaped output into HTML or execute generated JavaScript without an explicitly approved isolation design.
 - Do not reset owner data, remove volumes, or stop unrelated containers without explicit authorization and a verified target.
-- **Never use UUIDs or ULIDs for primary keys or any other field unless explicitly specified.** Always use auto-increment integers (`#[ORM\GeneratedValue]`) unless the spec specifically calls for UUIDs/ULIDs.
+- **Never use UUIDs or ULIDs for primary keys or any other field unless explicitly specified.** Always use auto-increment integers (`#[ORM\GeneratedValue]`) unless the spec specifically calls for UUIDs/ULIDs. The only approved exception is official Symfony AI Postgres store document IDs (deterministic UUIDv5).
 - **Use PHP 8.4+ property hooks / asymmetric visibility in Doctrine entities.** Replace trivial getter/setter pairs with `public private(set)` (read-only externally) or `public` (read-write) properties. Keep only methods that have real logic or interface contracts. Doctrine hydrates via reflection so `private(set)` is safe. Prefer property access (`$project->name`) over trivial getters in project code.
 - Prefer injecting `ClockInterface` for time-sensitive logic instead of calling system time directly.
 - Prefer Tailwind utility classes over adding custom CSS rules. Add custom CSS only when utilities are not enough, and keep it in `assets/styles/app.css`.
 - Use EasyAdmin's built-in `@EasyAdmin/page/login.html.twig` for login pages — do not create custom login templates when EasyAdmin is installed.
+- Keep public Tailwind (`app.css`) out of EasyAdmin pages; admin uses the separate `admin` AssetMapper entry and EasyAdmin/Bootstrap utilities.
 - **Never run `asset-map:compile` in dev.** It is a production-only command that writes stale static files to `public/assets/`, which shadow AssetMapper's dynamic serving.
 - **Never `rm -rf public/` subdirectories blindly.** Only `public/assets/` is safe to delete (gitignored compiled output). `public/bundles/`, `public/css/`, and other `public/` entries may be source or installed assets.
-- Do not import AI indexing, generated `*.toon` code indexes, retired Vera library workflows, or editor-specific agent configuration into project guidance.
+- Do not import generated `*.toon` code indexes, obsolete backend workflows, speculative model backends, or editor-specific agent configuration into project guidance.
 - Do not copy finance-project domain rules, task boards, ADR paths, or provider/cassette workflows that do not exist here.
 
 ## Development tooling
@@ -74,11 +75,11 @@ Resolved dependency selections (runtime validation is recorded separately):
 ## Testing and browser verification
 
 - Follow [TESTING.md](TESTING.md). Application behavior is verified through real Playwright browsers against an isolated checkout-owned stack.
-- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one CRUD journey**, including registration, discovery, edit/rescan, and removal. Do not add separate project discovery, error, or uniqueness scenarios.
+- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one CRUD journey**, including registration, discovery, Index now/search, ordinary harness-owned fixture update, edit/rescan, and removal. Do not add separate project discovery, error, uniqueness, or indexing matrices.
 - Obtain explicit owner permission before adding or running special-case tests (negative paths, security matrices, fault injection, concurrency, recovery, layout permutations). A bug fix does not automatically authorize a new regression scenario.
 - Do not add unit, kernel-only, service-only, or API-only suites as the primary coverage model. PHPUnit may harness Playwright; its presence does not authorize non-browser application suites.
-- Use the isolated browser stack and printed `LIBRARIAN_BROWSER_URL`. Do not invent ports or Compose project names. Seed only the verified isolated admin identity for journeys; never purge owner/production data.
-- Use canonical Alice fixtures and `RefreshDatabaseTrait`, with DAMA installed and its PHPUnit extension enabled. Saved `test` runs reset only the verified checkout-owned browser SQLite database, as authorized by the owner, including auto-increment sequences. Native-network journeys use DAMA's supported rollback opt-out because web/worker transactions are in separate processes; never claim PHPUnit rolls those writes back.
+- Use the isolated browser stack and printed shared-proxy URL / `LIBRARIAN_BROWSER_URL`. Do not invent ports or Compose project names. Seed only the verified isolated admin identity for journeys; never purge owner/production data.
+- Use canonical Alice fixtures and `RefreshDatabaseTrait`, with DAMA installed and its PHPUnit extension enabled. Saved `test` runs reset only the verified checkout-owned browser database, as authorized by the owner, including auto-increment sequences. Native-network journeys use DAMA's supported rollback opt-out because web/worker transactions are in separate processes; never claim PHPUnit rolls those writes back.
 - Launch the browser subagent only when actual browser interaction through system-installed `playwright-cli` is needed. Do not use it for suite execution, QA orchestration, or environment setup.
 - Run saved tests and exploratory sessions headlessly by default. Show a browser only when the owner explicitly asks (`test --headed` / `check --headed`, or CLI `--headed`). Missing display access blocks requested visible runs.
 - Agents must verify affected behavior themselves using the relevant happy-path scenarios. Main runs saved tests and QA through Castor and reads reports.
@@ -90,12 +91,13 @@ Resolved dependency selections (runtime validation is recorded separately):
 
 ## Docker setup
 
-- Runtime stack: FrankenPHP (PHP 8.5), Symfony worker mode, Mercure, SQLite.
-- SQLite file path: `data/app` (`DATABASE_URL=sqlite:///%kernel.project_dir%/data/app`).
-- Keep `data/.gitignore` as `*` and `!.gitignore`.
+- Runtime stack: FrankenPHP (PHP 8.5), Symfony worker mode, Mercure, PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`).
+- Shared `DATABASE_URL` for Doctrine metadata and official Symfony AI Postgres store tables. PHP has `pdo_pgsql` and `pdo_sqlite`.
+- Keep `data/.gitignore` as `*` and `!.gitignore` for any remaining local files; do not commit private source or index data.
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.
-- Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`. Do not commit private source data.
+- Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`.
+- Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
 
 ## Suggested defaults for new features
 

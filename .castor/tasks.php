@@ -163,8 +163,7 @@ function lspCheck(): int
 function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $arguments = []): int
 {
     return report('test', ['vendor/bin/castor', 'test', ...($headed ? ['--headed'] : []), '--', ...$arguments], runtime: false, operation: static function () use ($headed, $arguments): int {
-        $database = \dirname(__DIR__).'/var/browser-live/application.db';
-        foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live', $database] as $storage) {
+        foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live'] as $storage) {
             if (is_link($storage)) {
                 throw new \RuntimeException('Refusing symlinked browser storage.');
             }
@@ -173,18 +172,25 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         if (0 !== $started) {
             return $started;
         }
-        // Clear stale compiled containers before migrations/fixture setup.
+        $databaseUrl = postgresDatabaseUrl('browser');
+        $lockDsn = postgresLockDsn('browser');
+        assertOwnedBrowserDatabaseUrl($databaseUrl);
+
+        // Release worker/web PostgreSQL sessions before dropping the browser DB.
         stackRun('browser', ['stop', 'worker']);
+        stackRun('browser', ['restart', 'php']);
+        // Clear stale compiled containers before migrations/fixture setup.
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
         // Only this verified checkout-owned browser database is disposable.
-        stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:database:drop', '--force', '--env=test', '--no-interaction']);
-        // SQLite is recreated when migrations open the connection.
-        stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
+        stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:database:drop', '--force', '--if-exists', '--env=test', '--no-interaction']);
+        stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:database:create', '--env=test', '--no-interaction']);
+        stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
         // FrankenPHP workers retain loaded classes; use current application code.
         stackRun('browser', ['restart', 'php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
-        return report('test:browser', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
+        // Native-network tooling reaches private Postgres and the shared proxy hostname.
+        return report('test:browser', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'LIBRARIAN_PROXY_IP='.proxyAddress(), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
     });
 }
 
@@ -203,38 +209,36 @@ function appConsole(#[AsArgsAfterOptionEnd] array $arguments = [], string $isola
         throw new \InvalidArgumentException('Choose either the fixed browser database or a diagnostic database.');
     }
     if ($browserDatabase || '' !== $isolatedDatabase) {
-        if (!$browserDatabase && 1 !== preg_match('/\A[a-z0-9-]+\z/D', $isolatedDatabase)) {
-            throw new \InvalidArgumentException('Use a lowercase diagnostic database identifier.');
-        }
         if ($browserDatabase) {
-            $relative = 'var/browser-live';
-            $database = $relative.'/application.db';
-            foreach (['var', $relative, $database] as $path) {
+            foreach (['var', 'var/browser-live'] as $path) {
                 if (is_link(\dirname(__DIR__).'/'.$path)) {
                     throw new \RuntimeException('Refusing symlinked diagnostic storage.');
                 }
             }
-            if (!is_dir(\dirname(__DIR__).'/'.$relative)) {
-                mkdir(\dirname(__DIR__).'/'.$relative, 0700, true);
-            }
+            ensureBrowserPostgresService();
+            $databaseUrl = postgresDatabaseUrl('browser');
+            $lockDsn = postgresLockDsn('browser');
 
-            return report('app:console', ['env', 'DATABASE_URL=sqlite:////app/'.$database, 'php', 'bin/console', '--env=dev', ...$arguments]);
+            return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments], networked: true);
         }
 
-        $relative = 'var/browser/'.$isolatedDatabase;
-        foreach (['var', 'var/browser', $relative, $relative.'/application.db'] as $path) {
+        foreach (['var', 'var/browser'] as $path) {
             if (is_link(\dirname(__DIR__).'/'.$path)) {
                 throw new \RuntimeException('Refusing symlinked diagnostic storage.');
             }
         }
-        if (!is_dir(\dirname(__DIR__).'/'.$relative)) {
-            mkdir(\dirname(__DIR__).'/'.$relative, 0700, true);
-        }
+        ensureBrowserPostgresService();
+        $databaseUrl = isolatedPostgresDatabaseUrl($isolatedDatabase);
+        $lockDsn = isolatedPostgresLockDsn($isolatedDatabase);
 
-        return report('app:console', ['env', 'DATABASE_URL=sqlite:////app/'.$relative.'/application.db', 'php', 'bin/console', '--env=dev', ...$arguments]);
+        return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments], networked: true);
     }
 
-    return report('app:console', ['php', 'bin/console', ...$arguments]);
+    return report('app:console', ['php', 'bin/console', ...$arguments], runtime: false, operation: static function () use ($arguments): int {
+        stackRun('dev', ['exec', '-T', 'php', 'php', 'bin/console', ...$arguments]);
+
+        return 0;
+    });
 }
 
 /** @param array<string, callable(): int> $tasks */

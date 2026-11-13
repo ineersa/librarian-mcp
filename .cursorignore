@@ -2,4 +2,3 @@
 .env.prod.local
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
-.vera

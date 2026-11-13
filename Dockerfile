@@ -21,6 +21,7 @@ RUN install-php-extensions \
         mbstring \
         pcntl \
         pdo_sqlite \
+        pdo_pgsql \
         posix \
         sqlite3 \
         zip \

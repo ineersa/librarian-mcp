@@ -1,13 +1,13 @@
 doctrine:
     dbal:
         url: '%env(resolve:DATABASE_URL)%'
-        # Retired catalog data remains archived in place, outside ORM ownership.
-        # Do not let a schema diff drop the owner's existing library records.
-        schema_filter: '~^(?!libraries$)~'
+        # Exclude vendor-owned AI store tables (librarian_p<int>_g<int>) and the
+        # Symfony Lock DoctrineDbalStore table so schema diffs never drop them.
+        schema_filter: '~^(?!librarian_p\d+_g\d+$|lock_keys$)~'
 
         # IMPORTANT: You MUST configure your server version,
         # either here or in the DATABASE_URL env var (see .env file)
-        #server_version: '16'
+        #server_version: '17'
 
         profiling_collect_backtrace: '%kernel.debug%'
     orm:

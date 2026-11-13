@@ -2,7 +2,7 @@
 
 ## Scope and approval policy
 
-Keep the suite small: **one happy-path journey per feature**. A single CRUD journey covers its related list, create, detail, edit, and delete operations. **Projects has exactly one journey**, including registration, source discovery, edit/rescan, and removal. Do not add separate discovery, error, or uniqueness scenarios, or hide extra cases in loops and data providers.
+Keep the suite small: **one happy-path journey per feature**. A single CRUD journey covers its related list, create, detail, edit, and delete operations. **Projects has exactly one journey**, including registration, source discovery, Index now, search preview, ordinary harness-owned fixture content/revision update, edit/rescan, and removal. Do not add separate discovery, error, uniqueness, or indexing matrices, or hide extra cases in loops and data providers.
 
 **Ask the owner for explicit permission before adding or running special-case tests.** This includes negative paths, boundary values, security matrices, fault injection, concurrency, recovery, and layout permutations. Fixing a bug does not automatically authorize another regression scenario. Database-reset / purge tests remain excluded.
 
@@ -16,7 +16,7 @@ This document does **not** claim that validation has already passed.
 
 ## Native-network suite
 
-Browser journeys use Playwright against the isolated stack URL supplied as `LIBRARIAN_BROWSER_URL` (`http://php:8080` inside the private browser network). Stack tasks also print the loopback-published URL for host browser exploration. Only fixture preparation boots a test kernel; browser requests are real HTTP, not intercepted in-process. PHPUnit cannot roll back web/worker writes for cross-process isolation.
+Browser journeys use Playwright against the isolated stack's checkout-specific `*.browser.librarian.localhost:8082` URL supplied as `LIBRARIAN_BROWSER_URL`. The repository-shared Caddy proxy binds loopback; `LIBRARIAN_PROXY_IP` lets Chromium resolve that same hostname inside Docker. Native tooling joins the proxy and private browser PostgreSQL networks, without host networking or a published database port. Only fixture preparation boots a test kernel; browser requests are real HTTP, not intercepted in-process. PHPUnit cannot roll back web/worker writes for cross-process isolation.
 
 Each scenario opens and closes its own browser/context and signs in through the real login form. Headed launches request a 2560×1440 window with native 1000ms slow motion and `viewport: null`. Headless launches use a 1920×1080 viewport without slow motion.
 
@@ -27,14 +27,14 @@ Saved journeys in `tests/E2E/` (product path after plan 03):
 | Homepage | Public landing / login entry |
 | Authentication | Login and logout (dashboard title: Projects dashboard) |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
-| Projects | Register via directory picker, wait for async discovery/health, edit/rescan, detail, remove only its registration |
+| Projects | Register via absolute path input, wait for async discovery/health, Index now + committed index, search a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + reindex/search, edit/rescan, detail, remove only its registration |
 | MCP HTTP | Optional token path: regenerate the isolated admin's token through the UI when used, then initialize / initialized / tools-list over real HTTP (`tools/list` empty until plan 05) |
 
-The Projects journey uses only the two synthetic source trees needed for registration and path rebinding during edit. It never imports operator `compose.sources.yaml` overlays or private owner projects.
+The Projects journey uses only the two synthetic source trees needed for registration and path rebinding during edit. Intentional fixture mutation is allowed only through harness-owned helpers against verified synthetic paths, with restore in `finally` so repeated runs stay idempotent. It never imports operator `compose.sources.yaml` overlays or private owner projects.
 
-CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. Source fixture trees/databases must remain unchanged after registration removal and failed discovery.
+CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. After the journey restores any intentional harness mutation, source fixture trees/databases must match the pre-journey hash; registration removal must not change sources.
 
-The former kernel/unit suite and FakeVera / MockHub / library TOON tool harnesses have been removed. Do not add unit/API-only suites as the primary coverage model. Indexing, hybrid retrieval, and memory tools remain out of scope until later plans.
+Do not add unit/API-only suites as the primary coverage model. Public MCP memory tools remain plan 05. Do not claim plan 04 acceptance from docs alone; see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
 
 ## Prepare the tooling runtime
 
@@ -58,11 +58,11 @@ vendor/bin/castor qa:static
 
 `tooling:prepare` builds the development tooling image, installs locked dependencies, and prepares Chromium. Private browser/tooling files live under ignored `var/tooling/`. Do not invoke another PHP runner around Castor.
 
-See [framework upgrade notes](docs/framework-upgrade.md) for dependency decisions and [project sources](docs/project-sources.md) for the registration/discovery contract. Do not infer a passing build from this setup guide alone.
+See [framework upgrade notes](docs/framework-upgrade.md), [project sources](docs/project-sources.md), and [indexing design](docs/indexing-design.md). Do not infer a passing build or plan 04 acceptance from this setup guide alone.
 
 ## Running tests
 
-`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, recreates only `var/browser-live/application.db` through Doctrine commands, applies migrations, then runs Playwright scenarios headlessly by default. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture before the first journey. Native PHPUnit arguments go after `--`:
+`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, stops the owned worker, Doctrine-drops/creates/migrates only the guarded browser database `librarian_browser` in the checkout-scoped Postgres Docker volume, then runs Playwright scenarios headlessly by default. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture before the first journey. Native PHPUnit arguments go after `--`:
 
 ```sh
 vendor/bin/castor test -- tests/E2E/AuthenticationTest.php
@@ -82,7 +82,7 @@ Report actual elapsed time, results, and any gaps. Do not inflate assertion coun
 
 Use the canonical Alice fixture `fixtures/user.yaml` for development and test (`admin@test.com` / `admin`); its password is hashed by `UserPasswordProcessor`. Do not create a supplementary dataset or mutate development data for verification. Do not copy credentials from another checkout into reports.
 
-Native-network SQLite, cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). The owner has authorized resetting this checkout's isolated browser database before saved runs. Castor rejects symlinked storage, stops the owned worker, recreates the test SQLite database with Doctrine commands, migrates it, and restarts the application/worker. This resets rows and SQLite auto-increment sequences. It does not reset development/production databases or delete source trees, uploads, volumes, or unrelated storage.
+Cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). The browser database is `librarian_browser` in the checkout-scoped Postgres Docker volume — not `var/browser-live/application.db` and not DB files under `var/`. The owner has authorized resetting that guarded browser database before saved runs: Castor stops the owned worker, Doctrine drop/create/migrate only that database, and resets integer sequences. It does not reset development/production databases or delete source trees, uploads, unrelated volumes, or owner storage.
 
 `LibrarianNetworkBrowserTest` extends `KernelTestCase` and uses Alice's `RefreshDatabaseTrait`. It verifies the exact test database URL and storage before loading fixtures. DAMA's bundle and PHPUnit extension are enabled. Network browser journeys use DAMA's supported `SkipDatabaseRollback` attribute: web and worker writes happen in separate processes and cannot be rolled back by PHPUnit's connection. The trait's initial transaction is committed before Chromium starts so those processes can see Alice's fixture data. Do not claim cross-process transactional rollback. Fresh storage is provided once per saved `test` run, not between each HTTP request.
 
@@ -101,7 +101,7 @@ Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
-The upgraded runtime uses a **private network and loopback-published checkout URL**, not a shared multi-checkout development proxy. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
+Development and browser stacks share this repository's Caddy proxy and route registry across worktrees, following the finance setup. The repository-wide port initially defaults to **8082**; see [Castor proxy operations](docs/castor.md#isolated-browser-stack) for overrides and explicit recreation. App/worker/PostgreSQL remain checkout-scoped and no database ports are published. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
 
 ## Diagnostics and evidence
 
@@ -116,5 +116,5 @@ Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, 
 ## Out of scope for this testing policy
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
-- Speculative Symfony AI backends beyond what main installs for the approved upgrade
-- Production cutover, data backup, Hatfield semantic removal, and later indexing/MCP-tool plans
+- Speculative Symfony AI backends beyond the approved CodeRank + official Postgres store + local BGE baseline
+- Remote deployments, data backup, Hatfield semantic removal, and MCP memory-tool plan 05

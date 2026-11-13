@@ -2,7 +2,11 @@
 
 {% block head_metas %}
     {{ parent() }}
-    {% if entity.instance.health.isPending() or entity.instance.health.isScanning() %}
+    {% set refreshNeeded = entity.instance.health.isPending() or entity.instance.health.isScanning() %}
+    {% if indexStatus is defined and indexStatus.pending %}
+        {% set refreshNeeded = true %}
+    {% endif %}
+    {% if refreshNeeded %}
         <meta http-equiv="refresh" content="2">
     {% endif %}
 {% endblock %}
@@ -20,11 +24,73 @@
             <span>{{ project.health.label() }}</span>
         </p>
         <p class="mb-1 text-muted">
-            Ready means sources were discovered. Indexing arrives in plan04.
+            Ready means sources were discovered. Indexing is a separate derived step.
         </p>
         {% if project.lastError %}
             <p class="mb-0 text-danger" data-project-error>{{ project.lastError }}</p>
         {% endif %}
-        {{ parent() }}
     </div>
+
+    {% if indexStatus is defined %}
+        <div
+            id="project-index-status"
+            class="card mb-3"
+            data-index-status="{{ indexStatus.statusValue }}"
+            data-index-pending="{{ indexStatus.pending ? '1' : '0' }}"
+            data-index-stale="{{ indexStatus.stale ? '1' : '0' }}"
+            {% if indexStatus.latest %}
+                data-index-generation-id="{{ indexStatus.latest.id }}"
+                data-index-committed-revision="{{ indexStatus.latest.committedRevision ?? '' }}"
+                data-index-parent-count="{{ indexStatus.latest.parentCount }}"
+                data-index-chunk-count="{{ indexStatus.latest.chunkCount }}"
+            {% endif %}
+            {% if indexStatus.active %}
+                data-index-active-generation-id="{{ indexStatus.active.id }}"
+            {% endif %}
+        >
+            <div class="card-body">
+                <h2 class="h5 mb-3">Index status</h2>
+                <p class="mb-1">
+                    <strong>Status:</strong>
+                    <span data-index-status-label>{{ indexStatus.statusLabel }}</span>
+                </p>
+                <p class="mb-1 text-muted small">
+                    Source discovery is not indexing. Search uses the last committed active generation while newer work is pending.
+                </p>
+                {% if indexStatus.latest %}
+                    <dl class="row mb-0 small">
+                        <dt class="col-sm-4">Latest generation</dt>
+                        <dd class="col-sm-8" data-index-latest-id>{{ indexStatus.latest.id }}</dd>
+                        <dt class="col-sm-4">Active generation</dt>
+                        <dd class="col-sm-8" data-index-active-id>{{ indexStatus.active ? indexStatus.active.id : 'None' }}</dd>
+                        <dt class="col-sm-4">Source revision (project)</dt>
+                        <dd class="col-sm-8" data-index-source-revision>{{ project.sourceRevision ?? 'Unknown' }}</dd>
+                        <dt class="col-sm-4">Committed revision</dt>
+                        <dd class="col-sm-8" data-index-committed-revision-value>{{ indexStatus.latest.committedRevision ?? 'Not committed' }}</dd>
+                        <dt class="col-sm-4">Parents / chunks</dt>
+                        <dd class="col-sm-8">
+                            <span data-index-parent-count-value>{{ indexStatus.latest.parentCount }}</span>
+                            /
+                            <span data-index-chunk-count-value>{{ indexStatus.latest.chunkCount }}</span>
+                        </dd>
+                        <dt class="col-sm-4">Last successful index</dt>
+                        <dd class="col-sm-8" data-index-last-success>
+                            {% if indexStatus.lastIndexAt %}
+                                {{ indexStatus.lastIndexAt|date('Y-m-d H:i:s T') }}
+                            {% else %}
+                                Never indexed
+                            {% endif %}
+                        </dd>
+                    </dl>
+                {% else %}
+                    <p class="mb-0" data-index-empty>No index generation yet. Use Index now after sources are discovered.</p>
+                {% endif %}
+                {% if indexStatus.error %}
+                    <p class="mb-0 mt-2 text-danger" data-index-error>{{ indexStatus.error }}</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    {{ parent() }}
 {% endblock %}

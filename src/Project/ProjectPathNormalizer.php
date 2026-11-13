@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Project;
 
+use Symfony\Component\Filesystem\Path;
+
 /**
  * Normalizes project names and selected roots for identity/uniqueness.
  */
@@ -19,7 +21,7 @@ final class ProjectPathNormalizer
     public function canonicalizeRoot(string $rootPath): ?string
     {
         $trimmed = trim($rootPath);
-        if ('' === $trimmed) {
+        if ('' === $trimmed || !Path::isAbsolute($trimmed)) {
             return null;
         }
 

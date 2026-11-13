@@ -11,7 +11,15 @@ use Symfony\Component\Process\Process;
 /** @return list<string> */
 function productionComposeCommand(): array
 {
-    return ['docker', 'compose', '--env-file', '.env', '--env-file', '.env.prod', '-f', 'compose.yaml', '-f', 'compose.prod.yaml', ...(is_file(\dirname(__DIR__).'/compose.sources.yaml') ? ['-f', 'compose.sources.yaml'] : [])];
+    // Compose interpolates ${POSTGRES_PASSWORD} etc. from --env-file values.
+    // Optional .env.prod.local may override those for host-side interpolation
+    // without printing or exporting secrets into the Castor process.
+    $command = ['docker', 'compose', '--env-file', '.env', '--env-file', '.env.prod'];
+    if (is_file(\dirname(__DIR__).'/.env.prod.local')) {
+        $command = [...$command, '--env-file', '.env.prod.local'];
+    }
+
+    return [...$command, '-f', 'compose.yaml', '-f', 'compose.prod.yaml', ...(is_file(\dirname(__DIR__).'/compose.sources.yaml') ? ['-f', 'compose.sources.yaml'] : [])];
 }
 
 /** @param list<string> $arguments */

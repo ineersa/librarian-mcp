@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=../schema.json
+
+# Default LockBundle resource. Messenger DeduplicateStamp requires a serializable
+# store; postgresql:// resolves to DoctrineDbalStore and creates lock_keys.
+lock: '%env(resolve:LOCK_DSN)%'
