@@ -4,7 +4,7 @@ twig:
         mercure_public_url: '%env(MERCURE_PUBLIC_URL)%'
         site_name: 'Librarian MCP'
         site_short_name: 'Librarian MCP'
-        site_description: 'System for libraries and documentation management, ingestion pipeline and MCP server'
+        site_description: 'Shared memory service for local Hatfield projects'
         github_url: 'https://github.com/ineersa/librarian-mcp'
 
 when@test:

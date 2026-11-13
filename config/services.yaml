@@ -7,39 +7,39 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
-    app.vera.binary: '%env(VERA_BINARY)%'
-    app.vera.timeout: '%env(int:VERA_TIMEOUT)%'
-    app.library_data_dir: '%env(LIBRARY_DATA_DIR)%'
+    app.hatfield_user_home: '%env(HATFIELD_USER_HOME)%'
+    app.hatfield_app_root: '%env(HATFIELD_APP_ROOT)%'
+    app.hatfield_path_mappings: '%env(json:HATFIELD_PATH_MAPPINGS)%'
 
 services:
     # default configuration for services in *this* file
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.
         autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        bind:
+            $hatfieldUserHome: '%app.hatfield_user_home%'
+            $hatfieldAppRoot: '%app.hatfield_app_root%'
+            $pathMappings: '%app.hatfield_path_mappings%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name
     App\:
         resource: '../src/'
+        exclude:
+            - '../src/Entity/'
+            - '../src/DataFixtures/'
+            - '../src/Project/ProjectDiscoveryResult.php'
+            - '../src/Project/ProjectSourceException.php'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
 
-    App\Vera\VeraCli:
-        arguments:
-            $veraBinary: '%app.vera.binary%'
-            $processTimeout: '%app.vera.timeout%'
+when@dev: &fixtures
+    services:
+        App\DataFixtures\:
+            resource: '../src/DataFixtures/'
+            autowire: true
+            autoconfigure: true
 
-    App\Controller\Admin\LibraryCrudController:
-        arguments:
-            $veraCli: '@App\Vera\VeraCli'
+when@test: *fixtures
 
-    App\Service\LibraryManager:
-        arguments:
-            $projectDir: '%kernel.project_dir%'
-            $libraryDataDir: '%app.library_data_dir%'
-
-    App\Mcp\LibraryMetadataCorpus:
-        arguments:
-            $projectDir: '%kernel.project_dir%'
-            $libraryDataDir: '%app.library_data_dir%'

@@ -176,11 +176,15 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         // Clear stale compiled containers before migrations/fixture setup.
         stackRun('browser', ['stop', 'worker']);
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
+        // Only this verified checkout-owned browser database is disposable.
+        stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:database:drop', '--force', '--env=test', '--no-interaction']);
+        // SQLite is recreated when migrations open the connection.
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
-        stackRun('browser', ['exec', '-T', 'php', 'php', 'tests/Support/prepare_browser.php']);
+        // FrankenPHP workers retain loaded classes; use current application code.
+        stackRun('browser', ['restart', 'php']);
         stackRun('browser', ['up', '-d', '--wait', 'worker']);
 
-        return report('test:browser', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
+        return report('test:browser', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);
     });
 }
 

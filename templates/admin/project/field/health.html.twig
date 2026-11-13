@@ -1,0 +1,19 @@
+{% extends '@EasyAdmin/crud/field/choice.html.twig' %}
+
+{% block field_value %}
+    {% set health = field.value %}
+    {% set status = health.value|default(field.value|default('')) %}
+    {% set label = health is not null ? health.label() : (status|replace({'_': ' '})|title) %}
+
+    {% set badgeClasses = {
+        'pending': 'badge badge-secondary',
+        'scanning': 'badge badge-info',
+        'ready': 'badge badge-success',
+        'error': 'badge badge-danger'
+    } %}
+
+    <span
+        data-project-health="{{ status }}"
+        class="{{ badgeClasses[status] ?? badgeClasses['pending'] }}"
+    >{{ label }}</span>
+{% endblock %}

@@ -32,13 +32,13 @@
 *.code-workspace
 /config/reference.php
 /config/schema.json
+/compose.sources.yaml
 /.castor.stub.php
-.vera/
+/.hatfield/
 
-# Vera runtime state written by the binary at runtime
-/docker/vera/lib/
-/docker/vera/models/
-/docker/vera/update-check.json
+# Retired runtime artifacts may remain locally; preserve them without committing.
+.vera/
+/docker/vera/
 
 # AI index artifacts
 *.toon

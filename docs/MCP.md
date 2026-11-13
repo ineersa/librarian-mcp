@@ -28,7 +28,13 @@ Firewall:
 - `security.firewalls.mcp` (stateless, path `^/_mcp`)
 - custom authenticator: `App\Security\McpTokenAuthenticator`
 
-Token source support:
+Token policy (plan 03 local-utility decision):
+
+- MCP token headers are **optional**
+- When a token **is** supplied, it is validated
+- Admin/login remain protected (`ROLE_ADMIN`)
+
+Supported token sources when present:
 
 1. `Authorization: Bearer <token>`
 2. `X-MCP-Token: <token>`
@@ -36,97 +42,44 @@ Token source support:
    - raw `Authorization: mcp_...`
    - query param `token` / `access_token` (primarily for inspector/browser stream compatibility)
 
-Authorization rule:
-
-- user must have `ROLE_MCP`
-
-Token lifecycle (`App\Security\McpTokenManager`):
+Token lifecycle (`App\Security\McpTokenManager`) when tokens are used:
 
 - plaintext token format: `mcp_<random>`
 - only SHA-256 hash is stored in DB
 - regeneration updates hash + created timestamp
 - successful auth updates `mcpTokenLastUsedAt`
 
----
-
-## 3) Tool surface (stable)
-
-The MCP tool set is fixed and does not change when libraries are added/removed.
-
-Implemented tools:
-
-- `search-libraries`
-- `semantic-search`
-- `grep`
-- `read`
-
-### `search-libraries`
-
-- Inputs: `query`, optional `limit` (1..50)
-- Returns only `ready` libraries
-- Ranking blends:
-  - DB metadata partial match (`name`, `slug`, `description`, `gitUrl`)
-  - semantic metadata corpus match (`LibraryMetadataCorpus`)
-
-### `semantic-search`
-
-- Inputs: `library`, `query`, optional `lang`, `path`, `type`, `scope`, `limit`
-- Resolves library by slug and requires `status=ready`
-- Executes Vera semantic/hybrid search in that single library
-
-### `grep`
-
-- Inputs: `library`, `pattern`, optional `ignoreCase`, `context`, `scope`, `limit`
-- Requires `ready` library
-- Executes Vera regex grep in that library only
-
-### `read`
-
-- Inputs: `library`, `file`, optional `offset`, `limit`
-- Requires `ready` library
-- Returns line-windowed output
-
-Read safety checks are strict and cumulative:
-
-1. file must be present in `Library.readableFiles`
-2. resolved `realpath` must stay under library root
-3. resolved path must be an existing file
+MCP callers still cannot register projects or supply arbitrary filesystem paths. Registration and path changes are administrator operations only.
 
 ---
 
-## 4) Output format
+## 3) Tool surface (current)
 
-All tool responses are produced by `ToonToolResultFactory`.
+Plan 03 retires the old library tools (`search-libraries`, `semantic-search`, `grep`, `read`) and Vera/TOON library result path.
 
-- Success: TOON-encoded text payload
-- Error: `CallToolResult::error()` with TOON object:
-  - `message`
-  - `retryable`
-  - `hint`
+Until plan 05 lands the memory tools:
 
-Nuance:
-- Empty array success is normalized to literal `[]` so clients can distinguish “empty result” from malformed output.
+- the registry is explicit and empty of public tools
+- anonymous `initialize` / `initialized` plus token-bearing `tools/list` cover the optional-auth HTTP smoke path
+- `tools/list` returns no tools
 
----
+Future public tools (plan 05, not implemented here):
 
-## 5) Readiness and error semantics
+- `memory_search`
+- `recall`
 
-`ReadyLibraryResolver` enforces:
-
-- unknown slug => non-retryable “Library not found”
-- non-ready library => retryable “Library is not ready”
-
-This keeps tool behavior explicit and avoids partial/inconsistent reads from indexing libraries.
+Do not reintroduce library/Vera tools as a compatibility layer.
 
 ---
 
-## 6) Logging / observability
+## 4) Output / readiness notes
 
-MCP tools and sync pipeline emit structured logs including:
+There is no library readiness or readable-file sandbox in the current product path. Project source discovery health lives in admin (`pending` / `scanning` / `ready` / `error`) and means **sources discovered**, not indexed.
 
-- tool name
-- target library slug
-- latency
-- failure details + retryability intent
+Indexing, hybrid retrieval, and memory tool payloads are deferred to plans 04–05. See [project-sources.md](project-sources.md) for registration/discovery semantics.
 
-This is intentionally optimized for diagnosing production MCP calls without requiring verbose client traces.
+---
+
+## 5) Logging / observability
+
+Keep credentials, observation text, session journals, and plaintext MCP tokens out of routine logs. Prefer structured operational fields (project id, health transition, latency, non-sensitive error class).

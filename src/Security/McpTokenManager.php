@@ -11,6 +11,8 @@ use Symfony\Component\Clock\ClockInterface;
 
 final class McpTokenManager
 {
+    public const string TOKEN_PREFIX = 'mcp_';
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly UserRepository $userRepository,
@@ -20,7 +22,7 @@ final class McpTokenManager
 
     public function regenerate(User $user): string
     {
-        $token = 'mcp_'.bin2hex(random_bytes(24));
+        $token = self::TOKEN_PREFIX.bin2hex(random_bytes(24));
 
         $user->setMcpTokenHash(self::hashToken($token));
         $user->setMcpTokenCreatedAt($this->clock->now());
@@ -41,7 +43,7 @@ final class McpTokenManager
 
     public function findUserByToken(string $plainToken): ?User
     {
-        if (!str_starts_with($plainToken, 'mcp_')) {
+        if (!str_starts_with($plainToken, self::TOKEN_PREFIX)) {
             return null;
         }
 

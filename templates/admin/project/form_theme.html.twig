@@ -1,0 +1,124 @@
+{% block project_directory_widget %}
+    {% set browseUrl = browse_url|default('') %}
+    {% set existingClass = attr.class|default('') %}
+
+    <div
+        data-controller="project-directory"
+        data-project-directory-browse-url-value="{{ browseUrl }}"
+        class="project-directory-picker d-grid gap-2"
+    >
+        <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center">
+            <input
+                type="text"
+                {{ block('widget_attributes') }}
+                class="{{ (existingClass ~ ' form-control')|trim }}"
+                value="{{ value }}"
+                readonly
+                data-project-directory-target="input"
+            >
+            <button
+                type="button"
+                class="btn btn-secondary"
+                data-action="project-directory#open"
+                data-project-directory-target="openButton"
+            >
+                Choose directory
+            </button>
+        </div>
+
+        <dialog
+            data-project-directory-target="dialog"
+            class="col-12 col-md-9 col-xl-6 rounded border bg-dark p-4 text-light shadow"
+            aria-labelledby="project-directory-title"
+        >
+            <div class="mb-3 d-flex align-items-start justify-content-between gap-3">
+                <div>
+                    <h2 id="project-directory-title" class="h5 mb-1">Choose directory</h2>
+                    <p class="mb-0 small text-muted">
+                        Browse directories visible to the Librarian service. Host folders require a deliberate Docker mount.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="btn btn-link"
+                    data-action="project-directory#close"
+                    aria-label="Close directory picker"
+                >
+                    Close
+                </button>
+            </div>
+
+            <div class="mb-3 d-flex flex-column flex-sm-row gap-2">
+                <input
+                    type="text"
+                    class="form-control"
+                    data-project-directory-target="location"
+                    data-action="keydown.enter->project-directory#goToLocation:prevent"
+                    aria-label="Directory location"
+                    placeholder="/service/visible/path"
+                >
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-action="project-directory#goToLocation"
+                >
+                    Go
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-action="project-directory#goParent"
+                    data-project-directory-target="parentButton"
+                >
+                    Parent
+                </button>
+            </div>
+
+            <p
+                class="mb-2 small text-muted"
+                data-project-directory-target="currentPath"
+                aria-live="polite"
+            ></p>
+
+            <p
+                class="mb-2 small text-danger"
+                data-project-directory-target="error"
+                role="alert"
+                hidden
+            ></p>
+
+            <div
+                class="mb-3 list-group overflow-auto rounded border"
+                data-project-directory-target="entries"
+                role="listbox"
+                aria-label="Directories"
+            ></div>
+
+            <p
+                class="mb-3 small text-muted"
+                data-project-directory-target="truncated"
+                hidden
+            >
+                Showing the first 200 directories.
+            </p>
+
+            <div class="d-flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    data-action="project-directory#selectCurrent"
+                    data-project-directory-target="selectButton"
+                >
+                    Select this directory
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-action="project-directory#close"
+                >
+                    Cancel
+                </button>
+            </div>
+        </dialog>
+    </div>
+{% endblock %}

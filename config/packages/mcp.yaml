@@ -3,8 +3,8 @@ mcp:
         librarian:
             name: 'librarian-mcp'
             version: '1.0.0'
-            description: 'Librarian MCP HTTP server'
-            instructions: 'Use search-libraries to find a library, then semantic-search/grep/read on one library.'
+            description: 'Shared Hatfield project memory service'
+            instructions: 'Register and scan local Hatfield projects in the admin UI. Memory retrieval tools are not implemented yet.'
             transports:
                 stdio: false
                 http: true
@@ -16,4 +16,6 @@ mcp:
                 directory: '%kernel.project_dir%/var/mcp-sessions'
                 ttl: 3600
             registry:
-                - 'App\Mcp\Tool\'
+                # Bundle 0.15 permits an empty wildcard registry, not an unmatched prefix.
+                # No MCP tool services remain; plan 05 will select the memory tools.
+                tools: ['*']

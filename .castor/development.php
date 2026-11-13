@@ -84,7 +84,7 @@ function allocatePublishedPort(string $mode): string
 /** @return list<string> */
 function stackCommand(string $mode): array
 {
-    return ['docker', 'compose', '--project-name', stackProject($mode), '-f', 'compose.yaml', '-f', 'compose.override.yaml', ...('browser' === $mode ? ['-f', 'compose.browser.yaml'] : [])];
+    return ['docker', 'compose', '--project-name', stackProject($mode), '-f', 'compose.yaml', '-f', 'compose.override.yaml', ...('browser' === $mode ? ['-f', 'compose.browser.yaml'] : (is_file(\dirname(__DIR__).'/compose.sources.yaml') ? ['-f', 'compose.sources.yaml'] : []))];
 }
 
 /** @return array<string, string> */
@@ -184,11 +184,15 @@ function developmentStack(string $mode, string $action): int
                 }
             }
             if ('browser' === $mode) {
-                foreach (['/var/browser-live', '/var/browser-live/cache', '/var/browser-live/log', '/var/browser-live/libraries', '/var/browser-live/mcp-sessions'] as $relative) {
+                foreach (['/var/browser-live', '/var/browser-live/cache', '/var/browser-live/log', '/var/browser-live/mcp-sessions'] as $relative) {
                     $path = \dirname(__DIR__).$relative;
                     if (!is_dir($path)) {
                         mkdir($path, 0700, true);
                     }
+                }
+                $fixtures = report('test:sources:prepare', ['php', 'tests/Support/prepare_project_sources.php']);
+                if (0 !== $fixtures) {
+                    return $fixtures;
                 }
             }
             ensureStackNetwork($mode);
@@ -234,7 +238,7 @@ function browserLiveTest(#[AsArgsAfterOptionEnd] array $arguments = [], bool $he
         throw new \InvalidArgumentException('Pass the PHPUnit test selection after --.');
     }
 
-    return report('browser:live:test', ['env', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
+    return report('browser:live:test', ['env', 'DATABASE_URL=sqlite:////app/var/browser-live/application.db', 'LIBRARIAN_BROWSER_REUSE_STORAGE=1', 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL=http://php:8080', 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/browser-live-test/junit.xml'], headed: $headed, networked: true);
 }
 
 #[AsTask(namespace: 'browser', name: 'stack:up', description: 'Build and start only the isolated browser-test application.')]

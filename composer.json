@@ -1,6 +1,6 @@
 {
     "name": "ineersa/librarian-mcp",
-    "description": "Searchable Git libraries exposed over authenticated MCP HTTP",
+    "description": "Read-only Hatfield project source discovery and shared memory service",
     "type": "project",
     "license": "MIT",
     "minimum-stability": "stable",
@@ -17,7 +17,6 @@
         "ext-pcntl": "*",
         "ext-pdo_sqlite": "*",
         "ext-posix": "*",
-        "helgesverre/toon": "^3.1",
         "nyholm/psr7": "^1.8",
         "php": "^8.5",
         "phpdocumentor/reflection-docblock": "^5.6.7 || ^6.0",
@@ -147,7 +146,9 @@
         }
     },
     "require-dev": {
+        "dama/doctrine-test-bundle": "^8.7",
         "friendsofphp/php-cs-fixer": "^3.95.1",
+        "hautelook/alice-bundle": "^2.17",
         "jolicode/castor": "^1.9",
         "phpstan/phpstan": "^2.1.51",
         "phpstan/phpstan-doctrine": "^2.0",

@@ -25,7 +25,11 @@ final class LoginController extends AbstractController
         // last username entered by the user
         $lastUsername = $authenticationUtils->getLastUsername();
 
-        return $this->render('login/index.html.twig', [
+        return $this->render('@EasyAdmin/page/login.html.twig', [
+            'page_title' => 'Librarian MCP',
+            'username_label' => 'Email',
+            'csrf_token_intention' => 'authenticate',
+            'target_path' => $this->generateUrl('admin'),
             'last_username' => $lastUsername,
             'error' => $error,
         ]);

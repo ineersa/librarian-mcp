@@ -1,26 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# ── Vera CLI: build from source ──────────────────────────────────────────────
-FROM rust:1-bookworm AS vera_builder
-
-ARG VERA_REPO=https://github.com/ineersa/Vera.git
-ARG VERA_BRANCH=localhost
-
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-
-RUN git clone --branch ${VERA_BRANCH} --depth 1 ${VERA_REPO} /vera-src
-
-WORKDIR /vera-src
-
-# Vera keeps these grammars out of Git and links them into vera-core.
-RUN bash scripts/bootstrap-vendored-grammars.sh
-
-RUN --mount=type=cache,id=librarian-vera-target,target=/vera-src/target \
-    --mount=type=cache,target=/usr/local/cargo/registry \
-    CARGO_BUILD_JOBS=$(nproc) cargo build --release -p vera-cli \
-    && cp target/release/vera /usr/local/bin/vera \
-    && vera --version
-
 # ── PHP app ──────────────────────────────────────────────────────────────────
 FROM dunglas/frankenphp:1.13.5-php8.5-bookworm@sha256:8104eb9c834d905e5678a183d053ef1a0c650c5f4874f366dfec7eb025e92e06 AS frankenphp_base
 
@@ -46,10 +25,6 @@ RUN install-php-extensions \
         sqlite3 \
         zip \
         opcache
-
-# Vera CLI — copy the binary built from source
-COPY --from=vera_builder /usr/local/bin/vera /usr/local/bin/vera
-RUN vera --version
 
 COPY docker/frankenphp/Caddyfile /etc/caddy/Caddyfile
 COPY docker/frankenphp/worker.Caddyfile /etc/caddy/worker.Caddyfile

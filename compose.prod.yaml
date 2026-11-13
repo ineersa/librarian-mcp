@@ -45,9 +45,12 @@ services:
       - ./data-prod:/app/data-prod
       - caddy_data:/data
       - caddy_config:/config
-      # Keep vera config available for both root and non-root execution.
-      - ./docker/vera:/root/.vera
-      - ./docker/vera:/app/.vera
+      - type: bind
+        source: '${PROJECTS_HOST_PATH:-.}'
+        target: /projects
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - app_net
     ports:
@@ -67,9 +70,12 @@ services:
       - php
     volumes:
       - ./data-prod:/app/data-prod
-      # Messenger may run as a non-root user (HOME=/app) depending on runtime.
-      - ./docker/vera:/root/.vera
-      - ./docker/vera:/app/.vera
+      - type: bind
+        source: '${PROJECTS_HOST_PATH:-.}'
+        target: /projects
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - app_net
     dns:

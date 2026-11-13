@@ -4,9 +4,9 @@ This guide assumes `compose.yaml` + `compose.prod.yaml`. Prefer Castor productio
 
 ## Framework upgrade note
 
-Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 because stable 8.2 was unavailable. The framework requires PHP 8.4.1+; this project uses PHP 8.5. See [framework upgrade notes](framework-upgrade.md) for dependency pins and validation.
+Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 because stable 8.2 was unavailable. The framework requires PHP 8.4.1+; this project uses PHP 8.5. See [framework upgrade notes](framework-upgrade.md) for dependency pins.
 
-The production compose topology, data mounts, project name, and Vera workflow are preserved. No production cutover is part of this upgrade.
+The production compose topology, data mounts, project name, and ports are preserved. Plan 03 replaces the Git/Vera library product with local project registration and read-only source discovery; see [project-sources.md](project-sources.md). No production cutover authorization is implied by that product change.
 
 ## Default mode (recommended)
 
@@ -29,15 +29,20 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    - `APP_SECRET`
    - `DEFAULT_URI` (for example `https://librarian.example.com`)
    - `MCP_ALLOWED_HOSTS` (comma-separated hostnames without scheme/port; include `librarian.example.com`)
+   - `HATFIELD_USER_HOME` (required)
+   - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
+   - `HATFIELD_PATH_MAPPINGS` when host/service path prefixes differ
+   - `PROJECT_BROWSE_ROOT` (picker start path inside the service)
    - `MERCURE_JWT_SECRET`, `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`
    - `SYMFONY_TRUSTED_PROXIES=REMOTE_ADDR`
    - `SYMFONY_TRUSTED_HEADERS=x-forwarded-for,x-forwarded-host,x-forwarded-proto,x-forwarded-port`
 
-3. Configure the published app port in `.env` (Compose interpolation, not the container-only `.env.prod.local`):
+3. Configure the published app port and host project bind in `.env` (Compose interpolation, not the container-only `.env.prod.local`), or use exported process environment / an explicit bind in `compose.sources.yaml`:
 
    ```bash
    APP_HTTP_BIND=127.0.0.1
    APP_HTTP_PORT=8081
+   PROJECTS_HOST_PATH=/absolute/host/projects
    ```
 
    Keep it loopback-only (`127.0.0.1`) when nginx is your public entrypoint.
@@ -56,6 +61,8 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    ```
 
 6. Create an admin user, then configure nginx to proxy the explicit loopback port selected above.
+
+Optional: maintain an ignored `compose.sources.yaml` for additional read-only mounts of user/global/custom Hatfield settings or data. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production use service name `messenger`, not development's `worker`; see [source mounts](project-sources.md#docker-source-mounts).
 
 ## Nginx example (host machine)
 
@@ -122,4 +129,6 @@ Then publish host 443 with a local compose override.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
 - Symfony environment is baked by `composer dump-env prod` during image build.
 - Castor loads `.env` and `.env.prod` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
+- Production image no longer embeds Vera; project sources are mounted read-only.
 - Do not exercise migrations against the real application database for tests; use isolated storage for validation.
+- Do not reset owner/production data, volumes, or unrelated containers without explicit authorization.
