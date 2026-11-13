@@ -17,7 +17,7 @@ Librarian registers **local directories**, not GitHub libraries. It discovers Ha
 - Editing the directory rebinds the **same registration ID**. Nothing infers identity from a basename, session number, name, or origin.
 - A scan publishes results only if the registration still refers to its scanned directory. Filesystem discovery runs outside the short Doctrine write transaction.
 - Deletion removes the Librarian registration and **owned derived indexes** (generation rows and generation-scoped Postgres store tables). It never removes the project directory, `.hatfield`, OM database, journals, or external/symlink destinations.
-- Generated migrations add Librarian-owned tables only. Prior SQLite migration history is retained as inactive history; PostgreSQL baseline migrations live under `migrations/postgres`. The actual development application uses PostgreSQL, not the retired SQLite backend.
+- Generated migrations add Librarian-owned tables only. PostgreSQL migrations live under `migrations/postgres`. The actual development application uses PostgreSQL.
 
 ## Source settings contract
 

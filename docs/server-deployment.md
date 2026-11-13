@@ -71,7 +71,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
 Optional: maintain an ignored `compose.sources.yaml` for additional read-only mounts of user/global/custom Hatfield settings or data. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production use service name `messenger`, not development's `worker`; see [source mounts](project-sources.md#docker-source-mounts).
 
-Historical SQLite migration classes remain on disk but are not registered for PostgreSQL. Use the generated PostgreSQL baseline, never replay SQLite migrations against it. The actual local checkout replacement is recorded in [indexing validation](indexing-validation.md#actual-checkout-replacement).
+Use the generated PostgreSQL baseline in `migrations/postgres`. The actual local checkout replacement is recorded in [indexing validation](indexing-validation.md#actual-checkout-replacement).
 
 ## Nginx example (host machine)
 

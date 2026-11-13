@@ -103,7 +103,7 @@ There is no security allowlist beyond admin authentication. Symlinks / external 
 Librarian-owned:
 
 - Shared PostgreSQL + pgvector database for Doctrine metadata and generation-scoped store tables
-- Prior SQLite migration history retained; new baseline migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
+- Generated PostgreSQL migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
 - Actual development and browser stacks use PostgreSQL; the retired SQLite/Chroma storage was removed after preserving application records
 
 Source-owned (read-only mounts):

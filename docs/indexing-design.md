@@ -41,7 +41,7 @@ Application entities:
 - `IndexGeneration`: project relation, signature, source identity/path/root binding, active flag, state, scan cursor/round, committed revision, parent/chunk counts, timestamps, sanitized error
 - `IndexedMemory`: generation relation, canonical kind/ID, content/metadata signature, chunk ID list, last-seen scan round
 
-Prior SQLite migration history is retained, but is not an active backend or migration path. PostgreSQL baseline migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author migration classes or schema SQL. The checkout's SQLite/Chroma replacement is complete; see [replacement verification](indexing-validation.md#actual-checkout-replacement).
+PostgreSQL migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author migration classes or schema SQL. The checkout's SQLite/Chroma replacement is complete; see [replacement verification](indexing-validation.md#actual-checkout-replacement).
 
 ## Source changes
 

@@ -1,6 +1,4 @@
 doctrine_migrations:
     migrations_paths:
-        # Historical SQLite migrations remain untouched on disk, but must not run
-        # against PostgreSQL. This namespace starts a separate PostgreSQL baseline.
         'DoctrineMigrations\Postgres': '%kernel.project_dir%/migrations/postgres'
     enable_profiler: false
