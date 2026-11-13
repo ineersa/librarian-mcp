@@ -627,6 +627,13 @@ final class ProjectIndexer
         if ($generation->sourceIdentity !== $expectedSourceIdentity) {
             throw IndexException::sanitized('Source identity replacement invalidated this index checkpoint.');
         }
+
+        // Live path/dev/ino only. Full snapshot counts/revision/witness stay
+        // outside the short relational write transaction.
+        $currentIdentity = $this->sourceReader->identityFor($generation->sourcePath);
+        if ($currentIdentity !== $expectedSourceIdentity) {
+            throw IndexException::sanitized('Source identity replacement invalidated this index checkpoint.');
+        }
     }
 
     private function rootBinding(Project $project): string

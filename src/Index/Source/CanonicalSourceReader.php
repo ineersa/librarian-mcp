@@ -273,21 +273,29 @@ final class CanonicalSourceReader
         return (int) $value;
     }
 
-    private function identityFor(string $databasePath): string
+    /**
+     * Cheap stable filesystem identity (path + device + inode).
+     *
+     * Does not open SQLite or count source rows. Use snapshot() when revision,
+     * witness, or table counts are required.
+     */
+    public function identityFor(string $databasePath): string
     {
         clearstatcache(true, $databasePath);
-        $stat = @stat($databasePath);
-        $dev = \is_array($stat) ? ($stat['dev'] ?? null) : null;
-        $ino = \is_array($stat) ? ($stat['ino'] ?? null) : null;
         $resolved = realpath($databasePath);
         if (false === $resolved) {
-            $resolved = $databasePath;
+            throw IndexException::sanitized('Unable to resolve observational memory database path.');
+        }
+
+        $stat = @stat($resolved);
+        if (!\is_array($stat) || !isset($stat['dev'], $stat['ino'])) {
+            throw IndexException::sanitized('Unable to read observational memory filesystem identity.');
         }
 
         return hash('sha256', json_encode([
             $resolved,
-            $dev,
-            $ino,
+            $stat['dev'],
+            $stat['ino'],
         ], \JSON_THROW_ON_ERROR));
     }
 
