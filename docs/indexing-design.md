@@ -1,6 +1,6 @@
 # Plan 04 — indexing design
 
-Status: owner-approved simplification to the official Symfony AI **Postgres** store. Application code/config cutover is owned by main; completed checks and remaining gaps live in [indexing validation](indexing-validation.md). Production cutover and MCP memory tools remain plans 06 and 05.
+Status: official Symfony AI **Postgres** store on shared PostgreSQL + pgvector. Checks and remaining gaps: [indexing validation](indexing-validation.md). Production cutover and MCP memory tools remain plans 06 and 05.
 
 ## Goal
 
@@ -13,13 +13,13 @@ No private Chroma service, no separate SQLite FTS files, no CombinedStore/RRF ad
 
 ## Store and retrieval (as provided)
 
-Locked target: Symfony AI Store + official Postgres bridge **~0.15** with PostgreSQL + **pgvector**. Use the stock bridge as shipped.
+Locked dependency: Symfony AI Store + official Postgres bridge **0.15.0** with PostgreSQL + **pgvector**. Runtime image: `pgvector/pgvector:pg17-bookworm` (digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). PHP extensions include `pdo_pgsql` and `pdo_sqlite`. Use the stock bridge as shipped.
 
 - One store table per project/generation (isolation by table name, not metadata filters)
-- Document IDs follow the bridge schema (**UUID**). This is the only approved UUID exception; application entities keep auto-increment integers
+- Store document IDs are deterministic **UUIDv5** values derived from `[generation ID, kind, sourceId, full parent signature, chunk position]`. Format version **3** participates in the generation signature. This is the only approved UUID exception; application entities keep auto-increment integers
 - `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match
 - Native hybrid does **not** apply metadata/date filters; admin Search memory has no date-window UI
-- Ranking is stock weighted hybrid, not BM25 and not RRF. Behavior preservation vs the earlier Chroma path is explicitly out of scope; testing/tuning comes later
+- Ranking is stock weighted hybrid, not BM25 and not RRF. Behavior preservation vs earlier backends is out of scope; testing/tuning comes later
 
 Embeddings use the official Generic platform for the local OpenAI-compatible CodeRank endpoint and Symfony's native `Vectorizer`, with a small `ResultConvertedEvent` listener for dimension/cardinality/finite-vector checks. Query prefix remains `Represent this query for searching relevant code: `. Configured baseline remains **768** dimensions.
 
@@ -34,14 +34,14 @@ Read retained `om_observation` and `om_reflection` only. Journals are not embedd
 
 Reuse discovery's schema/version validation and read-only PDO opener. Indexing does not migrate source schemas.
 
-Chunker stays UTF-8 byte-based: 1,200 bytes, overlap 192, at most 80 lines; embedding batches ≤4. Chunk identity is deterministic SHA-256 business content used to derive the store UUID; different parent versions must not collide.
+Chunker stays UTF-8 byte-based: 1,200 bytes, overlap 192, at most 80 lines; embedding batches ≤4. Different parent versions must not collide across chunk IDs.
 
 Application entities:
 
 - `IndexGeneration`: project relation, signature, source identity/path/root binding, active flag, state, scan cursor/round, committed revision, parent/chunk counts, timestamps, sanitized error
 - `IndexedMemory`: generation relation, canonical kind/ID, content/metadata signature, chunk ID list, last-seen scan round
 
-Legacy SQLite migration history is retained. New PostgreSQL baseline migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author SQL.
+Prior SQLite migration history is retained. New PostgreSQL baseline migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author SQL. There is no automatic transfer or reset of owner registrations from the prior SQLite file; plan 06 owns any owner-approved cutover.
 
 ## Source changes
 
@@ -56,7 +56,7 @@ Canonical change signal is ordinary metadata revision advance:
 5. Embed outside the short write transaction. Upsert/remove store chunks and commit the relational manifest together in one short PostgreSQL transaction
 6. Advance the cursor only after that work succeeds. After traversal, remove unseen parents in bounded batches and publish the committed boundary
 
-Source identity remains path + filesystem device/inode. Unused DB/WAL witness hashing and unused snapshot count fields are deleted. A changed filesystem identity or lower revision starts a fresh generation. An in-place restore that preserves identity and revision is not reliably detected.
+Source identity remains path + filesystem device/inode. A changed filesystem identity or lower revision starts a fresh generation. An in-place restore that preserves identity and revision is not reliably detected.
 
 ## Scheduling
 

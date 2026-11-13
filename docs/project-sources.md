@@ -17,7 +17,7 @@ Librarian registers **local directories**, not GitHub libraries. It discovers Ha
 - Editing the directory rebinds the **same registration ID**. Nothing infers identity from a basename, session number, name, or origin.
 - A scan publishes results only if the registration still refers to its scanned directory. Filesystem discovery runs outside the short Doctrine write transaction.
 - Deletion removes the Librarian registration and **owned derived indexes** (generation rows and generation-scoped Postgres store tables). It never removes the project directory, `.hatfield`, OM database, journals, or external/symlink destinations.
-- Legacy `libraries` rows remain excluded from ORM ownership. Generated migrations add Librarian-owned tables only. Legacy SQLite migration history is retained; new PostgreSQL baseline migrations live under `migrations/postgres`.
+- Generated migrations add Librarian-owned tables only. Prior SQLite migration history is retained; new PostgreSQL baseline migrations live under `migrations/postgres`. There is no automatic transfer or reset of owner registrations from the prior SQLite file.
 
 ## Source settings contract
 
@@ -34,18 +34,18 @@ Associative maps merge recursively; lists/scalars/null replace. Missing optional
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
 - `PROJECT_BROWSE_ROOT` is the picker start path only. There is no security root allowlist for this local single-admin utility.
 
-Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal; unused DB/WAL witnesses are not part of the design.
+Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
 
 ## Derived indexing (plan 04)
 
-Owner-approved simplified baseline:
+Approved baseline:
 
 - CodeRankEmbed explicit **768-dim** vectors (existing local endpoint)
-- Official Symfony AI **Postgres** store ~0.15 on shared PostgreSQL + pgvector
+- Official Symfony AI **Postgres** store **0.15.0** on shared PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`)
 - Stock `HybridQuery` weighted similarity + PostgreSQL `ts_rank` (lexical match required; not BM25/RRF)
 - Isolation by per-project/per-generation store table names (no native date filters)
 - Local BGE rerank batches **8**, 768-character truncation, floor **-4**
-- UUID document IDs only where required by the official store schema; application entities keep auto-increment integers
+- Deterministic UUIDv5 store document IDs from `[generation ID, kind, sourceId, full parent signature, chunk position]`; format version **3** participates in the generation signature. Application entities keep auto-increment integers
 
 Notes:
 
@@ -63,7 +63,7 @@ Config surface:
 - `BGE_URL`, `BGE_MODEL`
 - `INDEX_INTERVAL`, `LOCK_DSN`
 
-Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (default interval 60s). Exact Postgres service image/tag is owned by the infrastructure child / main.
+Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (default interval 60s).
 
 ## Docker source mounts
 
@@ -75,4 +75,4 @@ EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry s
 
 Saved coverage remains **one** Projects journey: register/discover → Index now → search a public synthetic observation → ordinary harness-owned fixture content/revision update → Index now → updated search → stable-ID rebind/delete with source-hash checks. Fixture mutation is harness-owned and restored; app code must not mutate sources.
 
-PostgreSQL cutover checks are pending main. Earlier Chroma/SQLite measurements are historical only and are not acceptance for the Postgres store. Prefer [indexing-design.md](indexing-design.md), [indexing-validation.md](indexing-validation.md), and [TESTING.md](../TESTING.md).
+Do not claim plan 04 acceptance from docs alone. Prefer [indexing-design.md](indexing-design.md), [indexing-validation.md](indexing-validation.md), and [TESTING.md](../TESTING.md).

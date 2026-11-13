@@ -34,10 +34,10 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Do not commit credentials, private project settings, OM databases, session journals, database files, MCP plaintext tokens, or private provider payloads.
 - Keep database write transactions short. Do not hold one open during source discovery or other long external work.
 - Source access is strictly read-only. Removing a project registration deletes Librarian-owned registration/index data (including owned Postgres generation/store tables); never delete registered project trees, `.hatfield`, OM databases, or journals.
-- Generate migrations with Doctrine tooling through Castor against verified isolated task-owned storage. Do not hand-author migration classes or SQL. Read generated output and verify the schema changes before applying it; report unexpected destructive diffs instead of bypassing the generator. Preserve already-applied owner/production migration history. Legacy SQLite migration history is retained; new PostgreSQL baseline migrations live under `migrations/postgres` (`DoctrineMigrations\Postgres`).
+- Generate migrations with Doctrine tooling through Castor against verified isolated task-owned storage. Do not hand-author migration classes or SQL. Read generated output and verify the schema changes before applying it; report unexpected destructive diffs instead of bypassing the generator. Preserve already-applied owner/production migration history. Prior SQLite migration history is retained; new PostgreSQL baseline migrations live under `migrations/postgres` (`DoctrineMigrations\Postgres`). There is no automatic transfer or reset of owner registrations from the prior SQLite file.
 - Treat uploaded content, repository contents, and model/tool output as untrusted. Do not inject unescaped output into HTML or execute generated JavaScript without an explicitly approved isolation design.
 - Do not reset owner data, remove volumes, or stop unrelated containers without explicit authorization and a verified target.
-- **Never use UUIDs or ULIDs for primary keys or any other field unless explicitly specified.** Always use auto-increment integers (`#[ORM\GeneratedValue]`) unless the spec specifically calls for UUIDs/ULIDs. The only approved exception is official Symfony AI Postgres store document IDs required by that bridge schema.
+- **Never use UUIDs or ULIDs for primary keys or any other field unless explicitly specified.** Always use auto-increment integers (`#[ORM\GeneratedValue]`) unless the spec specifically calls for UUIDs/ULIDs. The only approved exception is official Symfony AI Postgres store document IDs (deterministic UUIDv5).
 - **Use PHP 8.4+ property hooks / asymmetric visibility in Doctrine entities.** Replace trivial getter/setter pairs with `public private(set)` (read-only externally) or `public` (read-write) properties. Keep only methods that have real logic or interface contracts. Doctrine hydrates via reflection so `private(set)` is safe. Prefer property access (`$project->name`) over trivial getters in project code.
 - Prefer injecting `ClockInterface` for time-sensitive logic instead of calling system time directly.
 - Prefer Tailwind utility classes over adding custom CSS rules. Add custom CSS only when utilities are not enough, and keep it in `assets/styles/app.css`.
@@ -91,12 +91,12 @@ Resolved dependency selections (runtime validation is recorded separately):
 
 ## Docker setup
 
-- Runtime stack: FrankenPHP (PHP 8.5), Symfony worker mode, Mercure, PostgreSQL + pgvector.
-- Shared `DATABASE_URL` for Doctrine metadata and official Symfony AI Postgres store tables.
+- Runtime stack: FrankenPHP (PHP 8.5), Symfony worker mode, Mercure, PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`).
+- Shared `DATABASE_URL` for Doctrine metadata and official Symfony AI Postgres store tables. PHP has `pdo_pgsql` and `pdo_sqlite`.
 - Keep `data/.gitignore` as `*` and `!.gitignore` for any remaining local files; do not commit private source or index data.
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.
-- Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`. Exact Postgres service image/tag is owned by the infrastructure child / main.
+- Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`.
 - Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
 
 ## Suggested defaults for new features

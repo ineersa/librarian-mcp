@@ -137,7 +137,7 @@ Summary:
 - Discovery is read-only; removing a registration deletes owned derived indexes but never source trees, `.hatfield`, OM databases, or journals
 - `ready` means sources were discovered, not indexed; source journal counts are not an index backlog
 - Admin Index now / Search memory operate on Librarian-owned derived data; MCP memory tools remain plan 05
-- Design details and pending evidence: [indexing design](docs/indexing-design.md)
+- Design details: [indexing design](docs/indexing-design.md); validation status: [indexing validation](docs/indexing-validation.md)
 
 ---
 
@@ -242,7 +242,7 @@ Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover tasks 
 
 ### Framework upgrade gate
 
-On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions and recorded checks. Product behavior after plans 03/04 is project registration, source discovery, and derived hybrid indexing — not the historical Git/Vera library path. Plan 04 now targets the official Symfony AI Postgres store; cutover validation is pending main — see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
+On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions and recorded checks. Product behavior after plans 03/04 is project registration, source discovery, and derived hybrid indexing on the official Symfony AI Postgres store — not the historical Git/Vera library path. See [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
 
 ---
 

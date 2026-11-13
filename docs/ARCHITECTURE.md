@@ -12,7 +12,7 @@ The app is a Symfony web/admin application that:
 Core runtime pieces:
 
 - **Web/admin:** Symfony + EasyAdmin
-- **Persistence + store:** Doctrine ORM + official Symfony AI Postgres store on shared PostgreSQL + pgvector
+- **Persistence + store:** Doctrine ORM + official Symfony AI Postgres store **0.15.0** on shared PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`)
 - **Async pipeline:** Symfony Messenger (`async`) + Scheduler (`scheduler_default`)
 - **Models:** local CodeRankEmbed (explicit 768-dim vectors) + local BGE reranker
 - **Source discovery:** read-only Hatfield settings / OM / session inspection
@@ -45,7 +45,7 @@ Uniqueness is case-insensitive for names, canonical for directories, and normali
 - `IndexGeneration` tracks signature, source identity/binding, active flag, state, committed revision, parent/chunk counts, and sanitized errors.
 - `IndexedMemory` stores committed parent provenance for recall.
 - Generation-scoped Postgres store tables are Librarian-owned derived data. Registration deletion removes those owned indexes, never source trees.
-- Official store document IDs are UUIDs required by the bridge schema; application entity keys remain auto-increment integers.
+- Store document IDs are deterministic UUIDv5 values derived from `[generation ID, kind, sourceId, full parent signature, chunk position]`; format version 3 participates in the generation signature. Application entity keys remain auto-increment integers.
 
 ---
 
@@ -103,7 +103,8 @@ There is no security allowlist beyond admin authentication. Symlinks / external 
 Librarian-owned:
 
 - Shared PostgreSQL + pgvector database for Doctrine metadata and generation-scoped store tables
-- Legacy SQLite migration history retained; new baseline migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
+- Prior SQLite migration history retained; new baseline migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
+- No automatic transfer or reset of owner registrations from the prior SQLite file (plan 06)
 
 Source-owned (read-only mounts):
 
@@ -122,7 +123,7 @@ Do not commit private project settings, OM databases, session journals, or deriv
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport remains available; public tools are empty until plan 05
 - No production cutover/migration authorization is implied by plan 04 implementation
-- Postgres service image/tag and Castor recreate mechanics are owned by the infrastructure child / main
+- Browser database is `librarian_browser` in the checkout-scoped Postgres volume; browser-only Postgres publishes a dynamic `127.0.0.1` host port for the saved harness; production/dev Postgres publish no host ports
 
 ## 8) Framework / MCP upgrade notes (plan 01, historical infrastructure)
 

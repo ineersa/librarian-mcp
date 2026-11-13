@@ -34,7 +34,7 @@ The Projects journey uses only the two synthetic source trees needed for registr
 
 CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. After the journey restores any intentional harness mutation, source fixture trees/databases must match the pre-journey hash; registration removal must not change sources.
 
-The former kernel/unit suite and FakeVera / MockHub / library TOON tool harnesses have been removed. Do not add unit/API-only suites as the primary coverage model. Public MCP memory tools remain plan 05. Plan 04 Postgres cutover validation is owned by main and is not claimed by docs alone; see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
+The former kernel/unit suite and FakeVera / MockHub / library TOON tool harnesses have been removed. Do not add unit/API-only suites as the primary coverage model. Public MCP memory tools remain plan 05. Do not claim plan 04 acceptance from docs alone; see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
 
 ## Prepare the tooling runtime
 
@@ -62,7 +62,7 @@ See [framework upgrade notes](docs/framework-upgrade.md), [project sources](docs
 
 ## Running tests
 
-`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, recreates only `var/browser-live/application.db` through Doctrine commands, applies migrations, then runs Playwright scenarios headlessly by default. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture before the first journey. Native PHPUnit arguments go after `--`:
+`vendor/bin/castor test` prepares the checkout-owned isolated browser stack, stops the owned worker, Doctrine-drops/creates/migrates only the guarded browser database `librarian_browser` in the checkout-scoped Postgres Docker volume, then runs Playwright scenarios headlessly by default. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture before the first journey. Native PHPUnit arguments go after `--`:
 
 ```sh
 vendor/bin/castor test -- tests/E2E/AuthenticationTest.php
@@ -82,7 +82,7 @@ Report actual elapsed time, results, and any gaps. Do not inflate assertion coun
 
 Use the canonical Alice fixture `fixtures/user.yaml` for development and test (`admin@test.com` / `admin`); its password is hashed by `UserPasswordProcessor`. Do not create a supplementary dataset or mutate development data for verification. Do not copy credentials from another checkout into reports.
 
-Native-network Postgres, cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). The owner has authorized resetting this checkout's isolated browser database before saved runs. Castor rejects symlinked storage, stops the owned worker, recreates/migrates the isolated browser database with Doctrine commands, and restarts the application/worker. This resets rows and auto-increment sequences. Exact Postgres recreate mechanics are owned by the infrastructure child / main. It does not reset development/production databases or delete source trees, uploads, unrelated volumes, or owner storage.
+Cache, logs, MCP sessions, Mercure state, and synthetic project fixtures are under `var/browser-live/` (and the browser stack's mapped `/project-sources`). The browser database is `librarian_browser` in the checkout-scoped Postgres Docker volume — not `var/browser-live/application.db` and not DB files under `var/`. The owner has authorized resetting that guarded browser database before saved runs: Castor stops the owned worker, Doctrine drop/create/migrate only that database, and resets integer sequences. It does not reset development/production databases or delete source trees, uploads, unrelated volumes, or owner storage.
 
 `LibrarianNetworkBrowserTest` extends `KernelTestCase` and uses Alice's `RefreshDatabaseTrait`. It verifies the exact test database URL and storage before loading fixtures. DAMA's bundle and PHPUnit extension are enabled. Network browser journeys use DAMA's supported `SkipDatabaseRollback` attribute: web and worker writes happen in separate processes and cannot be rolled back by PHPUnit's connection. The trait's initial transaction is committed before Chromium starts so those processes can see Alice's fixture data. Do not claim cross-process transactional rollback. Fresh storage is provided once per saved `test` run, not between each HTTP request.
 
@@ -101,7 +101,7 @@ Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 
-The upgraded runtime uses a **private app/Postgres network** and a printed loopback checkout URL (host networking on Linux), not a shared multi-checkout development proxy. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays and does not publish the database.
+The upgraded runtime uses a **private app/Postgres network** and a printed loopback checkout URL (host networking on Linux), not a shared multi-checkout development proxy. Browser-only Postgres publishes a dynamic host port on `127.0.0.1` for the saved host-networked harness; production/dev Postgres publish no host ports. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
 
 ## Diagnostics and evidence
 
