@@ -186,12 +186,18 @@ function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
 
 function isolatedPostgresDatabaseName(string $identifier): string
 {
+    if (1 !== preg_match('/\A[a-z0-9-]+\z/D', $identifier)) {
+        throw new \InvalidArgumentException('Use a lowercase diagnostic database identifier.');
+    }
+
     return 'librarian_iso_'.str_replace('-', '_', $identifier);
 }
 
 function isolatedPostgresDatabaseUrl(string $identifier): string
 {
-    $credentials = postgresCredentials('dev');
+    // Diagnostic DBs live on the checkout-owned browser Postgres service so
+    // networked tooling can reuse the already-supported private browser network.
+    $credentials = postgresCredentials('browser');
     $db = isolatedPostgresDatabaseName($identifier);
 
     return \sprintf(
@@ -205,6 +211,22 @@ function isolatedPostgresDatabaseUrl(string $identifier): string
 function isolatedPostgresLockDsn(string $identifier): string
 {
     return isolatedPostgresDatabaseUrl($identifier);
+}
+
+/**
+ * Starts only this checkout's browser Postgres service for diagnostic/fresh DB work.
+ * Does not start php/worker and does not reset any existing databases.
+ */
+function ensureBrowserPostgresService(): void
+{
+    foreach ([\dirname(__DIR__).'/var', \dirname(__DIR__).'/var/browser-live'] as $storage) {
+        if (is_link($storage)) {
+            throw new \RuntimeException('Refusing symlinked browser storage.');
+        }
+    }
+
+    ensureStackNetwork('browser');
+    stackRun('browser', ['up', '-d', '--wait', 'postgres']);
 }
 
 /** @return list<string> */

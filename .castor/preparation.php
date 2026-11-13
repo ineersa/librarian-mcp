@@ -58,12 +58,15 @@ function testDatabaseFresh(): int
         mkdir($root.'/var/browser', 0700, true);
     }
 
+    // Own only the browser Postgres service for diagnostic DBs; do not reset existing data.
+    ensureBrowserPostgresService();
+
     $identifier = 'migrations-'.bin2hex(random_bytes(8));
     $databaseUrl = isolatedPostgresDatabaseUrl($identifier);
     $lockDsn = isolatedPostgresLockDsn($identifier);
     $command = ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console'];
 
-    // Ensure the task-owned diagnostic database exists on the private Postgres service.
+    // Ensure the task-owned diagnostic database exists on checkout-owned browser Postgres.
     $create = report('test:database:fresh-create', [...$command, 'doctrine:database:create', '--if-not-exists', '--env=dev', '--no-interaction'], networked: true);
     if (0 !== $create) {
         return $create;

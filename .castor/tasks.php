@@ -193,6 +193,7 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
     });
 }
 
+/** @param list<string> $arguments */
 #[AsTask(namespace: 'app', name: 'composer', description: 'Run application Composer in the project runtime; pass its arguments after --.')]
 function appComposer(#[AsArgsAfterOptionEnd] array $arguments = []): int
 {
@@ -213,24 +214,23 @@ function appConsole(#[AsArgsAfterOptionEnd] array $arguments = [], string $isola
                     throw new \RuntimeException('Refusing symlinked diagnostic storage.');
                 }
             }
+            ensureBrowserPostgresService();
             $databaseUrl = postgresDatabaseUrl('browser', forHostNetwork: false);
             $lockDsn = postgresLockDsn('browser', forHostNetwork: false);
 
-            return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments]);
+            return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments], networked: true);
         }
 
-        if (1 !== preg_match('/\A[a-z0-9-]+\z/D', $isolatedDatabase)) {
-            throw new \InvalidArgumentException('Use a lowercase diagnostic database identifier.');
-        }
         foreach (['var', 'var/browser'] as $path) {
             if (is_link(\dirname(__DIR__).'/'.$path)) {
                 throw new \RuntimeException('Refusing symlinked diagnostic storage.');
             }
         }
+        ensureBrowserPostgresService();
         $databaseUrl = isolatedPostgresDatabaseUrl($isolatedDatabase);
         $lockDsn = isolatedPostgresLockDsn($isolatedDatabase);
 
-        return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments]);
+        return report('app:console', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'php', 'bin/console', '--env=dev', ...$arguments], networked: true);
     }
 
     return report('app:console', ['php', 'bin/console', ...$arguments]);
