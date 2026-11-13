@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Entity\Project;
+use App\Index\ProjectIndexManager;
 use App\Message\ScanProjectMessage;
 use App\Project\HatfieldSourceDiscovery;
 use App\Project\ProjectDiscoveryResult;
@@ -25,6 +26,7 @@ final class ScanProjectMessageHandler
         private readonly HatfieldSourceDiscovery $sourceDiscovery,
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
+        private readonly ProjectIndexManager $projectIndexManager,
     ) {
     }
 
@@ -65,7 +67,8 @@ final class ScanProjectMessageHandler
         }
 
         // Reload, compare and publish in one short transaction, never during discovery.
-        $this->entityManager->wrapInTransaction(function () use ($projectId, $root, $result): void {
+        $queuedIndexing = false;
+        $this->entityManager->wrapInTransaction(function () use ($projectId, $root, $result, &$queuedIndexing): void {
             $project = $this->entityManager->find(Project::class, $projectId, LockMode::PESSIMISTIC_WRITE);
             if (null === $project) {
                 $this->logger->info('Skipping project scan persistence because registration was removed.', [
@@ -83,7 +86,12 @@ final class ScanProjectMessageHandler
             }
 
             $this->persistResult($project, $result);
+            $queuedIndexing = $result->successful;
         });
+
+        if ($queuedIndexing) {
+            $this->projectIndexManager->queueId($projectId);
+        }
     }
 
     private function persistResult(Project $project, ProjectDiscoveryResult $result): void

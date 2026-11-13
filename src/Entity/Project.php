@@ -202,4 +202,10 @@ class Project
         $this->sourceDetails = $sourceDetails;
         $this->touch($now);
     }
+
+    public function markSuccessfulIndex(\DateTimeImmutable $now): void
+    {
+        $this->lastSuccessfulIndexAt = $now;
+        $this->touch($now);
+    }
 }

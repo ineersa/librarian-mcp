@@ -75,6 +75,25 @@ final class OmSourceReader
         }
     }
 
+    /**
+     * Shared read-only PDO opener for indexing and discovery.
+     *
+     * Callers own short read transactions and must close the connection before
+     * model or derived-store work. Never migrates or writes source tables.
+     */
+    public function openReadonlyConnection(string $databasePath): \PDO
+    {
+        if (!is_file($databasePath)) {
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseMissing, 'Observational memory database file is missing.');
+        }
+
+        if (!is_readable($databasePath)) {
+            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Observational memory database file is unreadable.');
+        }
+
+        return $this->openReadonly($databasePath);
+    }
+
     private function openReadonly(string $databasePath): \PDO
     {
         // PDO requires the sqlite: driver prefix. Keep mode=ro and avoid immutable
