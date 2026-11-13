@@ -39,6 +39,17 @@ function toolingPrepare(): int
     return aggregate('tooling:prepare', ['tooling:build' => toolingBuild(...), 'composer:install' => composerInstall(...), 'browser:install' => browserInstall(...)]);
 }
 
+/** @param list<string> $arguments */
+#[AsTask(namespace: 'tooling', name: 'run', description: 'Run native diagnostic argv in the authoritative tooling image; optionally join the owned browser network.')]
+function toolingRun(#[AsArgsAfterOptionEnd] array $arguments = [], bool $networked = false): int
+{
+    if ([] === $arguments) {
+        throw new \InvalidArgumentException('Pass the native command and its arguments after --.');
+    }
+
+    return report('tooling:run', $arguments, networked: $networked);
+}
+
 #[AsTask(namespace: 'dev', name: 'cache:warmup', description: 'Prepare compiled container metadata for Mate.')]
 function devCacheWarmup(): int
 {

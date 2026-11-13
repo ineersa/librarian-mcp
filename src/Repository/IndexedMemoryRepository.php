@@ -63,21 +63,22 @@ class IndexedMemoryRepository extends ServiceEntityRepository
 
     public function sumChunkCount(int $generationId): int
     {
-        $rows = $this->createQueryBuilder('m')
-            ->select('m.chunkIds')
-            ->andWhere('IDENTITY(m.generation) = :generationId')
-            ->setParameter('generationId', $generationId)
-            ->getQuery()
-            ->getArrayResult();
+        // Aggregate in SQLite: never hydrate the entire populated manifest in PHP.
+        return (int) $this->getEntityManager()->getConnection()->fetchOne(
+            'SELECT COALESCE(SUM(json_array_length(chunk_ids)), 0) FROM indexed_memories WHERE generation_id = ?',
+            [$generationId],
+        );
+    }
 
-        $total = 0;
-        foreach ($rows as $row) {
-            $chunkIds = $row['chunkIds'] ?? [];
-            if (\is_array($chunkIds)) {
-                $total += \count($chunkIds);
-            }
-        }
-
-        return $total;
+    public function isCommittedChunk(int $generationId, string $kind, string $sourceId, string $contentSignature, string $chunkId): bool
+    {
+        return false !== $this->getEntityManager()->getConnection()->fetchOne(
+            'SELECT 1 FROM indexed_memories
+             WHERE generation_id = :generation AND kind = :kind AND source_id = :source
+               AND content_signature = :signature
+               AND EXISTS (SELECT 1 FROM json_each(chunk_ids) WHERE value = :chunk)
+             LIMIT 1',
+            ['generation' => $generationId, 'kind' => $kind, 'source' => $sourceId, 'signature' => $contentSignature, 'chunk' => $chunkId],
+        );
     }
 }

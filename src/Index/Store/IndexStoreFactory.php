@@ -48,14 +48,14 @@ final class IndexStoreFactory
         return $this->client;
     }
 
-    public function forGeneration(int $projectId, int $generationId): IndexStores
+    public function forGeneration(int $projectId, int $generationId, bool $initialize = true): IndexStores
     {
         $this->assertIds($projectId, $generationId);
         $collectionName = $this->collectionName($projectId, $generationId);
-        $this->ensureCosineCollection($collectionName);
+        $this->ensureCosineCollection($collectionName, $initialize);
 
         $vector = new ChromaVectorStoreAdapter(new ChromaStore($this->client, $collectionName));
-        [$lexicalStore, $pdo] = $this->lexicalStore($projectId, $generationId);
+        [$lexicalStore, $pdo] = $this->lexicalStore($projectId, $generationId, $initialize);
         $text = new SqliteLexicalStoreAdapter($lexicalStore, $pdo);
         $combined = new CombinedStore($vector, $text, self::RRF_K);
         $indexer = new DocumentIndexer(new DocumentProcessor($this->vectorizer, $combined));
@@ -94,12 +94,15 @@ final class IndexStoreFactory
         return \sprintf('librarian_p%d_g%d', $projectId, $generationId);
     }
 
-    private function ensureCosineCollection(string $collectionName): void
+    private function ensureCosineCollection(string $collectionName, bool $initialize): void
     {
         try {
             try {
                 $existing = $this->client->getCollection($collectionName);
             } catch (NotFoundException) {
+                if (!$initialize) {
+                    throw IndexException::sanitized('The committed vector collection is missing. Indexing must repair it before search.');
+                }
                 $existing = $this->client->createCollection($collectionName, [
                     'hnsw:space' => self::COSINE_SPACE,
                 ]);
@@ -119,18 +122,25 @@ final class IndexStoreFactory
     /**
      * @return array{0: SqliteStore, 1: \PDO}
      */
-    private function lexicalStore(int $projectId, int $generationId): array
+    private function lexicalStore(int $projectId, int $generationId, bool $initialize): array
     {
         $directory = \dirname($this->lexicalPath($projectId, $generationId));
-        $this->filesystem->mkdir($directory, 0700);
         $path = $this->lexicalPath($projectId, $generationId);
+        if ($initialize) {
+            $this->filesystem->mkdir($directory, 0700);
+        } elseif (!is_file($path)) {
+            throw IndexException::sanitized('The committed lexical index is missing. Indexing must repair it before search.');
+        }
 
         try {
-            $pdo = new \PDO('sqlite:'.$path);
+            $dsn = $initialize ? 'sqlite:'.$path : 'sqlite:file:'.str_replace('%2F', '/', rawurlencode($path)).'?mode=ro';
+            $pdo = new \PDO($dsn);
             $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-            @chmod($path, 0600);
             $store = SqliteStore::fromPdo($pdo, self::TABLE);
-            $store->setup();
+            if ($initialize) {
+                @chmod($path, 0600);
+                $store->setup();
+            }
         } catch (\Throwable $error) {
             throw IndexException::sanitized('Failed to prepare lexical store.', $error);
         }

@@ -140,7 +140,7 @@ trait ProjectSourceBrowserHelpers
 
     protected function openSearchMemory(): PageInterface
     {
-        $this->page->getByRole('link', ['name' => 'Search memory'])->click();
+        $this->page->getByRole('button', ['name' => 'Search memory'])->click();
         $this->page->waitForURL('**/search-memory**');
         $this->page->locator('#project-memory-search')->waitFor();
 

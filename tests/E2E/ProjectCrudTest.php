@@ -37,9 +37,10 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
             $status = $this->page->locator('#project-source-status');
             Expect::locator($status)->toContainText('Sources discovered', new AssertionOptions(timeoutMs: 10_000));
-            Expect::locator($status)->toContainText('.hatfield/extensions-data/observational-memory/om.sqlite');
-            Expect::locator($status)->toContainText('.hatfield/sessions');
-            Expect::locator($status)->toContainText('20261021_006_semantic_source_revisions');
+            $details = $this->page->locator('body');
+            Expect::locator($details)->toContainText('.hatfield/extensions-data/observational-memory/om.sqlite');
+            Expect::locator($details)->toContainText('.hatfield/sessions');
+            Expect::locator($details)->toContainText('20261021_006_semantic_source_revisions');
             $this->assertSourceCount('Observations', 2);
             $this->assertSourceCount('Reflections', 1);
             $this->assertSourceCount('Sessions', 1);
@@ -92,7 +93,7 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $this->openProjectDetail($projectId);
             $this->waitForProjectHealth(ProjectHealth::Ready);
             Expect::locator($status)->toHaveAttribute('data-project-id', $projectId);
-            Expect::locator($status)->toContainText('.hatfield/custom-om/memory.sqlite');
+            Expect::locator($details)->toContainText('.hatfield/custom-om/memory.sqlite');
             Expect::locator($this->page->getByRole('heading', ['level' => 1]))->toContainText('Rebound OM Fixture');
 
             $this->deleteRecord('/admin/projects/'.$projectId);

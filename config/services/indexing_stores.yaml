@@ -37,6 +37,9 @@ services:
 
     Codewithkyrian\ChromaDB\Client:
         factory: ['@App\Index\Store\ChromaClientFactory', 'create']
+        # The client constructor performs tenant/database HTTP requests. Route
+        # discovery and static diagnostics must not connect to the backend.
+        lazy: true
 
     # Keep private model requests out of the application's traceable HTTP client.
     # These adapters create a bounded native Symfony HttpClient when passed null.

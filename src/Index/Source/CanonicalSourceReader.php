@@ -37,6 +37,7 @@ final class CanonicalSourceReader
         try {
             $pdo->beginTransaction();
             try {
+                $this->omSourceReader->validateSchema($pdo);
                 $revision = $this->fetchRevision($pdo);
                 $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
                 $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
@@ -96,6 +97,32 @@ final class CanonicalSourceReader
         } finally {
             $pdo = null;
         }
+    }
+
+    /**
+     * Cheap stable filesystem identity (path + device + inode).
+     *
+     * Does not open SQLite or count source rows. Use snapshot() when revision,
+     * witness, or table counts are required.
+     */
+    public function identityFor(string $databasePath): string
+    {
+        clearstatcache(true, $databasePath);
+        $resolved = realpath($databasePath);
+        if (false === $resolved) {
+            throw IndexException::sanitized('Unable to resolve observational memory database path.');
+        }
+
+        $stat = @stat($resolved);
+        if (!\is_array($stat) || !isset($stat['dev'], $stat['ino'])) {
+            throw IndexException::sanitized('Unable to read observational memory filesystem identity.');
+        }
+
+        return hash('sha256', json_encode([
+            $resolved,
+            $stat['dev'],
+            $stat['ino'],
+        ], \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -271,32 +298,6 @@ final class CanonicalSourceReader
         }
 
         return (int) $value;
-    }
-
-    /**
-     * Cheap stable filesystem identity (path + device + inode).
-     *
-     * Does not open SQLite or count source rows. Use snapshot() when revision,
-     * witness, or table counts are required.
-     */
-    public function identityFor(string $databasePath): string
-    {
-        clearstatcache(true, $databasePath);
-        $resolved = realpath($databasePath);
-        if (false === $resolved) {
-            throw IndexException::sanitized('Unable to resolve observational memory database path.');
-        }
-
-        $stat = @stat($resolved);
-        if (!\is_array($stat) || !isset($stat['dev'], $stat['ino'])) {
-            throw IndexException::sanitized('Unable to read observational memory filesystem identity.');
-        }
-
-        return hash('sha256', json_encode([
-            $resolved,
-            $stat['dev'],
-            $stat['ino'],
-        ], \JSON_THROW_ON_ERROR));
     }
 
     private function witnessFor(string $databasePath, ?int $revision): string
