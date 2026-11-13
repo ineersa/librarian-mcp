@@ -33,6 +33,8 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
     public const int DEFAULT_LIMIT = 100;
     private const string TABLE = 'librarian_document';
 
+    private bool $limitReached = false;
+
     public function __construct(
         private readonly SqliteStore $store,
         private readonly \PDO $connection,
@@ -75,12 +77,13 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
     }
 
     /**
-     * @param SharedOptions $options
+     * @param array<string, mixed> $options
      *
      * @return iterable<VectorDocumentInterface>
      */
     public function query(QueryInterface $query, array $options = []): iterable
     {
+        $this->limitReached = false;
         if (!$query instanceof TextQuery) {
             throw new UnsupportedQueryTypeException($query::class, $this);
         }
@@ -95,6 +98,7 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
         if ($limit < 1) {
             $limit = self::DEFAULT_LIMIT;
         }
+        $limit = min(self::DEFAULT_LIMIT, $limit);
 
         $ftsQuery = implode(' OR ', array_map(
             static fn (string $term): string => '"'.str_replace('"', '""', $term).'"',
@@ -115,11 +119,11 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
             $sql .= ' AND CAST(json_extract(d.metadata, \'$.'.IndexFields::GENERATION_ID.'\') AS INTEGER) = :generation_id';
             $params[':generation_id'] = (int) $options['generation_id'];
         }
-        if (isset($options['from']) && null !== $options['from']) {
+        if (isset($options['from'])) {
             $sql .= ' AND CAST(json_extract(d.metadata, \'$.'.IndexFields::OCCURRED_AT.'\') AS INTEGER) >= :from';
             $params[':from'] = (int) $options['from'];
         }
-        if (isset($options['until']) && null !== $options['until']) {
+        if (isset($options['until'])) {
             $sql .= ' AND CAST(json_extract(d.metadata, \'$.'.IndexFields::OCCURRED_AT.'\') AS INTEGER) < :until';
             $params[':until'] = (int) $options['until'];
         }
@@ -137,6 +141,7 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
             throw IndexException::sanitized('Lexical query failed.', $error);
         }
 
+        $this->limitReached = \count($rows) >= $limit;
         foreach ($rows as $row) {
             if (!\is_array($row) || !isset($row['id'], $row['metadata'])) {
                 throw IndexException::sanitized('Lexical query returned an invalid row.');
@@ -153,5 +158,10 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
                 isset($row['rank']) && (\is_float($row['rank']) || \is_int($row['rank'])) ? (float) $row['rank'] : null,
             );
         }
+    }
+
+    public function wasTruncated(): bool
+    {
+        return $this->limitReached;
     }
 }

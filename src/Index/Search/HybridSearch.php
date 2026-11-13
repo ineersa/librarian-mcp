@@ -100,7 +100,8 @@ final readonly class HybridSearch
             }
         }
 
-        $truncated = $candidateLimitReached
+        $truncated = $stores->wasTruncated()
+            || $candidateLimitReached
             || \count($fused) >= self::FUSED_LIMIT;
 
         return new SearchResult(array_values($parents), $truncated);

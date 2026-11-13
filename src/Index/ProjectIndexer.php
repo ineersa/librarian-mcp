@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace App\Index;
 
-use App\Entity\IndexGeneration;
 use App\Entity\IndexedMemory;
-use App\Entity\IndexState;
+use App\Entity\IndexGeneration;
 use App\Entity\Project;
 use App\Entity\ProjectHealth;
 use App\Index\Source\CanonicalMemory;
@@ -14,8 +13,8 @@ use App\Index\Source\CanonicalSourceReader;
 use App\Index\Source\SourceSnapshot;
 use App\Index\Store\IndexStoreFactory;
 use App\Index\Store\IndexStores;
-use App\Repository\IndexGenerationRepository;
 use App\Repository\IndexedMemoryRepository;
+use App\Repository\IndexGenerationRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;

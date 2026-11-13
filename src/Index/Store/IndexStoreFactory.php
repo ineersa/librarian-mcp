@@ -60,7 +60,7 @@ final class IndexStoreFactory
         $combined = new CombinedStore($vector, $text, self::RRF_K);
         $indexer = new DocumentIndexer(new DocumentProcessor($this->vectorizer, $combined));
 
-        return new IndexStores($combined, $indexer);
+        return new IndexStores($combined, $indexer, $vector, $text);
     }
 
     /**
@@ -107,10 +107,7 @@ final class IndexStoreFactory
 
             $space = $existing->metadata['hnsw:space'] ?? null;
             if (self::COSINE_SPACE !== $space) {
-                throw IndexException::sanitized(\sprintf(
-                    'Chroma collection "%s" is not configured for cosine distance.',
-                    $collectionName,
-                ));
+                throw IndexException::sanitized(\sprintf('Chroma collection "%s" is not configured for cosine distance.', $collectionName));
             }
         } catch (IndexException $error) {
             throw $error;

@@ -40,7 +40,7 @@ final readonly class MemoryChunker
             // Advance at least one full codepoint even when a line limit leaves a
             // chunk shorter than the requested overlap. Never split UTF-8 bytes.
             $next = max($offset + 1, $end - self::OVERLAP_BYTES);
-            while ($next < $end && (ord($text[$next]) & 0xC0) === 0x80) {
+            while ($next < $end && (\ord($text[$next]) & 0xC0) === 0x80) {
                 ++$next;
             }
             $offset = $next;

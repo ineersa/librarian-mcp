@@ -42,7 +42,7 @@ final class ValidatingVectorizer implements VectorizerInterface
                 'trace_content' => false,
             ],
         ]);
-        $this->platform = $platform ?? GenericFactory::createPlatform(
+        $this->platform = new CardinalityCheckingPlatform($platform ?? GenericFactory::createPlatform(
             baseUrl: $this->settings->embeddingUrl,
             httpClient: $http,
             modelCatalog: new ModelCatalog([
@@ -59,7 +59,7 @@ final class ValidatingVectorizer implements VectorizerInterface
             supportsEmbeddings: true,
             embeddingsPath: $this->embeddingsPath($this->settings->embeddingUrl),
             name: 'librarian-coderank',
-        );
+        ));
         $this->inner = $vectorizer ?? new Vectorizer(
             $this->platform,
             $this->settings->embeddingModel,
@@ -91,10 +91,6 @@ final class ValidatingVectorizer implements VectorizerInterface
             $this->assertVector($result->getVector());
 
             return $result;
-        }
-
-        if (!\is_array($result)) {
-            throw IndexException::sanitized('Embedding endpoint returned an unexpected result type.');
         }
 
         $expected = $this->expectedCount($values);
@@ -152,6 +148,7 @@ final class ValidatingVectorizer implements VectorizerInterface
         }
     }
 
+    /** @param array<mixed>|string|\Stringable|EmbeddableDocumentInterface $values */
     private function expectedCount(string|\Stringable|EmbeddableDocumentInterface|array $values): int
     {
         if (\is_array($values)) {

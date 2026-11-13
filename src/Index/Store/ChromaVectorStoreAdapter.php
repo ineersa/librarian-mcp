@@ -26,12 +26,14 @@ use Symfony\AI\Store\StoreInterface;
  *     include?: list<string>,
  * }
  */
-final readonly class ChromaVectorStoreAdapter implements StoreInterface
+final class ChromaVectorStoreAdapter implements StoreInterface
 {
     public const int DEFAULT_LIMIT = 100;
 
+    private bool $limitReached = false;
+
     public function __construct(
-        private ChromaStore $store,
+        private readonly ChromaStore $store,
     ) {
     }
 
@@ -61,17 +63,28 @@ final readonly class ChromaVectorStoreAdapter implements StoreInterface
     }
 
     /**
-     * @param SharedOptions $options
+     * @param array<string, mixed> $options
      *
      * @return iterable<VectorDocumentInterface>
      */
     public function query(QueryInterface $query, array $options = []): iterable
     {
-        return $this->store->query($query, $this->chromaOptions($options));
+        $this->limitReached = false;
+        $mapped = $this->chromaOptions($options);
+        $count = 0;
+        foreach ($this->store->query($query, $mapped) as $document) {
+            $this->limitReached = ++$count >= $mapped['limit'];
+            yield $document;
+        }
+    }
+
+    public function wasTruncated(): bool
+    {
+        return $this->limitReached;
     }
 
     /**
-     * @param SharedOptions $options
+     * @param array<string, mixed> $options
      *
      * @return array{
      *     where?: array<string, mixed>,
@@ -90,7 +103,7 @@ final readonly class ChromaVectorStoreAdapter implements StoreInterface
 
         $mapped = [
             'include' => $options['include'] ?? ['documents', 'embeddings', 'metadatas', 'distances'],
-            'limit' => $limit,
+            'limit' => min(self::DEFAULT_LIMIT, $limit),
         ];
         if (null !== $where && [] !== $where) {
             $mapped['where'] = $where;
@@ -103,7 +116,7 @@ final readonly class ChromaVectorStoreAdapter implements StoreInterface
     }
 
     /**
-     * @param SharedOptions $options
+     * @param array<string, mixed> $options
      *
      * @return array<string, mixed>|null
      */
@@ -116,10 +129,10 @@ final readonly class ChromaVectorStoreAdapter implements StoreInterface
         if (isset($options['generation_id'])) {
             $conditions[] = [IndexFields::GENERATION_ID => ['$eq' => (int) $options['generation_id']]];
         }
-        if (isset($options['from']) && null !== $options['from']) {
+        if (isset($options['from'])) {
             $conditions[] = [IndexFields::OCCURRED_AT => ['$gte' => (int) $options['from']]];
         }
-        if (isset($options['until']) && null !== $options['until']) {
+        if (isset($options['until'])) {
             $conditions[] = [IndexFields::OCCURRED_AT => ['$lt' => (int) $options['until']]];
         }
 

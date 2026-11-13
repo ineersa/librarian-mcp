@@ -15,6 +15,13 @@ final readonly class IndexStores
     public function __construct(
         public CombinedStore $combined,
         public DocumentIndexer $indexer,
+        private ChromaVectorStoreAdapter $vector,
+        private SqliteLexicalStoreAdapter $text,
     ) {
+    }
+
+    public function wasTruncated(): bool
+    {
+        return $this->vector->wasTruncated() || $this->text->wasTruncated();
     }
 }

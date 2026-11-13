@@ -1,15 +1,14 @@
 # yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 #
-# Main must import this file and exclude '../src/Index/' from the App\ resource
-# (or at least the synthetic DTOs below) so IndexSettings / factory constructors
-# receive the env bindings defined here.
+# Index services are explicitly registered; DTOs and per-generation adapters are
+# constructed by their owners, not registered as synthetic container services.
 
 parameters:
     app.index.storage_dir: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%'
-    env(INDEX_STORAGE_DIR): 'var/index'
+    env(INDEX_STORAGE_DIR): 'data/indexes'
     env(CODERANK_URL): 'http://host.docker.internal:8059/v1'
-    env(CODERANK_MODEL): 'coderank'
-    env(CODERANK_ARTIFACT): '0000000000000000000000000000000000000000000000000000000000000000'
+    env(CODERANK_MODEL): 'CodeRankEmbed'
+    env(CODERANK_ARTIFACT): ''
     env(BGE_URL): 'http://host.docker.internal:8060/v1'
     env(BGE_MODEL): 'bge-reranker-base'
     env(CHROMA_HOST): 'http://chroma'
@@ -39,9 +38,15 @@ services:
     Codewithkyrian\ChromaDB\Client:
         factory: ['@App\Index\Store\ChromaClientFactory', 'create']
 
-    App\Index\Model\ValidatingVectorizer: ~
+    # Keep private model requests out of the application's traceable HTTP client.
+    # These adapters create a bounded native Symfony HttpClient when passed null.
+    App\Index\Model\ValidatingVectorizer:
+        arguments:
+            $httpClient: null
     App\Index\Model\ModelGateway: ~
-    App\Index\Model\LocalBgeReranker: ~
+    App\Index\Model\LocalBgeReranker:
+        arguments:
+            $httpClient: null
 
     App\Index\Store\IndexStoreFactory:
         arguments:
@@ -49,17 +54,3 @@ services:
             $client: '@Codewithkyrian\ChromaDB\Client'
 
     App\Index\Search\HybridSearch: ~
-
-    # DTOs / adapters are constructed by IndexStoreFactory.
-    App\Index\Store\IndexStores:
-        synthetic: true
-    App\Index\Search\SearchResult:
-        synthetic: true
-    App\Index\IndexException:
-        synthetic: true
-    App\Index\IndexFields:
-        synthetic: true
-    App\Index\Store\ChromaVectorStoreAdapter:
-        synthetic: true
-    App\Index\Store\SqliteLexicalStoreAdapter:
-        synthetic: true
