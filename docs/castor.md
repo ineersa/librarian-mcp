@@ -43,11 +43,11 @@ vendor/bin/castor browser:stack:status
 vendor/bin/castor browser:stack:stop
 ```
 
-Use the printed loopback URL for host exploration and for saved browser journeys. The PHPUnit harness runs under Linux Docker `--network host` so Playwright opens the same `127.0.0.1:PORT` URL printed by `browser:stack:status`. Host-gateway cannot reach loopback-published ports; there is no shared proxy and no silent `http://php:8080` fallback. Generic diagnostics that need private Chroma/php DNS still use `networked=true` (`stackNetwork('browser')` + `host.docker.internal:host-gateway`). Host networking for the browser harness is Linux-specific. Do not invent ports or Compose project names.
+Use the printed loopback URL for host exploration and for saved browser journeys. The PHPUnit harness runs under Linux Docker `--network host` so Playwright opens the same `127.0.0.1:PORT` URL printed by `browser:stack:status`. Host-gateway cannot reach loopback-published ports; there is no shared proxy and no silent `http://php:8080` fallback. Generic diagnostics that need private Postgres/php DNS still use `networked=true` (`stackNetwork('browser')` + `host.docker.internal:host-gateway`). Host networking for the browser harness is Linux-specific. Do not invent ports or Compose project names.
 
-Dev/browser stacks include a private `chromadb/chroma:1.0.21` service (no published host port, persistent Compose volume, `/data` persist path). Browser preparation creates writable `var/browser-live/indexes` (+ `locks/`) separately from the read-only synthetic source mount. Lifecycle: `browser:stack:restart --service=php|worker|chroma` (and compatible `browser:stack:restart-worker`).
+Dev/browser stacks include a private PostgreSQL + pgvector service on the checkout network (no public DB port). Exact image/tag and recreate mechanics are owned by the infrastructure child / main. Lifecycle: `browser:stack:restart --service=php|worker|...` (and compatible `browser:stack:restart-worker`).
 
-`test` recreates only the verified checkout-owned browser SQLite database before applying migrations. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture in the PHPUnit browser base; SQLite IDs therefore restart on each saved run. `browser:live:test` reuses current storage and does not provide that reset. To watch the single Projects journey rather than the whole suite:
+`test` recreates only the verified checkout-owned browser database before applying migrations. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture in the PHPUnit browser base; IDs therefore restart on each saved run. `browser:live:test` reuses current storage and does not provide that reset. To watch the single Projects journey rather than the whole suite:
 
 ```bash
 vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
@@ -55,15 +55,14 @@ vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
 
 ### Indexing diagnostics
 
-Use the existing browser console task for isolated application commands:
+Use the existing browser console task for isolated application commands once main lands the Postgres cutover:
 
 ```bash
-vendor/bin/castor browser:stack:console -- app:indexing:capabilities --models
 vendor/bin/castor browser:stack:console -- app:index-project <project-id> --queue-only
 vendor/bin/castor browser:stack:console -- app:index-project <project-id> --drain
 ```
 
-Replace `<project-id>` with a registration in that isolated stack. The capability command uses public synthetic documents and removes its temporary collection. `--models` additionally contacts the configured local CodeRank/BGE endpoints. `--drain` processes the same bounded indexing units synchronously and clears Doctrine's identity map between units; ordinary operation uses Messenger plus `scheduler_default`. It does not make source writes or turn search into ingestion. See [indexing design and evidence](indexing-design.md).
+Replace `<project-id>` with a registration in that isolated stack. `--drain` processes the same bounded indexing units synchronously and clears Doctrine's identity map between units; ordinary operation uses Messenger plus `scheduler_default` with `CallbackMessageProvider` yielding indexing jobs. It does not make source writes or turn search into ingestion. See [indexing design](indexing-design.md) and [indexing validation](indexing-validation.md).
 
 ### Mate diagnostics
 

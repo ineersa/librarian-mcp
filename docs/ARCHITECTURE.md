@@ -6,16 +6,14 @@ The app is a Symfony web/admin application that:
 
 1. Stores a catalog of registered local Hatfield projects
 2. Asynchronously discovers each project's OM database and session roots read-only
-3. Builds Librarian-owned hybrid indexes (Chroma + SQLite FTS5) from retained observations/reflections
+3. Builds Librarian-owned hybrid indexes from retained observations/reflections
 4. Exposes HTTP MCP at `/_mcp` (public memory tools arrive in plan 05)
 
 Core runtime pieces:
 
 - **Web/admin:** Symfony + EasyAdmin
-- **Persistence:** Doctrine ORM + SQLite (Librarian-owned registration / generation / parent metadata)
+- **Persistence + store:** Doctrine ORM + official Symfony AI Postgres store on shared PostgreSQL + pgvector
 - **Async pipeline:** Symfony Messenger (`async`) + Scheduler (`scheduler_default`)
-- **Vector store:** private Chroma service (image tag 1.0.21; `/version` may report 1.0.0)
-- **Lexical store:** SQLite FTS5/BM25 in Librarian-owned files under `INDEX_STORAGE_DIR`
 - **Models:** local CodeRankEmbed (explicit 768-dim vectors) + local BGE reranker
 - **Source discovery:** read-only Hatfield settings / OM / session inspection
 - **MCP transport:** Symfony MCP bundle HTTP endpoint
@@ -46,7 +44,8 @@ Uniqueness is case-insensitive for names, canonical for directories, and normali
 
 - `IndexGeneration` tracks signature, source identity/binding, active flag, state, committed revision, parent/chunk counts, and sanitized errors.
 - `IndexedMemory` stores committed parent provenance for recall.
-- Chroma collections and lexical SQLite files are Librarian-owned derived data. Registration deletion removes those owned indexes, never source trees.
+- Generation-scoped Postgres store tables are Librarian-owned derived data. Registration deletion removes those owned indexes, never source trees.
+- Official store document IDs are UUIDs required by the bridge schema; application entity keys remain auto-increment integers.
 
 ---
 
@@ -78,11 +77,11 @@ Details: [project-sources.md](project-sources.md), [indexing-design.md](indexing
 2. Queue scan message on Messenger `async`
 3. Worker marks health `scanning`, discovers sources read-only
 4. On success: health `ready` with discovered paths/counts/schema/revision; indexing may be queued
-5. Index worker acquires the project execution lock, reads bounded source batches, embeds, writes Chroma + lexical stores, advances checkpoints only after both backends acknowledge
-6. Scheduler tick enqueues periodic updates (`INDEX_INTERVAL`) without a custom polling daemon
+5. Index worker acquires the project execution lock, reads bounded source batches, embeds outside short DB writes, then upserts/removes store chunks + commits the relational manifest in one short PostgreSQL transaction
+6. Scheduler `CallbackMessageProvider` yields project indexing jobs every `INDEX_INTERVAL` seconds (default 60) without a custom tick protocol or OS cron
 7. On failure: sanitized `lastError` / generation error state; Messenger retries remain replay-safe for deterministic IDs
 
-Search remains available against the last committed usable index while newer work is pending where the store supports it. Stale/partial status is reported explicitly.
+Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match and does not apply date filters.
 
 ---
 
@@ -91,7 +90,7 @@ Search remains available against the last committed usable index while newer wor
 - EasyAdmin dashboard shows registered-project counts and recent health
 - Project CRUD at `/admin/projects` with inlined actions
 - Directory picker browses service-visible directories starting at `PROJECT_BROWSE_ROOT`
-- Explicit **Scan sources**, **Index now**, and **Search memory** actions
+- Explicit **Scan sources**, **Index now**, and **Search memory** actions (no date-window UI)
 - Detail page exposes source health (`#project-source-status`) and index status (`#project-index-status`) with bounded meta refresh while pending
 - Admin uses the separate `admin` AssetMapper entry (no public Tailwind reset)
 
@@ -103,10 +102,8 @@ There is no security allowlist beyond admin authentication. Symlinks / external 
 
 Librarian-owned:
 
-- SQLite app DB at `data/app` (dev) / production data mount
-- relational generations / indexed parents
-- lexical indexes under `INDEX_STORAGE_DIR` (browser: `var/browser-live/indexes`)
-- Chroma owned volume (private network; no public host port)
+- Shared PostgreSQL + pgvector database for Doctrine metadata and generation-scoped store tables
+- Legacy SQLite migration history retained; new baseline migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
 
 Source-owned (read-only mounts):
 
@@ -114,7 +111,7 @@ Source-owned (read-only mounts):
 - optional ignored `compose.sources.yaml` overlays for user/global/custom settings or data (dev/prod via Castor only)
 - browser stack uses synthetic `/project-sources` fixtures, never operator overlays
 
-Do not commit private project settings, OM databases, session journals, or derived index files.
+Do not commit private project settings, OM databases, session journals, or derived index data.
 
 ---
 
@@ -122,9 +119,10 @@ Do not commit private project settings, OM databases, session journals, or deriv
 
 - Long-running discovery/indexing is async (Messenger worker required; consumes `async` + `scheduler_default`)
 - Source access is strictly read-only
-- Models remain external local endpoints (`CODERANK_*`, `BGE_*`); Chroma is `CHROMA_HOST`/`CHROMA_PORT`
+- Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport remains available; public tools are empty until plan 05
 - No production cutover/migration authorization is implied by plan 04 implementation
+- Postgres service image/tag and Castor recreate mechanics are owned by the infrastructure child / main
 
 ## 8) Framework / MCP upgrade notes (plan 01, historical infrastructure)
 

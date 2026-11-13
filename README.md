@@ -10,7 +10,7 @@ It provides:
 - Index now / Search memory over the committed active generation
 - HTTP MCP at `/_mcp` (token optional; memory tools arrive in plan 05)
 
-Under the hood it does **not** clone repositories or run Vera/Vektor. Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its own database, lexical files, and private Chroma volume.
+Under the hood it does **not** clone repositories or run Vera/Vektor. Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its shared PostgreSQL + pgvector database (Doctrine metadata and official Symfony AI Postgres store tables).
 
 ## Table of contents
 
@@ -30,7 +30,7 @@ This is a shared local memory service for registered Hatfield projects:
 
 - **Project catalog + health** (`pending` / `scanning` / `ready` / `error`)
 - **Async read-only discovery** (so scans do not block web requests)
-- **Derived hybrid indexing** (CodeRank 768-dim vectors in private Chroma + SQLite FTS5/BM25 + native RRF k60 + local BGE)
+- **Derived hybrid indexing** (CodeRank 768-dim vectors via the official Symfony AI Postgres store + local BGE; stock weighted hybrid/`ts_rank`, not BM25/RRF)
 - **Stable project identity** (auto-increment ID survives rescans and explicit path rebinds)
 - **Optional MCP token auth** (admin/login remain protected; supplied tokens are still validated)
 - **No public MCP tools yet** — `tools/list` is empty until plan 05
@@ -62,10 +62,10 @@ Edit `.env.prod.local` and set at least:
 - `HATFIELD_USER_HOME` (required logical Hatfield home context)
 - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
 - `PROJECT_BROWSE_ROOT` for the picker start path
+- `DATABASE_URL` (shared Doctrine + store Postgres)
 - `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
 - `BGE_URL`, `BGE_MODEL`
-- `CHROMA_HOST`, `CHROMA_PORT`
-- `INDEX_STORAGE_DIR`, `INDEX_INTERVAL`, `LOCK_DSN`
+- `INDEX_INTERVAL`, `LOCK_DSN`
 - `MERCURE_JWT_SECRET`
 - `MERCURE_PUBLISHER_JWT_KEY`
 - `MERCURE_SUBSCRIBER_JWT_KEY`
@@ -169,14 +169,14 @@ Summary:
   Optional unless settings use `%kernel.project_dir%`.
 - `HATFIELD_PATH_MAPPINGS`  
   Optional JSON longest-prefix host→service path mappings.
+- `DATABASE_URL`  
+  Shared PostgreSQL + pgvector for Doctrine metadata and official store tables.
 - `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`  
   Local CodeRankEmbed endpoint, model alias, and immutable artifact digest.
 - `BGE_URL`, `BGE_MODEL`  
   Local BGE reranker endpoint/model (Voyage request client used only as protocol adapter).
-- `CHROMA_HOST`, `CHROMA_PORT`  
-  Private Chroma service (no public host port required).
-- `INDEX_STORAGE_DIR`, `INDEX_INTERVAL`, `LOCK_DSN`  
-  Derived lexical/index storage, scheduler interval, and shared lock DSN.
+- `INDEX_INTERVAL`, `LOCK_DSN`  
+  Scheduler interval (`CallbackMessageProvider` yields indexing jobs) and shared lock DSN.
 
 ### Mercure
 
@@ -201,9 +201,8 @@ Summary:
 
 ### Storage
 
-- Librarian app DB / generation metadata: `data/app` (dev) / production data mount
-- Derived lexical indexes: `INDEX_STORAGE_DIR` (browser uses `var/browser-live/indexes`)
-- Chroma owned volume on the private network
+- Shared PostgreSQL + pgvector database for app metadata and generation-scoped store tables
+- Scheduler freshness via Messenger `scheduler_default` (`INDEX_INTERVAL`, default 60s)
 - Registered project sources stay on the mounted project tree (`/projects` and optional `compose.sources.yaml` overlays)
 - Do not commit private project settings, OM databases, or session journals as fixtures
 
@@ -243,7 +242,7 @@ Prefer the Composer-locked host entry point `vendor/bin/castor`. Discover tasks 
 
 ### Framework upgrade gate
 
-On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions and recorded checks. Product behavior after plans 03/04 is project registration, source discovery, and derived hybrid indexing — not the historical Git/Vera library path. Plan 04 acceptance evidence is still incomplete; see [indexing design](docs/indexing-design.md).
+On 2026-11-12 the owner approved **Symfony 8.2.0-BETA1** (stable 8.2 not yet available) with package-scoped stability allowances. The lockfile selects core 8.2.0-BETA1, MCP 0.15 / SDK 0.9, Mate 0.15 stable, EasyAdmin 5.10, Doctrine ORM 3.7.6, and UX Stimulus/Turbo 3.7. See [upgrade notes](docs/framework-upgrade.md) for compatibility decisions and recorded checks. Product behavior after plans 03/04 is project registration, source discovery, and derived hybrid indexing — not the historical Git/Vera library path. Plan 04 now targets the official Symfony AI Postgres store; cutover validation is pending main — see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
 
 ---
 
@@ -260,6 +259,7 @@ See [TESTING.md](TESTING.md) for Playwright policy, isolated browser stack (`LIB
 - [Castor command guide](docs/castor.md)
 - [Project sources](docs/project-sources.md)
 - [Indexing design](docs/indexing-design.md)
+- [Indexing validation](docs/indexing-validation.md)
 - [Mercure notes](docs/mercure.md)
 - [Architecture overview](docs/ARCHITECTURE.md)
 - [MCP contract](docs/MCP.md)

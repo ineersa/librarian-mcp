@@ -1,94 +1,80 @@
-# Plan 04 — implementation design
+# Plan 04 — indexing design
 
-Status: implemented; completed checks and remaining validation gaps are recorded in [indexing validation](indexing-validation.md). The model/backend choice is approved by plan 02. Production cutover and memory MCP tools remain plans 06 and 05 respectively.
+Status: owner-approved simplification to the official Symfony AI **Postgres** store. Application code/config cutover is owned by main; completed checks and remaining gaps live in [indexing validation](indexing-validation.md). Production cutover and MCP memory tools remain plans 06 and 05.
 
-## Versioned integration and framework reuse
+## Goal
 
-Locked dependency set: Symfony AI Store, Generic/Voyage platform components, ChromaDB bridge (`symfony/ai-chroma-db-store`) and SQLite bridge **0.15.0**, PHP Chroma client **1.0.0**, Chroma image **1.0.21**. Symfony Lock and Scheduler use the existing approved **8.2.0-BETA1** line; global minimum stability remains stable. The selected server image reports **1.0.0** from its version API; that is not its image tag.
+Reuse Symfony AI facilities and keep Librarian-owned state in one database:
 
-The 0.15 Chroma bridge requires PHP client `^1.0`; that client's tagged README requires Chroma >=1.0 and uses the v2 API. The bridge's test Compose still names 0.6.3: this is not a compatible-version proof. Verify the proposed 1.0.21 combination against an isolated service before claiming compatibility.
+- Doctrine registration / generation / parent metadata
+- Generation-scoped store tables created by the official Postgres bridge
 
-Use the official PHP client to pre-create/verify a collection with `hnsw:space=cosine`; the bridge's `setup()` cannot set distance options. Pass explicit vectors to the bridge's idempotent `add()` (which calls Chroma `upsert()`); do not configure a Chroma embedding function. For query results explicitly include documents, embeddings, metadatas and distances. Native metadata `where` filters and `limit=100` belong to the Chroma branch. No custom Chroma HTTP transport or vector distance implementation.
+No private Chroma service, no separate SQLite FTS files, no CombinedStore/RRF adapters, and no cross-store pending protocol.
 
-Symfony AI 0.15 `VectorDocument` accepts integer/string IDs; UUID/ULID fields are not needed. `CombinedStore(vectorStore, textStore, rrfK: 60)` supplies the existing RRF implementation. It forwards the same option array to both branches, so a small adapter must translate shared search options to each backend's supported options.
+## Store and retrieval (as provided)
 
-Symfony's SQLite bridge supplies FTS5 schema creation, writes, deletes and native BM25 ranking. Its stock text query filters metadata **after** its SQL LIMIT. For correct bounded project/date retrieval, the lexical adapter must apply those predicates in SQL before LIMIT against the vendor-owned tables. Reuse SQLite FTS5 rank, not a PHP BM25 implementation. Never invoke the SQLite vector/exact-distance query path. Store only a one-dimensional placeholder in its lexical document records, not duplicate embedding arrays; the reference Hatfield adapter uses the same lexical-only representation.
+Locked target: Symfony AI Store + official Postgres bridge **~0.15** with PostgreSQL + **pgvector**. Use the stock bridge as shipped.
 
-Use the official Generic platform for the OpenAI-compatible CodeRank endpoint and Symfony AI's document/vectorization pipeline, preserving raw document text. Its factory supports configurable embedding paths; `/v1` base URLs need `/embeddings`, not another `/v1/embeddings` suffix. Query preprocessing remains `Represent this query for searching relevant code: ` plus the raw query. Validate exact configured dimensions (baseline 768), response cardinality and finite nonzero vectors. Provider bodies and source text must not enter logs or exception chains; disable HTTP response-body tracing and leave vectorizer content logging on a null logger.
+- One store table per project/generation (isolation by table name, not metadata filters)
+- Document IDs follow the bridge schema (**UUID**). This is the only approved UUID exception; application entities keep auto-increment integers
+- `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match
+- Native hybrid does **not** apply metadata/date filters; admin Search memory has no date-window UI
+- Ranking is stock weighted hybrid, not BM25 and not RRF. Behavior preservation vs the earlier Chroma path is explicitly out of scope; testing/tuning comes later
 
-The existing BGE contract is llama.cpp `/v1/rerank`, `results[{index,relevance_score}]`. The installed 0.15 Voyage `Reranker\\ModelClient` supports a configured base URL and sends the required `model/query/documents` body to `/v1/rerank`. Reuse that official request client against the local endpoint with no truncating top-k option; verify that the endpoint returns every input index. Its stock Voyage result converter expects `data`, not llama.cpp's `results`, so retain strict application-side result count/type/index/finite-score validation. This selects no hosted Voyage backend and adds no custom HTTP transport. Preserve sanitized visible failure, not an embeddings-only fallback.
+Embeddings use the official Generic platform for the local OpenAI-compatible CodeRank endpoint and Symfony's native `Vectorizer`, with a small `ResultConvertedEvent` listener for dimension/cardinality/finite-vector checks. Query prefix remains `Represent this query for searching relevant code: `. Configured baseline remains **768** dimensions.
+
+Local BGE keeps the small Voyage request/response adapter for llama.cpp `/v1/rerank` (`results[{index,relevance_score}]`). No hosted Voyage backend and no custom HTTP transport.
 
 ## Corpus and identity
 
-Read retained `om_observation` and `om_reflection` only. Canonical projection:
+Read retained `om_observation` and `om_reflection` only. Journals are not embedded.
 
-- observation: `observation_id`, `run_id`, `content`, `timestamp`, `relevance`;
-- reflection: `reflection_id`, `run_id`, `content`, `created_at` (no synthetic importance).
+- Observation: `observation_id`, `run_id`, `content`, `timestamp`, `relevance`
+- Reflection: `reflection_id`, `run_id`, `content`, `created_at`
 
-Keep the full canonical ID and session/run ID. Normalize dates to UTC epoch seconds for native numeric filters in both branches; retain canonical date/provenance for recall. Reuse discovery's schema/version validation and read-only PDO opener; indexing does not migrate source schemas. Journals are not embedded.
+Reuse discovery's schema/version validation and read-only PDO opener. Indexing does not migrate source schemas.
 
-Preserve the existing UTF-8 chunker: 1,200 bytes, overlap 192 bytes, at most 80 lines; embedding batches at most four. Do not replace byte boundaries with character or token boundaries during the storage comparison. Chunk keys are deterministic SHA-256 business identifiers over project ID, source identity, canonical kind/ID, generation signature, the full canonical parent content/metadata signature, position and chunk content, not UUIDs or database primary keys. Different parent versions must never share an ID, including metadata-only changes. Chunk-identity format version 2 participates in the generation signature, so old-format collections are rebuilt rather than silently reused.
+Chunker stays UTF-8 byte-based: 1,200 bytes, overlap 192, at most 80 lines; embedding batches ≤4. Chunk identity is deterministic SHA-256 business content used to derive the store UUID; different parent versions must not collide.
 
-All application-owned entities use generated integer primary keys. The two new entities are:
+Application entities:
 
-- `IndexGeneration`: project relation, signature, source identity/path, active flag, state, durable scan cursor/round, one pending parent attempt and committed source revision, counts, timestamps and sanitized error;
-- `IndexedMemory`: generation relation, canonical kind/ID, session/date, content/metadata signature, bounded-per-parent chunk key list and last-seen scan round.
+- `IndexGeneration`: project relation, signature, source identity/path/root binding, active flag, state, scan cursor/round, committed revision, parent/chunk counts, timestamps, sanitized error
+- `IndexedMemory`: generation relation, canonical kind/ID, content/metadata signature, chunk ID list, last-seen scan round
 
-The SQLite bridge's derived document/FTS tables are vendor-managed index structures in a separate Librarian-owned SQLite file. Keep them outside application ORM schema ownership. Relational registrations/progress are migrated with Doctrine's generator against isolated storage. Do not hand-author migrations or virtual-table migration SQL.
+Legacy SQLite migration history is retained. New PostgreSQL baseline migrations are generated into `migrations/postgres` under namespace `DoctrineMigrations\Postgres`. Do not hand-author SQL.
 
-## Collections and generations
+## Source changes
 
-Use a separate collection per project and generated generation ID, e.g. `librarian_p<project-id>_g<generation-id>`. The embedding signature covers exact artifact identity, dimensions, document preprocessing, normalization and chunking settings. Never reuse a collection for an incompatible signature. Require explicit artifact identity rather than silently equating a mutable model alias with an immutable artifact.
+OM schema 006 revision/change rows are a cheap hint, not a durable independent journal. Librarian never consumes those rows.
 
-Source identity includes canonical database path and filesystem identity; root rebinding, source replacement, revision rollback or embedding-signature change starts a separate generation. Keep the previous active pointer during a replacement build. Search uses it only while its source binding/identity and embedding signature remain compatible; otherwise it reports the mismatch instead of querying the wrong source or representation. Publish the new active pointer only after complete acknowledged vector/lexical work, with a short relational transaction that rechecks the current project binding. Retired generations and registration deletion may remove only Librarian-owned collections/rows/files.
+Canonical change signal is ordinary metadata revision advance:
 
-A vector query is constrained natively by project, generation and optional inclusive/exclusive normalized date bounds. The lexical query uses the same bounds before LIMIT. Never compensate with corpus-sized PHP overfetch. Hydrate only committed relational parent references; a vector hit alone does not establish recall provenance.
+1. Acquire the Symfony project lock
+2. Verify binding / source identity / embedding signature; select or create the generation
+3. Read one bounded canonical batch under a short read-only source transaction, then close it before model or store work
+4. Compare parent signatures. Unchanged parents only mark the scan round seen
+5. Embed outside the short write transaction. Upsert/remove store chunks and commit the relational manifest together in one short PostgreSQL transaction
+6. Advance the cursor only after that work succeeds. After traversal, remove unseen parents in bounded batches and publish the committed boundary
 
-## Source changes and checkpoint ownership
+Source identity remains path + filesystem device/inode. Unused DB/WAL witness hashing and unused snapshot count fields are deleted. A changed filesystem identity or lower revision starts a fresh generation. An in-place restore that preserves identity and revision is not reliably detected.
 
-OM schema 006 provides a global revision and coalesced `(kind,source_id,revision)` changes. **This is not a durable independent-consumer journal**: the existing Hatfield semantic reconciler deletes consumed change rows. Librarian must never consume/acknowledge those rows or assume no visible changes means no canonical changes.
+## Scheduling
 
-The safe initial reconciliation is bounded canonical keyset traversal when source state advances, comparing parent signatures and embedding only changed content. Use the revision/change information as a cheap signal/hint, not proof of a complete independent change feed. An unchanged populated source skips traversal and embedding; searches never ingest. Record the changed-source reconciliation cost honestly, including its manifest traversal cost. Do not introduce a second change-feed coordinator to hide the source contract limitation.
+Hatfield does not notify Librarian. Symfony Scheduler keeps indexes fresh inside the existing Messenger worker — not a separate OS cron.
 
-Each work item:
+Default interval is `INDEX_INTERVAL=60` seconds. Use `CallbackMessageProvider` so each tick yields project indexing jobs directly. No custom tick message, pagination coordinator, or polling daemon. Queue-only Messenger deduplication plus the project execution lock remain the admission/execution barriers. Bound each source batch, embedding batch, and HTTP request.
 
-1. Acquire the existing Symfony framework project lock; one operation owns its checkpoint. Lock files must be shared by web/worker/tooling in this checkout's owned storage.
-2. Verify project binding, source identity and signature; select/create the target generation and capture its revision boundary.
-3. Read one consistent bounded canonical batch under a read-only source transaction, then close that transaction before model or Chroma calls.
-4. Compare signatures. Unchanged parents only mark their scan round seen: no embedding or backend cleanup requests. Before a changed parent's external writes, commit a single pending-parent record on the generation containing its kind/ID and the previous plus attempted chunk IDs. The existing project lock permits only one parent attempt at a time. Then vectorize in batches <=4 and write deterministic, version-isolated chunks to both stores. Never clear a fresh generation if any parent manifest has committed, even if its batch cursor/counts have not advanced.
-5. After both backends acknowledge the new chunks, commit relational parent metadata in a short transaction. Remove recorded IDs not retained by that committed manifest, through the vendor stores in batches <=100; clear the pending marker only after both stores acknowledge cleanup. Recovery runs before the next job's unchanged-source fast path and canonical traversal, even if the attempted parent was newly inserted and then deleted before acknowledgement. No metadata-table sweep or per-unchanged-parent Chroma delete is required. Advance the batch cursor only after this work succeeds. No SQLite transaction is claimed to cover Chroma.
-6. After traversal, remove unseen parents in bounded batches. Atomically record their chunk IDs and remove their relational acknowledgement before external deletion, so a reappearing parent must reindex rather than skip over removed chunks. The same pending recovery retires those exact IDs. Then commit the source boundary. If the source advanced meanwhile, enqueue another round; do not claim the newer source fully indexed. Check root binding again before publishing results.
+Admin exposes index status, Index now, and Search memory in the existing Projects journey. MCP memory tools remain plan 05.
 
-Failure leaves the checkpoint behind the failed work, so Messenger's existing retry policy replays acknowledged/partial deterministic writes safely. Do not add a custom retry service. A successfully validated, unchanged active generation returns from Error to Ready after a transient source-read failure. Surface stale/updating/error state; no atomic multi-store visibility claim. Chroma/SQLite do not offer a shared transaction, so incremental search may temporarily lose candidates while an update is in flight; committed parent references must never resolve to another project/source. Validate fused candidates' parent/signature/chunk provenance in one bounded relational query before reranking.
+## Ranking shape
 
-Source restore detection needs explicit verification: replacement filesystem identity and lower revisions are clear reset signals; an in-place restore with an identical revision cannot be distinguished by revision alone. Verify available bounded file/change witnesses and document remaining limitations before acceptance. Do not silently claim all restores are detected or perform full corpus verification on every unchanged poll.
+Stock Postgres `HybridQuery` candidates → BGE on raw question/chunks (batches 8, 768 Unicode characters, floor -4) → stable order/ties → parent collapse. Report truncation and stale/partial status explicitly. Do not treat hybrid score as calibrated confidence.
 
-The implementation records bounded database/WAL headers, sizes and modification/change times as a diagnostic witness, not a canonical change signal: ordinary Hatfield activity changes these fields without changing memory content. Witness drift alone neither starts a full traversal nor resets an open cursor or prevents publication. A changed filesystem identity or lower revision selects a fresh generation; a late rollback does not publish the obsolete boundary. An in-place restore preserving filesystem identity and revision is not reliably detected, even if its generic witness changes. No fault-injection or restore matrix has been run.
+## Documentation consulted
 
-## Scheduling and bounded work
-
-Use Symfony Scheduler to periodically dispatch project indexing work at a configurable interval, consumed through Messenger. Use framework deduplication for queue admission and the project lock for execution. Queue-only deduplication is needed when a batch enqueues its continuation: holding the deduplication lock until handler exit would otherwise suppress that continuation. Bound each source/cleanup batch, embedding batch and HTTP request duration. Do not retain a full corpus/vector cache in PHP or introduce a custom polling daemon.
-
-Expose index status, explicit index action and search preview in the existing project administration; memory MCP tools remain plan 05. Extend the existing Projects happy-path journey rather than adding discovery/error/concurrency matrices or another test suite.
-
-## Ranking baseline
-
-Vector100 + lexical100 -> Symfony RRF k60 -> at most 200 fused chunks -> BGE on raw question/chunks in batches8, truncating each chunk to 768 Unicode characters -> floor -4 -> stable chunk order/ties -> parent collapse/deduplication. Do not threshold RRF as confidence. Report candidate-limit truncation and stale/partial index status explicitly.
-
-## Evidence required before acceptance
-
-Runtime compatibility and cosine/create/upsert/update/delete/filter/result-budget evidence; existing happy-path browser/QA gate; repeated full/incremental/unchanged populated-corpus build/search measurements; PHP live/allocated/peak and settled PHP/Chroma process memory; final parent/chunk counts; frozen50 plus five-identifier comparison on the same consistent corpus. Keep private questions, source snapshots, texts, vectors and raw provider responses out of Git and logs. Record process counts, model memory separately, and known validation gaps. Special-case fault/concurrency tests still require owner permission.
-
-Integration checks already performed: isolated generated migration/schema validation; production image build; static checks; five headless browser journeys (**43 assertions**), with exactly one Projects journey covering ordinary registration/index/search/update/rebinding/removal. A browser independently verified dark EasyAdmin styling and the search form's bundled Bootstrap 5 theme at the normal 1280×720 viewport, with no Tailwind collision or console errors.
-
-The frozen battery contains **38 positive targets and 12 intentional negatives**, not 12 missing-target drift cases. All 50 questions plus the original five identifier questions must be requested. The private evaluation uses a separate database/storage tree and a disjoint range of auto-generated integer IDs on the owned private backend. Original snapshots and vectors are hashed before/after; private payloads and harness artifacts stay ignored under `var/`.
-
-One populated build completed with 26,284 parents and 26,393 chunks. Further benchmarking was stopped at the owner's request; populated incremental measurements remain incomplete. No evaluation harness or benchmark-specific Castor command is part of the deliverable. Remote Docker-host model RSS/GPU allocations are not observable from the current tooling namespace; do not report them as zero or fold them into PHP/Chroma memory.
-
-## Sources inspected
-
-- Symfony AI Store docs: https://symfony.com/doc/current/ai/components/store.html
-- Symfony AI platform docs: https://symfony.com/doc/current/ai/components/platform.html
-- Symfony Scheduler/Lock/Messenger docs: https://symfony.com/doc/current/scheduler.html , https://symfony.com/doc/current/lock.html , https://symfony.com/doc/current/messenger.html
-- Tagged 0.15 Store/Generic/Chroma/SQLite package source and Composer requirements; client 1.0.0 source/README. Current docs alone are not proof of tagged APIs.
-- Hatfield source schema migration 006, `SemanticIndexService`, `SemanticApiClient`, `MemoryChunker`, `MemoryStoreAdapter` and `SemanticSettings`, inspected read-only in the local checkout. No private runtime settings or source payloads are copied into this document.
+- https://symfony.com/doc/current/ai/components/store.html
+- https://symfony.com/doc/current/ai/components/platform.html
+- https://symfony.com/doc/current/scheduler.html
+- https://symfony.com/doc/current/lock.html
+- https://symfony.com/doc/current/messenger.html
+- Official Postgres bridge source (`Symfony\AI\Store\Bridge\Postgres\Store`) for HybridQuery / UUID schema behavior

@@ -6,7 +6,7 @@ This guide assumes `compose.yaml` + `compose.prod.yaml`. Prefer Castor productio
 
 Symfony **8.2.0-BETA1** was owner-approved on 2026-11-12 because stable 8.2 was unavailable. The framework requires PHP 8.4.1+; this project uses PHP 8.5. See [framework upgrade notes](framework-upgrade.md) for dependency pins.
 
-The production compose topology, data mounts, project name, and ports are preserved. Plans 03/04 replace the Git/Vera library product with local project registration, read-only source discovery, and Librarian-owned hybrid indexing; see [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). No production cutover authorization is implied by that product change.
+The production compose topology, data mounts, project name, and ports are preserved where possible. Plans 03/04 replace the Git/Vera library product with local project registration, read-only source discovery, and Librarian-owned hybrid indexing on shared PostgreSQL + pgvector; see [project-sources.md](project-sources.md) and [indexing-design.md](indexing-design.md). No production cutover authorization is implied by that product change. Exact Postgres service image/tag is owned by the infrastructure child / main.
 
 ## Default mode (recommended)
 
@@ -33,19 +33,15 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - `HATFIELD_PATH_MAPPINGS` when host/service path prefixes differ
    - `PROJECT_BROWSE_ROOT` (picker start path inside the service)
+   - `DATABASE_URL` (shared Doctrine + official Postgres store)
    - `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
    - `BGE_URL`, `BGE_MODEL`
-   - `CHROMA_HOST`, `CHROMA_PORT`
-   - `INDEX_STORAGE_DIR`, `INDEX_INTERVAL`, `LOCK_DSN`
+   - `INDEX_INTERVAL`, `LOCK_DSN`
    - `MERCURE_JWT_SECRET`, `MERCURE_PUBLISHER_JWT_KEY`, `MERCURE_SUBSCRIBER_JWT_KEY`
    - `SYMFONY_TRUSTED_PROXIES=REMOTE_ADDR`
    - `SYMFONY_TRUSTED_HEADERS=x-forwarded-for,x-forwarded-host,x-forwarded-proto,x-forwarded-port`
 
-   Production defaults in `.env.prod` put lexical indexes and execution locks under
-   `INDEX_STORAGE_DIR=data-prod/indexes`, and Messenger deduplication locks at
-   `LOCK_DSN='sqlite:%kernel.project_dir%/data-prod/indexing-locks.db'`.
-   Both services share `/app/data-prod`; keep any overrides on that shared bind,
-   not container-local `/app/data`. See `.env.prod.local.dist`.
+   Production web and worker must share the same Postgres database and lock store. Keep lock DSN overrides on shared storage, not container-local paths. See `.env.prod.local.dist` after the infrastructure cutover lands.
 
 3. Configure the published app port and host project bind in `.env` (Compose interpolation, not the container-only `.env.prod.local`), or use exported process environment / an explicit bind in `compose.sources.yaml`:
 
@@ -140,7 +136,8 @@ Then publish host 443 with a local compose override.
 - Symfony environment is baked by `composer dump-env prod` during image build.
 - Castor loads `.env` and `.env.prod` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
 - Production image no longer embeds Vera; project sources are mounted read-only.
-- Chroma remains private (no public host port). Worker consumes Messenger `async` and `scheduler_default`.
+- Postgres stays on the private network. Worker consumes Messenger `async` and `scheduler_default`.
+- Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
 - Registration deletion removes owned derived indexes only; never source trees.
 - Do not exercise migrations against the real application database for tests; use isolated storage for validation.
 - Do not reset owner/production data, volumes, or unrelated containers without explicit authorization.

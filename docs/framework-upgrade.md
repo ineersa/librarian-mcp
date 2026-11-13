@@ -1,5 +1,7 @@
 # Framework upgrade (plan 01)
 
+Status note: this document is a **historical** record of the plan 01 Symfony 8.2.0-BETA1 upgrade validation. Current product storage/indexing after the owner-approved Postgres switch is documented in [indexing-design.md](indexing-design.md) and [indexing-validation.md](indexing-validation.md); do not treat the Vera/library/SQLite browser details below as the current topology.
+
 ## Release choice and dependency constraints
 
 On 2026-11-12 the owner explicitly approved **Symfony 8.2.0-BETA1** because stable 8.2 was not yet available. This is a deliberate prerelease deployment choice, not a claim that Symfony 8.2 is stable.
