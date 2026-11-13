@@ -5,7 +5,7 @@
 Librarian registers **local directories**. It discovers Hatfield OM/session metadata read-only, then builds Librarian-owned hybrid indexes from retained observations/reflections. It does not boot Hatfield, load extension PHP, run source migrations, or clone repositories.
 
 - **Sources discovered** (`ready`) means discovery succeeded, not that memories are indexed.
-- **Index now / Search memory** are admin actions over derived data. Search never synchronously ingests or rebuilds a project and has no date-window UI.
+- **Search memory** is an admin action over derived data. Indexing starts automatically after discovery and on the scheduler (default 60s). **Check for updates** is optional and never rebuilds. Search never synchronously ingests or rebuilds a project and has no date-window UI.
 - Public MCP memory tools remain **plan 05**.
 - Design and validation status live in [indexing-design.md](indexing-design.md) and [indexing-validation.md](indexing-validation.md).
 
@@ -54,7 +54,7 @@ Notes:
 - All derived index data and checkpoints share PostgreSQL; there is no cross-store recovery protocol.
 - Journals support exact recall later; they are not embedded in the initial corpus.
 
-Admin detail shows latest/active generation status, source/committed revision, parent/chunk counts, sanitized errors, and last successful index time. Pending/stale status is honest: discovery is not indexing. Detail uses the existing bounded meta refresh while work is in progress.
+Admin list and detail show human indexing status, indexed-memory counts, and last successful index time, distinct from discovered source counts. Pending/stale status is honest: discovery is not indexing. Live Mercure + Turbo Streams replace only the source/index status sections; EasyAdmin keeps Turbo Drive disabled for native form/confirmation scripts.
 
 Config surface:
 
@@ -73,6 +73,6 @@ EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry s
 
 ## Validation evidence
 
-Saved coverage remains **one** Projects journey: register/discover → Index now → search a public synthetic observation → ordinary harness-owned fixture content/revision update → Index now → updated search → stable-ID rebind/delete with source-hash checks. Fixture mutation is harness-owned and restored; app code must not mutate sources.
+Saved coverage remains **one** Projects journey: register/discover → wait for live automatic indexing status → search a public synthetic observation → ordinary harness-owned fixture content/revision update → optional Check for updates / live status → updated search → stable-ID rebind/delete with source-hash checks. Fixture mutation is harness-owned and restored; app code must not mutate sources.
 
 Do not claim plan 04 acceptance from docs alone. Prefer [indexing-design.md](indexing-design.md), [indexing-validation.md](indexing-validation.md), and [TESTING.md](../TESTING.md).

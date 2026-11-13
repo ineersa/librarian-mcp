@@ -13,6 +13,7 @@ use App\Index\Source\CanonicalMemory;
 use App\Index\Source\CanonicalSourceReader;
 use App\Index\Source\SourceSnapshot;
 use App\Index\Store\IndexStoreFactory;
+use App\Index\Status\ProjectStatusPublisher;
 use App\Repository\IndexedMemoryRepository;
 use App\Repository\IndexGenerationRepository;
 use App\Repository\ProjectRepository;
@@ -53,6 +54,7 @@ final class ProjectIndexer
         private readonly LockFactory $indexExecutionLockFactory,
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
+        private readonly ProjectStatusPublisher $projectStatusPublisher,
     ) {
     }
 
@@ -92,6 +94,7 @@ final class ProjectIndexer
                 if (IndexState::Error === $generation->state) {
                     $generation->markReady($this->clock->now());
                     $this->entityManager->flush();
+                    $this->projectStatusPublisher->publish($projectId);
                 }
                 $this->removeObsoleteGenerations($projectId, (int) $generation->id);
 
@@ -99,6 +102,7 @@ final class ProjectIndexer
             }
             $generation->beginScanRound($snapshot->revision, $this->clock->now());
             $this->entityManager->flush();
+            $this->projectStatusPublisher->publish($projectId);
         }
 
         $store = $this->storeFactory->forGeneration($projectId, (int) $generation->id, initialize: false);
@@ -137,6 +141,7 @@ final class ProjectIndexer
             $this->entityManager->flush();
             $this->storeFactory->forGeneration((int) $project->id, (int) $generation->id);
         });
+        $this->projectStatusPublisher->publish((int) $project->id);
 
         return $generation;
     }
@@ -201,6 +206,7 @@ final class ProjectIndexer
             }
             $managedGeneration->advanceCursor($cursor, $this->clock->now());
         });
+        $this->projectStatusPublisher->publish((int) $generation->project->id);
     }
 
     /** @return list<TextDocument> */
@@ -248,6 +254,7 @@ final class ProjectIndexer
             }
             $managedGeneration->touch($this->clock->now());
         });
+        $this->projectStatusPublisher->publish((int) $generation->project->id);
     }
 
     private function finishRound(IndexGeneration $generation): bool
@@ -285,6 +292,7 @@ final class ProjectIndexer
             $managed->project->markSuccessfulIndex($now);
         });
         $this->removeObsoleteGenerations($projectId, $generationId);
+        $this->projectStatusPublisher->publish($projectId);
 
         return $more;
     }
@@ -344,6 +352,7 @@ final class ProjectIndexer
             if (null !== $generation) {
                 $generation->markError($this->clock->now(), $exception->getMessage());
                 $this->entityManager->flush();
+                $this->projectStatusPublisher->publish($projectId);
             }
         } catch (\Throwable) {
             $this->logger->error('Unable to persist sanitized index failure state.', ['projectId' => $projectId]);

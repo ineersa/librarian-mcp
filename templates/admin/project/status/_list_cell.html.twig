@@ -1,0 +1,33 @@
+{% set project = project|default(null) %}
+{% set indexStatus = indexStatus|default(null) %}
+{% if project is not null and indexStatus is not null %}
+    <div
+        id="project-index-list-{{ project.id }}"
+        class="small"
+        data-project-id="{{ project.id }}"
+        data-index-status="{{ indexStatus.statusValue }}"
+        data-index-pending="{{ indexStatus.pending ? '1' : '0' }}"
+        data-index-stale="{{ indexStatus.stale ? '1' : '0' }}"
+        data-index-can-check="{{ indexStatus.canCheckUpdates ? '1' : '0' }}"
+        {% if indexStatus.latest %}
+            data-index-generation-id="{{ indexStatus.latest.id }}"
+            data-index-parent-count="{{ indexStatus.indexedMemoryCount }}"
+        {% endif %}
+    >
+        <div class="fw-semibold" data-index-status-label>{{ indexStatus.statusLabel }}</div>
+        <div class="text-muted" data-index-summary-label>{{ indexStatus.summaryLabel }}</div>
+        <div class="text-muted" data-index-last-success>
+            {% if indexStatus.lastIndexAt %}
+                Last indexed {{ indexStatus.lastIndexAt|date('Y-m-d H:i') }}
+            {% else %}
+                Never indexed
+            {% endif %}
+        </div>
+        <div class="text-muted" data-index-auto-help>
+            Automatic every ~60s after discovery
+        </div>
+        {% if indexStatus.error %}
+            <div class="text-danger" data-index-error>{{ indexStatus.error }}</div>
+        {% endif %}
+    </div>
+{% endif %}

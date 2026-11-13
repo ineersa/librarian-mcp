@@ -45,14 +45,16 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $this->assertSourceCount('Reflections', 1);
             $this->assertSourceCount('Sessions', 1);
 
-            // Discovery success may already have queued indexing; Index now is idempotent.
+            // Discovery success queues automatic indexing; Check for updates is optional.
             $this->triggerIndexNow();
             $this->waitForCommittedIndex(3);
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Index status', new AssertionOptions(timeoutMs: 10_000));
+            Expect::locator($this->page->locator('#project-index-status'))
+                ->toContainText('Automatic indexing', new AssertionOptions(timeoutMs: 10_000));
 
             $this->openSearchMemory();
-            $this->searchMemory('synthetic observation fx-1');
+            $this->searchMemory('where was I working on synthetic observation fx-1');
             $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');
 
             $updatedContent = 'synthetic observation fx-1 updated for indexing';

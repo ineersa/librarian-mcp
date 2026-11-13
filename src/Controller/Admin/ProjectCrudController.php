@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
-use App\Entity\IndexGeneration;
-use App\Entity\IndexState;
 use App\Entity\Project;
 use App\Entity\ProjectHealth;
 use App\Form\Type\ProjectMemorySearchType;
 use App\Index\IndexException;
 use App\Index\ProjectIndexManager;
 use App\Index\Search\HybridSearch;
+use App\Index\Status\ProjectIndexStatus;
+use App\Index\Status\ProjectIndexStatusFactory;
+use App\Index\Status\ProjectStatusTopics;
 use App\Project\ProjectManager;
 use App\Repository\IndexGenerationRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -45,18 +46,17 @@ use Symfony\Component\Security\Core\Exception\InvalidCsrfTokenException;
 class ProjectCrudController extends AbstractCrudController
 {
     public const string CSRF_SCAN_SOURCES = 'project-scan-sources';
-    public const string CSRF_INDEX_NOW = 'project-index-now';
+    public const string CSRF_CHECK_UPDATES = 'project-check-updates';
 
     private const string ACTION_SCAN_SOURCES = 'scanSources';
-    private const string ACTION_INDEX_NOW = 'indexNow';
+    private const string ACTION_CHECK_UPDATES = 'checkUpdates';
     private const string ACTION_SEARCH_MEMORY = 'searchMemory';
-    private const string INDEX_STATUS_NONE = 'none';
-    private const string INDEX_STATUS_STALE = 'stale';
 
     public function __construct(
         private readonly ProjectManager $projectManager,
         private readonly ProjectIndexManager $projectIndexManager,
         private readonly IndexGenerationRepository $indexGenerationRepository,
+        private readonly ProjectIndexStatusFactory $projectIndexStatusFactory,
         private readonly HybridSearch $hybridSearch,
         private readonly ClockInterface $clock,
     ) {
@@ -119,6 +119,18 @@ class ProjectCrudController extends AbstractCrudController
             ->setTemplatePath('admin/project/field/health.html.twig')
             ->hideOnForm();
 
+        yield TextField::new('indexStatusSummary', 'Indexing')
+            ->onlyOnIndex()
+            ->setVirtual(true)
+            ->formatValue(function (mixed $value, ?Project $entity): ?ProjectIndexStatus {
+                if (!$entity instanceof Project || null === $entity->id) {
+                    return null;
+                }
+
+                return $this->projectIndexStatusFactory->forProject($entity);
+            })
+            ->setTemplatePath('admin/project/field/index_status.html.twig');
+
         yield TextareaField::new('lastError')
             ->hideOnForm()
             ->hideOnIndex()
@@ -137,10 +149,12 @@ class ProjectCrudController extends AbstractCrudController
             ->hideOnIndex();
 
         yield IntegerField::new('observationCount', 'Observations')
-            ->hideOnForm();
+            ->hideOnForm()
+            ->setHelp('Discovered source observations, not indexed memories.');
 
         yield IntegerField::new('reflectionCount', 'Reflections')
-            ->hideOnForm();
+            ->hideOnForm()
+            ->setHelp('Discovered source reflections, not indexed memories.');
 
         yield IntegerField::new('sessionCount', 'Sessions')
             ->hideOnForm()
@@ -191,10 +205,17 @@ class ProjectCrudController extends AbstractCrudController
             ->setTemplatePath('admin/project/action/scan_sources.html.twig')
             ->addCssClass('btn btn-primary');
 
-        $indexNow = Action::new(self::ACTION_INDEX_NOW, 'Index now', 'fa fa-database')
-            ->linkToCrudAction(self::ACTION_INDEX_NOW)
-            ->setTemplatePath('admin/project/action/index_now.html.twig')
-            ->addCssClass('btn btn-secondary');
+        $checkUpdates = Action::new(self::ACTION_CHECK_UPDATES, 'Check for updates', 'fa fa-rotate')
+            ->linkToCrudAction(self::ACTION_CHECK_UPDATES)
+            ->setTemplatePath('admin/project/action/check_updates.html.twig')
+            ->addCssClass('btn btn-outline-secondary')
+            ->displayIf(function (Project $project): bool {
+                if (!$project->health->isReady() || null === $project->id) {
+                    return false;
+                }
+
+                return !$this->projectIndexStatusFactory->forProject($project)->pending;
+            });
 
         $searchMemory = Action::new(self::ACTION_SEARCH_MEMORY, 'Search memory', 'fa fa-magnifying-glass')
             ->linkToCrudAction(self::ACTION_SEARCH_MEMORY)
@@ -204,9 +225,9 @@ class ProjectCrudController extends AbstractCrudController
             ->update(Crud::PAGE_INDEX, Action::NEW, static fn (Action $action) => $action->setLabel('Register Project'))
             ->add(Crud::PAGE_INDEX, Action::DETAIL)
             ->add(Crud::PAGE_INDEX, $scanSources)
-            ->add(Crud::PAGE_INDEX, $indexNow)
+            ->add(Crud::PAGE_INDEX, $checkUpdates)
             ->add(Crud::PAGE_DETAIL, $scanSources)
-            ->add(Crud::PAGE_DETAIL, $indexNow)
+            ->add(Crud::PAGE_DETAIL, $checkUpdates)
             ->add(Crud::PAGE_DETAIL, $searchMemory)
             ->add(Crud::PAGE_EDIT, $scanSources)
             ->update(Crud::PAGE_INDEX, Action::DETAIL, static fn (Action $action) => $action
@@ -218,7 +239,7 @@ class ProjectCrudController extends AbstractCrudController
             ->update(Crud::PAGE_INDEX, Action::DELETE, static fn (Action $action) => $action
                 ->setLabel('Delete')
                 ->setIcon('fa fa-trash'))
-            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_SCAN_SOURCES, self::ACTION_INDEX_NOW, Action::EDIT, Action::DELETE])
+            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_SCAN_SOURCES, self::ACTION_CHECK_UPDATES, Action::EDIT, Action::DELETE])
             ->setPermission(Action::DELETE, 'ROLE_ADMIN');
     }
 
@@ -231,7 +252,28 @@ class ProjectCrudController extends AbstractCrudController
 
     public function configureResponseParameters(KeyValueStore $responseParameters): KeyValueStore
     {
-        if (Crud::PAGE_DETAIL !== $responseParameters->get('pageName')) {
+        $pageName = $responseParameters->get('pageName');
+        if (Crud::PAGE_INDEX === $pageName) {
+            $entities = $responseParameters->get('entities');
+            if (\is_iterable($entities)) {
+                $projects = [];
+                foreach ($entities as $entity) {
+                    $project = $entity instanceof EntityDto ? $entity->getInstance() : null;
+                    if ($project instanceof Project) {
+                        $projects[] = $project;
+                    }
+                }
+                $this->projectIndexStatusFactory->warm($projects);
+            }
+
+            $responseParameters->set('statusTopics', [
+                'list' => ProjectStatusTopics::LIST_STATUS,
+            ]);
+
+            return $responseParameters;
+        }
+
+        if (Crud::PAGE_DETAIL !== $pageName) {
             return $responseParameters;
         }
 
@@ -241,9 +283,12 @@ class ProjectCrudController extends AbstractCrudController
             return $responseParameters;
         }
 
-        $latest = $this->indexGenerationRepository->findLatestForProject($project->id);
-        $active = $this->indexGenerationRepository->findActiveForProject($project->id);
-        $responseParameters->set('indexStatus', $this->buildIndexStatus($project, $latest, $active));
+        $status = $this->projectIndexStatusFactory->forProject($project);
+        $responseParameters->set('indexStatus', $status);
+        $responseParameters->set('statusTopics', [
+            'list' => ProjectStatusTopics::LIST_STATUS,
+            'project' => ProjectStatusTopics::forProject($project->id),
+        ]);
 
         return $responseParameters;
     }
@@ -297,24 +342,39 @@ class ProjectCrudController extends AbstractCrudController
     }
 
     /**
+     * Optional incremental check. Automatic indexing already runs on a schedule.
+     *
      * @param AdminContext<Project> $context
      */
-    #[AdminRoute(path: '/{entityId}/index-now', name: 'index-now', options: ['methods' => [Request::METHOD_POST]])]
-    public function indexNow(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
+    #[AdminRoute(path: '/{entityId}/check-updates', name: 'check-updates', options: ['methods' => [Request::METHOD_POST]])]
+    public function checkUpdates(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
     {
         $request = $context->getRequest();
         $csrfToken = $request->request->has('token')
             ? (string) $request->request->get('token')
             : null;
 
-        if (!$this->isCsrfTokenValid(self::CSRF_INDEX_NOW, $csrfToken)) {
-            throw new InvalidCsrfTokenException('Invalid Index now CSRF token.');
+        if (!$this->isCsrfTokenValid(self::CSRF_CHECK_UPDATES, $csrfToken)) {
+            throw new InvalidCsrfTokenException('Invalid Check for updates CSRF token.');
         }
 
         /** @var Project $project */
         $project = $context->getEntity()->getInstance();
+        if (!$project->health->isReady()) {
+            $this->addFlash('warning', 'Source discovery must finish before checking for index updates.');
+
+            return $this->redirectToDetail($urlGenerator, $project);
+        }
+
+        $status = null !== $project->id ? $this->projectIndexStatusFactory->forProject($project) : null;
+        if (null !== $status && $status->pending) {
+            $this->addFlash('info', \sprintf('Project "%s" is already indexing. Wait for the live status to finish.', $project->name));
+
+            return $this->redirectToDetail($urlGenerator, $project);
+        }
+
         $this->projectIndexManager->queue($project);
-        $this->addFlash('success', \sprintf('Project "%s" queued for indexing.', $project->name));
+        $this->addFlash('success', \sprintf('Queued an optional index check for "%s". Automatic indexing continues on its schedule.', $project->name));
 
         return $this->redirectToDetail($urlGenerator, $project);
     }
@@ -380,59 +440,6 @@ class ProjectCrudController extends AbstractCrudController
                 ->setEntityId((string) $project->id)
                 ->generateUrl(),
         ]);
-    }
-
-    /**
-     * @return array{
-     *     latest: ?IndexGeneration,
-     *     active: ?IndexGeneration,
-     *     statusLabel: string,
-     *     statusValue: string,
-     *     pending: bool,
-     *     stale: bool,
-     *     error: ?string,
-     *     lastIndexAt: ?\DateTimeImmutable
-     * }
-     */
-    private function buildIndexStatus(Project $project, ?IndexGeneration $latest, ?IndexGeneration $active): array
-    {
-        $pending = null !== $latest && $latest->state->isInProgress();
-        $stale = false;
-        if (
-            null !== $active
-            && null !== $project->sourceRevision
-            && null !== $active->committedRevision
-            && $active->committedRevision < $project->sourceRevision
-        ) {
-            $stale = true;
-        }
-
-        $statusValue = self::INDEX_STATUS_NONE;
-        $statusLabel = 'Not indexed';
-        $error = null;
-
-        if (null !== $latest) {
-            $statusValue = $latest->state->value;
-            $statusLabel = $latest->state->label();
-            $error = $latest->lastError;
-            if ($pending) {
-                $statusLabel = IndexState::Building === $latest->state ? 'Indexing' : 'Updating index';
-            } elseif ($stale && $latest->state->isUsable()) {
-                $statusLabel = 'Index stale vs source revision';
-                $statusValue = self::INDEX_STATUS_STALE;
-            }
-        }
-
-        return [
-            'latest' => $latest,
-            'active' => $active,
-            'statusLabel' => $statusLabel,
-            'statusValue' => $statusValue,
-            'pending' => $pending,
-            'stale' => $stale,
-            'error' => $error,
-            'lastIndexAt' => $project->lastSuccessfulIndexAt,
-        ];
     }
 
     private function redirectToDetail(AdminUrlGenerator $urlGenerator, Project $project): RedirectResponse

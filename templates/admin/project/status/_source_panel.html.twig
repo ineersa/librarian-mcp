@@ -1,0 +1,21 @@
+{% set project = project|default(null) %}
+{% set indexStatus = indexStatus|default(null) %}
+{% if project is not null and indexStatus is not null %}
+    <div
+        id="project-source-status"
+        class="mb-3"
+        data-project-health="{{ indexStatus.health.value }}"
+        data-project-id="{{ project.id }}"
+    >
+        <p class="mb-1">
+            <strong>Source health:</strong>
+            <span data-project-health-label>{{ indexStatus.health.label() }}</span>
+        </p>
+        <p class="mb-1 text-muted">
+            Source discovery is separate from indexing. Automatic indexing starts after sources are ready.
+        </p>
+        {% if indexStatus.sourceError %}
+            <p class="mb-0 text-danger" data-project-error>{{ indexStatus.sourceError }}</p>
+        {% endif %}
+    </div>
+{% endif %}

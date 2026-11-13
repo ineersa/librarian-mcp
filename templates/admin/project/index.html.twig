@@ -1,5 +1,13 @@
 {% extends '@EasyAdmin/crud/index.html.twig' %}
 
+{% block main %}
+    {{ turbo_stream_from(statusTopics.list) }}
+    <p class="text-muted small mb-3">
+        Source discovery and indexing are separate. Indexing starts automatically after sources are discovered; the scheduler checks about every 60 seconds. Check for updates is optional.
+    </p>
+    {{ parent() }}
+{% endblock %}
+
 {% block entity_row_attributes %}
     data-project-id="{{ entity.primaryKeyValue }}"
     {% if entity.instance.health is defined and entity.instance.health is not null %}

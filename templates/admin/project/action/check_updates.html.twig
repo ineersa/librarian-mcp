@@ -1,0 +1,21 @@
+{% types {
+    action: '\\EasyCorp\\Bundle\\EasyAdminBundle\\Dto\\ActionDto',
+    entity?: '\\EasyCorp\\Bundle\\EasyAdminBundle\\Dto\\EntityDto',
+} %}
+
+{% set project = entity is defined and entity ? entity.instance : null %}
+{% set canCheck = project and project.health.isReady() %}
+{% if canCheck %}
+    <form method="post" action="{{ action.linkUrl }}" class="d-inline" data-action-check-updates>
+        <input type="hidden" name="token" value="{{ csrf_token('project-check-updates') }}">
+        <button type="submit" class="{{ action.cssClass }}">
+            {% if action.icon %}
+                <i class="{{ action.icon }}"></i>
+            {% endif %}
+            {% set action_label = action.label|trans %}
+            {% if action_label is not empty %}
+                <span class="action-label">{{ action_label }}</span>
+            {% endif %}
+        </button>
+    </form>
+{% endif %}

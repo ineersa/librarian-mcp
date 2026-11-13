@@ -92,12 +92,17 @@ trait ProjectSourceBrowserHelpers
 
     protected function triggerIndexNow(): void
     {
-        $this->page->getByRole('button', ['name' => 'Index now'])->click();
+        $button = $this->page->getByRole('button', ['name' => 'Check for updates']);
+        if (0 === $button->count()) {
+            // Automatic indexing may already be running; live status is enough.
+            return;
+        }
+        $button->click();
     }
 
     protected function waitForProjectHealth(ProjectHealth $health): void
     {
-        Expect::locator($this->page->locator('[data-project-health]'))
+        Expect::locator($this->page->locator('#project-source-status'))
             ->toHaveAttribute('data-project-health', $health->value, new AssertionOptions(timeoutMs: 60_000));
         if (ProjectHealth::Ready === $health) {
             Expect::locator($this->page->locator('#project-source-status'))
@@ -111,6 +116,8 @@ trait ProjectSourceBrowserHelpers
             ->toBeVisible(new AssertionOptions(timeoutMs: $timeoutMs));
         Expect::locator($this->page->locator('#project-index-status'))
             ->toHaveAttribute('data-index-pending', '0', new AssertionOptions(timeoutMs: $timeoutMs));
+        Expect::locator($this->page->locator('#project-index-status [data-index-status-label]'))
+            ->toContainText('Indexed', new AssertionOptions(timeoutMs: $timeoutMs));
         Expect::locator($this->page->locator('[data-index-parent-count-value]'))
             ->not()->toHaveText('0', new AssertionOptions(timeoutMs: $timeoutMs));
         $parentCount = trim((string) $this->page->locator('[data-index-parent-count-value]')->textContent());
