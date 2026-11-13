@@ -14,6 +14,36 @@
         <p class="mb-1 text-muted">
             Source discovery is separate from indexing. Automatic indexing starts after sources are ready.
         </p>
+        <dl class="row mb-2 small">
+            <dt class="col-sm-4">Observations</dt>
+            <dd class="col-sm-8" data-source-count="observations">{{ project.observationCount }}</dd>
+            <dt class="col-sm-4">Reflections</dt>
+            <dd class="col-sm-8" data-source-count="reflections">{{ project.reflectionCount }}</dd>
+            <dt class="col-sm-4">Sessions</dt>
+            <dd class="col-sm-8" data-source-count="sessions">{{ project.sessionCount }}</dd>
+        </dl>
+        {% if project.databasePath or project.sessionsPath or project.schemaVersion %}
+            <div class="small text-muted" data-source-details>
+                {% if project.databasePath %}
+                    <p class="mb-1">
+                        <strong>OM database:</strong>
+                        <span data-source-database-path>{{ project.databasePath }}</span>
+                    </p>
+                {% endif %}
+                {% if project.sessionsPath %}
+                    <p class="mb-1">
+                        <strong>Sessions path:</strong>
+                        <span data-source-sessions-path>{{ project.sessionsPath }}</span>
+                    </p>
+                {% endif %}
+                {% if project.schemaVersion %}
+                    <p class="mb-1">
+                        <strong>Schema version:</strong>
+                        <span data-source-schema-version>{{ project.schemaVersion }}</span>
+                    </p>
+                {% endif %}
+            </div>
+        {% endif %}
         {% if indexStatus.sourceError %}
             <p class="mb-0 text-danger" data-project-error>{{ indexStatus.sourceError }}</p>
         {% endif %}

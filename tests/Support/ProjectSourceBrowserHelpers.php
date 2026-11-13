@@ -154,7 +154,15 @@ trait ProjectSourceBrowserHelpers
 
     protected function assertSourceCount(string $label, int $expected): void
     {
-        $value = $this->page->locator('.field-group:has(.field-label > :text-is("'.$label.'")) .field-value')->textContent();
+        $selector = match ($label) {
+            'Observations' => '[data-source-count="observations"]',
+            'Reflections' => '[data-source-count="reflections"]',
+            'Sessions' => '[data-source-count="sessions"]',
+            default => throw new \InvalidArgumentException(\sprintf('Unsupported live source count label "%s".', $label)),
+        };
+        $locator = $this->page->locator('#project-source-status '.$selector);
+        Expect::locator($locator)->toHaveText((string) $expected, new AssertionOptions(timeoutMs: 60_000));
+        $value = $locator->textContent();
         self::assertSame((string) $expected, trim((string) $value));
     }
 }
