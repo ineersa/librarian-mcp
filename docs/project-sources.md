@@ -67,7 +67,7 @@ Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `Callb
 
 ## Docker source mounts
 
-`PROJECTS_HOST_PATH` defaults to this checkout (`.`) and is bound read-only at `/projects` in development/production. Web and Messenger consumer need the same source mounts/env. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack. Production consumer service name is `messenger` (not `worker`).
+`PROJECTS_HOST_PATH` defaults to this checkout (`.`) and is bound read-only at `/projects` in development. Production uses `PROJECTS_CONTAINER_PATH` for the target (default `/projects`); setting it to the host absolute path lets that same path work in the registration form. Web and Messenger consumer need identical read-only source mounts/env. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack. Production consumer service name is `messenger` (not `worker`).
 
 EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry so the public Tailwind reset stays out of admin. Login uses EasyAdmin's built-in dark template.
 

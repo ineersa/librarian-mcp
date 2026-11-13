@@ -2,7 +2,7 @@
 
 ## Scope and approval policy
 
-Keep the suite small: **one happy-path journey per feature**. A single CRUD journey covers its related list, create, detail, edit, and delete operations. **Projects has exactly one journey**, including registration, source discovery, Index now, search preview, ordinary harness-owned fixture content/revision update, edit/rescan, and removal. Do not add separate discovery, error, uniqueness, or indexing matrices, or hide extra cases in loops and data providers.
+Keep the suite small: **one happy-path journey per feature**. A single CRUD journey covers its related list, create, detail, edit, and delete operations. **Projects has exactly one journey**, including registration, live source/index status, optional Check for updates, natural-language search preview, ordinary harness-owned fixture content/revision update, edit/rescan, and removal. Do not add separate discovery, error, uniqueness, or indexing matrices, or hide extra cases in loops and data providers.
 
 **Ask the owner for explicit permission before adding or running special-case tests.** This includes negative paths, boundary values, security matrices, fault injection, concurrency, recovery, and layout permutations. Fixing a bug does not automatically authorize another regression scenario. Database-reset / purge tests remain excluded.
 
@@ -27,7 +27,7 @@ Saved journeys in `tests/E2E/` (product path after plan 03):
 | Homepage | Public landing / login entry |
 | Authentication | Login and logout (dashboard title: Projects dashboard) |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
-| Projects | Register via absolute path input, wait for async discovery/health, Index now + committed index, search a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + reindex/search, edit/rescan, detail, remove only its registration |
+| Projects | Register via absolute path input, wait for live async discovery/index status without page reloads, optional Check for updates, natural-language search for a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + reindex/search, edit/rescan, detail, remove only its registration |
 | MCP HTTP | Optional token path: regenerate the isolated admin's token through the UI when used, then initialize / initialized / tools-list over real HTTP (`tools/list` empty until plan 05) |
 
 The Projects journey uses only the two synthetic source trees needed for registration and path rebinding during edit. Intentional fixture mutation is allowed only through harness-owned helpers against verified synthetic paths, with restore in `finally` so repeated runs stay idempotent. It never imports operator `compose.sources.yaml` overlays or private owner projects.

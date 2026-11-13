@@ -17,7 +17,7 @@ Locked dependency: Symfony AI Store + official Postgres bridge **0.15.0** with P
 
 - One store table per project/generation (isolation by table name, not metadata filters)
 - Store document IDs are deterministic **UUIDv5** values derived from `[generation ID, kind, sourceId, full parent signature, chunk position]`. Format version **3** participates in the generation signature. This is the only approved UUID exception; application entities keep auto-increment integers
-- `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match
+- `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match. The application passes whitespace-separated question terms as the vendor's OR-text array, not one text that would AND every significant word. The full question still drives embeddings and BGE reranking
 - Native hybrid does **not** apply metadata/date filters; admin Search memory has no date-window UI
 - Ranking is stock weighted hybrid, not BM25 and not RRF. Behavior preservation vs earlier backends is out of scope; testing/tuning comes later
 
@@ -66,11 +66,11 @@ Hatfield does not notify Librarian. Symfony Scheduler keeps indexes fresh inside
 
 Default interval is `INDEX_INTERVAL=60` seconds. Use `CallbackMessageProvider` so each tick yields project indexing jobs directly. No custom tick message, pagination coordinator, or polling daemon. Queue-only Messenger deduplication plus the project execution lock remain the admission/execution barriers. Bound each source batch, embedding batch, and HTTP request.
 
-Admin exposes index status, Index now, and Search memory in the existing Projects journey. MCP memory tools remain plan 05.
+Admin list/detail status updates arrive through Mercure + Turbo Streams after committed checkpoints, without document refreshes. Source discovery and indexed-memory counts are separate. Automatic indexing is the default; Check for updates is an optional incremental check. Search memory remains part of the existing Projects journey. MCP memory tools remain plan 05.
 
 ## Ranking shape
 
-Stock Postgres `HybridQuery` candidates → BGE on raw question/chunks (batches 8, 768 Unicode characters, floor -4) → stable order/ties → parent collapse. Report truncation and stale/partial status explicitly. Do not treat hybrid score as calibrated confidence.
+Stock Postgres `HybridQuery` candidates (OR across question terms) → BGE on raw question/chunks (batches 8, 768 Unicode characters, floor -4) → stable order/ties → parent collapse. Report truncation and stale/partial status explicitly. Do not treat hybrid score as calibrated confidence.
 
 ## Documentation consulted
 

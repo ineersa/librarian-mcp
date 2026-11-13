@@ -3,7 +3,7 @@
 {% block main %}
     {{ turbo_stream_from(statusTopics.list) }}
     <p class="text-muted small mb-3">
-        Source discovery and indexing are separate. Indexing starts automatically after sources are discovered; the scheduler checks about every 60 seconds. Check for updates is optional.
+        Source discovery and indexing are separate. Indexing starts automatically after discovery and checks for changes periodically. Check for updates is optional.
     </p>
     {{ parent() }}
 {% endblock %}

@@ -15,7 +15,7 @@
         {% endif %}
     >
         <div class="fw-semibold" data-index-status-label>{{ indexStatus.statusLabel }}</div>
-        <div class="text-muted" data-index-summary-label>{{ indexStatus.summaryLabel }}</div>
+        <div class="text-muted" data-index-summary-label>{{ indexStatus.indexedMemoryCount|number_format }} {{ indexStatus.pending ? 'memories processed so far' : 'indexed memories' }}</div>
         <div class="text-muted" data-index-last-success>
             {% if indexStatus.lastIndexAt %}
                 Last indexed {{ indexStatus.lastIndexAt|date('Y-m-d H:i') }}
@@ -24,7 +24,7 @@
             {% endif %}
         </div>
         <div class="text-muted" data-index-auto-help>
-            Automatic every ~60s after discovery
+            Updates are automatic
         </div>
         {% if indexStatus.error %}
             <div class="text-danger" data-index-error>{{ indexStatus.error }}</div>

@@ -12,8 +12,8 @@ namespace App\Index\Status;
  */
 final class ProjectStatusTopics
 {
-    private const string PROJECT_STATUS = 'https://librarian.local/projects/%d/status';
     public const string LIST_STATUS = 'https://librarian.local/projects/status';
+    private const string PROJECT_STATUS = 'https://librarian.local/projects/%d/status';
 
     public static function forProject(int $projectId): string
     {

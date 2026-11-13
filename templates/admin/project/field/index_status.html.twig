@@ -1,5 +1,5 @@
 {% set project = entity.instance %}
-{% set indexStatus = field.value %}
+{% set indexStatus = field.formattedValue %}
 {% if indexStatus is not null %}
     {% include 'admin/project/status/_list_cell.html.twig' with {
         project: project,

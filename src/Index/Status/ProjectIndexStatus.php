@@ -11,31 +11,12 @@ use App\Entity\ProjectHealth;
 
 /**
  * Read-model for project source/index status presentation.
- *
- * @phpstan-type StatusArray array{
- *     projectId: int,
- *     healthValue: string,
- *     healthLabel: string,
- *     sourceError: ?string,
- *     latest: ?IndexGeneration,
- *     active: ?IndexGeneration,
- *     statusLabel: string,
- *     statusValue: string,
- *     summaryLabel: string,
- *     pending: bool,
- *     stale: bool,
- *     canCheckUpdates: bool,
- *     error: ?string,
- *     lastIndexAt: ?\DateTimeImmutable,
- *     indexedMemoryCount: int,
- *     automaticIndexingHelp: string
- * }
  */
 final readonly class ProjectIndexStatus
 {
     public const string STATUS_NONE = 'none';
     public const string STATUS_STALE = 'stale';
-    public const string AUTOMATIC_INDEXING_HELP = 'Indexing starts automatically after sources are discovered and the scheduler checks about every 60 seconds. Check for updates is optional.';
+    public const string AUTOMATIC_INDEXING_HELP = 'Automatic indexing starts after sources are discovered and checks for changes periodically. Check for updates is optional.';
 
     public function __construct(
         public int $projectId,
@@ -45,7 +26,6 @@ final readonly class ProjectIndexStatus
         public ?IndexGeneration $active,
         public string $statusLabel,
         public string $statusValue,
-        public string $summaryLabel,
         public bool $pending,
         public bool $stale,
         public bool $canCheckUpdates,
@@ -54,31 +34,6 @@ final readonly class ProjectIndexStatus
         public int $indexedMemoryCount,
         public string $automaticIndexingHelp = self::AUTOMATIC_INDEXING_HELP,
     ) {
-    }
-
-    /**
-     * @return StatusArray
-     */
-    public function toArray(): array
-    {
-        return [
-            'projectId' => $this->projectId,
-            'healthValue' => $this->health->value,
-            'healthLabel' => $this->health->label(),
-            'sourceError' => $this->sourceError,
-            'latest' => $this->latest,
-            'active' => $this->active,
-            'statusLabel' => $this->statusLabel,
-            'statusValue' => $this->statusValue,
-            'summaryLabel' => $this->summaryLabel,
-            'pending' => $this->pending,
-            'stale' => $this->stale,
-            'canCheckUpdates' => $this->canCheckUpdates,
-            'error' => $this->error,
-            'lastIndexAt' => $this->lastIndexAt,
-            'indexedMemoryCount' => $this->indexedMemoryCount,
-            'automaticIndexingHelp' => $this->automaticIndexingHelp,
-        ];
     }
 
     public static function fromProject(Project $project, ?IndexGeneration $latest, ?IndexGeneration $active): self
@@ -99,7 +54,7 @@ final readonly class ProjectIndexStatus
         }
 
         $statusValue = self::STATUS_NONE;
-        $statusLabel = 'Not indexed yet';
+        $statusLabel = $project->health->isReady() ? 'Waiting for first index' : 'Waiting for source discovery';
         $error = null;
         $indexedMemoryCount = 0;
 
@@ -120,13 +75,6 @@ final readonly class ProjectIndexStatus
             }
         }
 
-        $summaryLabel = $statusLabel;
-        if ($indexedMemoryCount > 0) {
-            $summaryLabel .= ' · '.\number_format($indexedMemoryCount).' memories';
-        } elseif (self::STATUS_NONE !== $statusValue && IndexState::Building->value !== $statusValue) {
-            $summaryLabel .= ' · no memories yet';
-        }
-
         $discoveryBusy = $project->health->isPending() || $project->health->isScanning();
         $canCheckUpdates = !$discoveryBusy && !$pending && $project->health->isReady();
 
@@ -138,7 +86,6 @@ final readonly class ProjectIndexStatus
             active: $active,
             statusLabel: $statusLabel,
             statusValue: $statusValue,
-            summaryLabel: $summaryLabel,
             pending: $pending,
             stale: $stale,
             canCheckUpdates: $canCheckUpdates,

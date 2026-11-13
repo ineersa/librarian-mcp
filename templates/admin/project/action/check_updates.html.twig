@@ -7,7 +7,7 @@
 {% set canCheck = project and project.health.isReady() %}
 {% if canCheck %}
     <form method="post" action="{{ action.linkUrl }}" class="d-inline" data-action-check-updates>
-        <input type="hidden" name="token" value="{{ csrf_token('project-check-updates') }}">
+        <input type="hidden" name="token" value="{{ csrf_token(constant('App\\Controller\\Admin\\ProjectCrudController::CSRF_CHECK_UPDATES')) }}">
         <button type="submit" class="{{ action.cssClass }}">
             {% if action.icon %}
                 <i class="{{ action.icon }}"></i>

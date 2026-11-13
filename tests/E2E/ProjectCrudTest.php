@@ -53,6 +53,11 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Automatic indexing', new AssertionOptions(timeoutMs: 10_000));
 
+            $this->openProjectsIndex();
+            $indexCell = $this->page->locator('#project-index-list-'.$projectId);
+            Expect::locator($indexCell)->toContainText('Indexed');
+            Expect::locator($indexCell)->toContainText('3 indexed memories');
+            $this->openProjectDetail($projectId);
             $this->openSearchMemory();
             $this->searchMemory('where was I working on synthetic observation fx-1');
             $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');

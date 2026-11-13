@@ -29,7 +29,7 @@
             </p>
             {% if indexStatus.latest %}
                 <dl class="row mb-0 small">
-                    <dt class="col-sm-4">Indexed memories</dt>
+                    <dt class="col-sm-4">{{ indexStatus.pending ? 'Memories processed so far' : 'Indexed memories' }}</dt>
                     <dd class="col-sm-8">
                         <span data-index-parent-count-value>{{ indexStatus.indexedMemoryCount }}</span>
                     </dd>
@@ -41,13 +41,23 @@
                             Never indexed
                         {% endif %}
                     </dd>
-                    <dt class="col-sm-4">Active generation</dt>
-                    <dd class="col-sm-8" data-index-active-id>{{ indexStatus.active ? indexStatus.active.id : 'None' }}</dd>
-                    <dt class="col-sm-4">Committed revision</dt>
-                    <dd class="col-sm-8" data-index-committed-revision-value>{{ indexStatus.latest.committedRevision ?? 'Not committed' }}</dd>
-                    <dt class="col-sm-4">Source revision</dt>
-                    <dd class="col-sm-8" data-index-source-revision>{{ project.sourceRevision ?? 'Unknown' }}</dd>
                 </dl>
+                {% if indexStatus.active and indexStatus.active.id != indexStatus.latest.id %}
+                    <p class="small mt-2 mb-0">
+                        Search still uses the previous index of {{ indexStatus.active.parentCount|number_format }} memories.
+                    </p>
+                {% endif %}
+                <details class="small mt-2">
+                    <summary>Technical index details</summary>
+                    <dl class="row mb-0 mt-2">
+                        <dt class="col-sm-4">Active generation</dt>
+                        <dd class="col-sm-8" data-index-active-id>{{ indexStatus.active ? indexStatus.active.id : 'None' }}</dd>
+                        <dt class="col-sm-4">Committed revision</dt>
+                        <dd class="col-sm-8" data-index-committed-revision-value>{{ indexStatus.latest.committedRevision ?? 'Not committed' }}</dd>
+                        <dt class="col-sm-4">Source revision at last discovery</dt>
+                        <dd class="col-sm-8" data-index-source-revision>{{ project.sourceRevision ?? 'Unknown' }}</dd>
+                    </dl>
+                </details>
             {% else %}
                 <p class="mb-0" data-index-empty>
                     No index yet. Automatic indexing starts after sources are discovered; Check for updates is optional.

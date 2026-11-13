@@ -2,10 +2,7 @@
 
 {% block main %}
     {% set project = entity.instance %}
-    {{ turbo_stream_from([
-        statusTopics.list,
-        statusTopics.project
-    ]) }}
+    {{ turbo_stream_from(statusTopics.project) }}
 
     {% include 'admin/project/status/_source_panel.html.twig' with {
         project: project,
@@ -18,4 +15,11 @@
     } only %}
 
     {{ parent() }}
+{% endblock %}
+
+{% block detail_fields %}
+    <details>
+        <summary class="mb-3">Additional details (snapshot at page load)</summary>
+        {{ parent() }}
+    </details>
 {% endblock %}

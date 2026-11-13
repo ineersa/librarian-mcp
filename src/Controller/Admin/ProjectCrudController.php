@@ -255,7 +255,7 @@ class ProjectCrudController extends AbstractCrudController
         $pageName = $responseParameters->get('pageName');
         if (Crud::PAGE_INDEX === $pageName) {
             $entities = $responseParameters->get('entities');
-            if (\is_iterable($entities)) {
+            if (is_iterable($entities)) {
                 $projects = [];
                 foreach ($entities as $entity) {
                     $project = $entity instanceof EntityDto ? $entity->getInstance() : null;

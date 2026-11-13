@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Index\Status;
 
-use App\Entity\IndexGeneration;
 use App\Entity\Project;
 use App\Repository\IndexGenerationRepository;
+use Symfony\Contracts\Service\ResetInterface;
 
 /**
- * Builds and request-caches project index status views without N+1 lookups.
+ * Builds and request-caches project index status views.
  */
-final class ProjectIndexStatusFactory
+final class ProjectIndexStatusFactory implements ResetInterface
 {
     /** @var array<int, ProjectIndexStatus> */
     private array $cache = [];
@@ -71,6 +71,11 @@ final class ProjectIndexStatusFactory
     public function forget(int $projectId): void
     {
         unset($this->cache[$projectId]);
+    }
+
+    public function reset(): void
+    {
+        $this->cache = [];
     }
 
     /**

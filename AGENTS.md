@@ -75,7 +75,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 ## Testing and browser verification
 
 - Follow [TESTING.md](TESTING.md). Application behavior is verified through real Playwright browsers against an isolated checkout-owned stack.
-- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one CRUD journey**, including registration, discovery, Index now/search, ordinary harness-owned fixture update, edit/rescan, and removal. Do not add separate project discovery, error, uniqueness, or indexing matrices.
+- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one CRUD journey**, including registration, live discovery/index status, optional Check for updates/search, ordinary harness-owned fixture update, edit/rescan, and removal. Do not add separate project discovery, error, uniqueness, or indexing matrices.
 - Obtain explicit owner permission before adding or running special-case tests (negative paths, security matrices, fault injection, concurrency, recovery, layout permutations). A bug fix does not automatically authorize a new regression scenario.
 - Do not add unit, kernel-only, service-only, or API-only suites as the primary coverage model. PHPUnit may harness Playwright; its presence does not authorize non-browser application suites.
 - Use the isolated browser stack and printed shared-proxy URL / `LIBRARIAN_BROWSER_URL`. Do not invent ports or Compose project names. Seed only the verified isolated admin identity for journeys; never purge owner/production data.

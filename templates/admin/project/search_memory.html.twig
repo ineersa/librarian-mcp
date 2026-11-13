@@ -7,22 +7,27 @@
 {% block main %}
     <div id="project-memory-search" class="mb-3" data-project-id="{{ project.id }}">
         <p class="text-muted mb-3">
-            Bounded hybrid retrieval over the committed active index. Search never ingests or rebuilds sources.
-            Rerank scores are uncalibrated ranking aids, not confidence.
+            Search this project's indexed memories. New memories become searchable automatically after indexing.
         </p>
 
         {% if activeGeneration %}
             <p class="small mb-3">
-                Active generation
-                <code data-search-active-generation>{{ activeGeneration.id }}</code>
-                · state {{ activeGeneration.state.label() }}
-                · committed revision {{ activeGeneration.committedRevision ?? 'none' }}
-                · parents {{ activeGeneration.parentCount }}
-                · chunks {{ activeGeneration.chunkCount }}
+                <strong>{{ activeGeneration.parentCount|number_format }} indexed memories</strong>
+                {% if project.lastSuccessfulIndexAt %}
+                    · Last successful update: {{ project.lastSuccessfulIndexAt|date('Y-m-d H:i:s T') }}
+                {% endif %}
             </p>
+            <details class="small text-muted mb-3">
+                <summary>Technical index details</summary>
+                Generation <code data-search-active-generation>{{ activeGeneration.id }}</code>
+                · {{ activeGeneration.state.label() }}
+                · source revision {{ activeGeneration.committedRevision ?? 'none' }}
+                · {{ activeGeneration.chunkCount|number_format }} text chunks
+            </details>
         {% else %}
             <div class="alert alert-warning" data-search-no-active>
-                No active committed index is available for this project yet.
+                Search will be available when this project's first indexing run finishes.
+                Check the project details for progress or errors.
             </div>
         {% endif %}
 
@@ -39,31 +44,35 @@
         {% if searched and searchResult %}
             {% if searchResult.truncated %}
                 <div class="alert alert-info" data-search-truncated>
-                    Candidate budgets were truncated before ranking. Results may omit additional matches.
+                    Search considers a limited set of matches. A more specific question can help narrow the results.
                 </div>
             {% endif %}
 
             {% if searchResult.results is empty %}
-                <p class="text-muted" data-search-empty>No ranked parents returned for this query.</p>
+                <p class="text-muted" data-search-empty>
+                    No matching memories found. Try a specific name, issue number or phrase.
+                </p>
             {% else %}
                 <div class="list-group" data-search-results>
                     {% for hit in searchResult.results %}
                         <article class="list-group-item" data-search-hit data-source-id="{{ hit.source_id }}" data-kind="{{ hit.kind }}">
                             <div class="d-flex justify-content-between gap-3">
                                 <div>
-                                    <strong>{{ hit.kind }}</strong>
-                                    <code class="ms-1">{{ hit.source_id }}</code>
+                                    <strong>{{ hit.kind|capitalize }}</strong>
                                 </div>
-                                <span class="small text-muted" title="Uncalibrated rerank score, not confidence">
-                                    score {{ hit.rerank_score|number_format(4) }}
+                                <span class="small text-muted">
+                                    {{ hit.occurred_at|date('Y-m-d H:i:s', 'UTC') }} UTC
                                 </span>
                             </div>
                             <div class="small text-muted mb-1">
-                                run {{ hit.session_id }}
-                                · date {{ hit.occurred_at|date('Y-m-d H:i:s', 'UTC') }} UTC
-                                · chunk {{ hit.chunk_position }}
+                                Session {{ hit.session_id }}
                             </div>
                             <pre class="small mb-0 text-wrap">{{ hit.snippet }}</pre>
+                            <details class="small text-muted mt-2">
+                                <summary>Technical result details</summary>
+                                Memory <code>{{ hit.source_id }}</code> · chunk {{ hit.chunk_position }}
+                                · ranking score {{ hit.rerank_score|number_format(4) }} (not a confidence estimate)
+                            </details>
                         </article>
                     {% endfor %}
                 </div>
