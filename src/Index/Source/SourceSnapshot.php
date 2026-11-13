@@ -8,9 +8,9 @@ namespace App\Index\Source;
  * Bounded filesystem/source identity snapshot for one OM database.
  *
  * Stable identity is path+device+inode only. Mutable witness covers size/mtime/
- * ctime/revision plus bounded DB/WAL header bytes for cheap same-revision
- * restore signals. An in-place restore that preserves path/dev/ino and every
- * bounded witness field remains undetectable without full corpus verification.
+ * ctime/revision plus bounded DB/WAL header bytes for diagnostics, not cursor
+ * invalidation: unrelated Hatfield activity also changes these fields. An
+ * in-place restore preserving identity and revision is not reliably detected.
  */
 final readonly class SourceSnapshot
 {

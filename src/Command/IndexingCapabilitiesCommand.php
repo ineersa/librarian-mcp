@@ -7,7 +7,7 @@ namespace App\Command;
 use App\Index\IndexException;
 use App\Index\IndexFields;
 use App\Index\Model\LocalBgeReranker;
-use App\Index\Model\ModelGateway;
+use App\Index\Model\ValidatingVectorizer;
 use App\Index\Store\ChromaVectorStoreAdapter;
 use App\Index\Store\IndexStoreFactory;
 use Composer\InstalledVersions;
@@ -35,7 +35,7 @@ final class IndexingCapabilitiesCommand extends Command
 
     public function __construct(
         private readonly IndexStoreFactory $stores,
-        private readonly ModelGateway $models,
+        private readonly ValidatingVectorizer $vectorizer,
         private readonly LocalBgeReranker $reranker,
     ) {
         parent::__construct();
@@ -75,7 +75,7 @@ final class IndexingCapabilitiesCommand extends Command
                 'limit' => 1,
                 'include' => ['documents', 'embeddings', 'metadatas', 'distances'],
             ];
-            $adapter = new ChromaVectorStoreAdapter($store);
+            $adapter = new ChromaVectorStoreAdapter($store, $collection);
             $hits = iterator_to_array($adapter->query(new VectorQuery(new Vector([1.0, 0.0])), $options), false);
             $this->requireCondition(1 === \count($hits) && self::AXIS_ID === (string) $hits[0]->getId(), 'Native project/date filter or result limit did not match.');
             $score = $hits[0]->getScore();
@@ -89,7 +89,7 @@ final class IndexingCapabilitiesCommand extends Command
 
             $modelEvidence = null;
             if (true === $input->getOption('models')) {
-                $vector = $this->models->embedQuery('Where is project memory stored?');
+                $vector = $this->vectorizer->embedQuery('Where is project memory stored?');
                 $ranking = $this->reranker->rank('Where is project memory stored?', [
                     'Project memory is stored in the local observational memory SQLite database.',
                     'A public synthetic note about an unrelated afternoon walk.',

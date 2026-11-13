@@ -35,9 +35,13 @@ New query-process peak allocation was **22 MiB**, versus **54 MiB** for the stan
 
 Original snapshot/vector/graph hashes remained unchanged. All private source/settings copies, questions, vectors, payloads and scratch code remain ignored under `var/`. No evaluation or Vektor fallback is part of production code.
 
+## Manual-review follow-up
+
+Manual-review follow-up on PR #3: `cs:fix`, `qa:static`, production Compose configuration validation, and the existing Projects journey passed (**1 test / 19 assertions**, 10.8 seconds in PHPUnit; 21.1 seconds including isolated stack preparation). The fixes cover shared production storage/locks, first-batch retry clearing, witness-driven scan restarts, unchanged-source error recovery, and parent-scoped cleanup of intermediate versions. No new scenarios, benchmarks, injected failures, or production lifecycle operations were run. Failure-path reasoning is source inspection, not executed fault coverage.
+
 ## Unfinished or unverified
 
 - Populated 1/5/20-parent incremental performance measurements and the second full build were not completed. The private writer initially lacked journal-directory permissions; its cleanup removed its own derived index, not original sources. The subsequent rebuild was cancelled. Ordinary content updates were verified in the existing browser journey.
 - Autonomous periodic pickup of newly written content is not browser-proven: the journey explicitly requests scan/index after mutation.
 - No fault-injection, deterministic duplicate-delivery concurrency, multi-project browser isolation, broad date/security, restore/signature-switch or production-cutover matrix was run.
-- Same-revision restores preserving every bounded file/WAL witness remain undetectable without stronger verification. Chroma/SQLite have no shared transaction; pending updates may temporarily remove candidates. Incompatible source/embedding generations fail explicitly.
+- In-place restores preserving filesystem identity and canonical revision are not reliably detected. Generic file/WAL witness drift is diagnostic only, because ordinary Hatfield activity changes it too. Chroma/SQLite have no shared transaction; pending updates may temporarily remove candidates. Incompatible source/embedding generations fail explicitly.

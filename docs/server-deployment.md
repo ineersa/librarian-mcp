@@ -41,6 +41,12 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    - `SYMFONY_TRUSTED_PROXIES=REMOTE_ADDR`
    - `SYMFONY_TRUSTED_HEADERS=x-forwarded-for,x-forwarded-host,x-forwarded-proto,x-forwarded-port`
 
+   Production defaults in `.env.prod` put lexical indexes and execution locks under
+   `INDEX_STORAGE_DIR=data-prod/indexes`, and Messenger deduplication locks at
+   `LOCK_DSN='sqlite:%kernel.project_dir%/data-prod/indexing-locks.db'`.
+   Both services share `/app/data-prod`; keep any overrides on that shared bind,
+   not container-local `/app/data`. See `.env.prod.local.dist`.
+
 3. Configure the published app port and host project bind in `.env` (Compose interpolation, not the container-only `.env.prod.local`), or use exported process environment / an explicit bind in `compose.sources.yaml`:
 
    ```bash

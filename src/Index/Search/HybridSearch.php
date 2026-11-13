@@ -8,7 +8,7 @@ use App\Index\IndexException;
 use App\Index\IndexFields;
 use App\Index\IndexSettings;
 use App\Index\Model\LocalBgeReranker;
-use App\Index\Model\ModelGateway;
+use App\Index\Model\ValidatingVectorizer;
 use App\Index\Source\CanonicalSourceReader;
 use App\Index\Store\IndexStoreFactory;
 use App\Repository\IndexedMemoryRepository;
@@ -27,7 +27,7 @@ final readonly class HybridSearch
 
     public function __construct(
         private IndexStoreFactory $storeFactory,
-        private ModelGateway $modelGateway,
+        private ValidatingVectorizer $vectorizer,
         private LocalBgeReranker $reranker,
         private IndexGenerationRepository $generationRepository,
         private IndexedMemoryRepository $memoryRepository,
@@ -68,7 +68,7 @@ final readonly class HybridSearch
         }
 
         $stores = $this->storeFactory->forGeneration($projectId, $generationId, initialize: false);
-        $vector = $this->modelGateway->embedQuery($question);
+        $vector = $this->vectorizer->embedQuery($question);
         $options = [
             'project_id' => $projectId,
             'generation_id' => $generationId,
@@ -96,7 +96,7 @@ final readonly class HybridSearch
 
         // A remote write may succeed before the relational acknowledgement. Only
         // committed parent signatures/chunk IDs may enter reranking or results.
-        $committed = [];
+        $candidates = [];
         foreach ($fused as $document) {
             $metadata = $document->getMetadata();
             $kind = $metadata[IndexFields::KIND] ?? null;
@@ -105,7 +105,12 @@ final readonly class HybridSearch
             if (!\is_string($kind) || !\is_string($sourceId) || !\is_string($signature)) {
                 throw IndexException::sanitized('Indexed candidate is missing committed provenance.');
             }
-            if ($this->memoryRepository->isCommittedChunk($generationId, $kind, $sourceId, $signature, (string) $document->getId())) {
+            $candidates[] = ['kind' => $kind, 'source_id' => $sourceId, 'signature' => $signature, 'chunk_id' => (string) $document->getId()];
+        }
+        $committedIds = array_fill_keys($this->memoryRepository->findCommittedChunkIds($generationId, $candidates), true);
+        $committed = [];
+        foreach ($fused as $document) {
+            if (isset($committedIds[(string) $document->getId()])) {
                 $committed[] = $document;
             }
         }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Index\Store;
 
 use App\Index\IndexFields;
+use Codewithkyrian\ChromaDB\Models\Collection;
 use Symfony\AI\Store\Bridge\ChromaDb\Store as ChromaStore;
 use Symfony\AI\Store\Document\VectorDocumentInterface;
 use Symfony\AI\Store\Query\QueryInterface;
@@ -34,6 +35,7 @@ final class ChromaVectorStoreAdapter implements StoreInterface
 
     public function __construct(
         private readonly ChromaStore $store,
+        private readonly Collection $collection,
     ) {
     }
 
@@ -45,6 +47,20 @@ final class ChromaVectorStoreAdapter implements StoreInterface
     public function remove(array|string $ids, array $options = []): void
     {
         $this->store->remove($ids, $options);
+    }
+
+    public function removeParentChunks(string $kind, string $sourceId, ?string $keepSignature = null): void
+    {
+        // The collection is already generation-scoped. Native metadata deletion
+        // includes failed writes that never reached the relational manifest.
+        $conditions = [
+            [IndexFields::KIND => ['$eq' => $kind]],
+            [IndexFields::SOURCE_ID => ['$eq' => $sourceId]],
+        ];
+        if (null !== $keepSignature) {
+            $conditions[] = [IndexFields::CONTENT_HASH => ['$ne' => $keepSignature]];
+        }
+        $this->collection->delete(where: ['$and' => $conditions]);
     }
 
     public function clear(array $options = []): void

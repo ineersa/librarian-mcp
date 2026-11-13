@@ -6,6 +6,7 @@ namespace App\Index;
 
 use App\Entity\IndexedMemory;
 use App\Entity\IndexGeneration;
+use App\Entity\IndexState;
 use App\Entity\Project;
 use App\Entity\ProjectHealth;
 use App\Index\Source\CanonicalMemory;
@@ -118,18 +119,19 @@ final class ProjectIndexer
 
         if (!$this->needsWork($generation, $snapshot)) {
             if ($generation->active) {
+                // A successful source validation repairs a transient read error;
+                // no new round is required for an unchanged committed boundary.
+                if (IndexState::Error === $generation->state) {
+                    $generation->markReady($this->clock->now());
+                    $this->entityManager->flush();
+                }
                 $this->removeObsoleteGenerations($projectId, (int) $generation->id);
             }
 
             return false;
         }
 
-        if ($this->shouldRestartOpenRound($generation, $snapshot)) {
-            // Same scan revision with a changed witness: restart canonical pass
-            // from the beginning using the next scanRound for unseen cleanup.
-            $this->beginRound($generation, $snapshot->revision, $snapshot->witness);
-            $generation = $this->requireGeneration((int) $generation->id);
-        } elseif (!$this->roundOpen($generation) && $this->shouldStartRound($generation, $snapshot)) {
+        if (!$this->roundOpen($generation)) {
             $this->beginRound($generation, $snapshot->revision, $snapshot->witness);
             $generation = $this->requireGeneration((int) $generation->id);
         }
@@ -165,41 +167,10 @@ final class ProjectIndexer
             return true;
         }
 
-        if ($snapshot->revision > $generation->committedRevision) {
-            return true;
-        }
-
-        return $snapshot->revision === $generation->committedRevision
-            && $snapshot->witness !== $generation->committedSourceWitness;
-    }
-
-    private function shouldStartRound(IndexGeneration $generation, SourceSnapshot $snapshot): bool
-    {
-        if (null === $generation->committedRevision) {
-            return true;
-        }
-
-        if ($snapshot->revision > $generation->committedRevision) {
-            return true;
-        }
-
-        // Equal revision with a changed witness reconciles in the same generation.
-        return $snapshot->revision === $generation->committedRevision
-            && $snapshot->witness !== $generation->committedSourceWitness;
-    }
-
-    private function shouldRestartOpenRound(IndexGeneration $generation, SourceSnapshot $snapshot): bool
-    {
-        if (!$this->roundOpen($generation) || null === $generation->scanRevision) {
-            return false;
-        }
-
-        // A higher revision arriving mid-pass must finish the current boundary first.
-        if ($snapshot->revision !== $generation->scanRevision) {
-            return false;
-        }
-
-        return $snapshot->witness !== $generation->scanWitness;
+        // Whole-file/WAL witnesses include unrelated Hatfield activity writes.
+        // Canonical revisions drive work; identity changes and revision rollback
+        // are handled separately when selecting the generation.
+        return $snapshot->revision > $generation->committedRevision;
     }
 
     private function roundOpen(IndexGeneration $generation): bool
@@ -276,8 +247,8 @@ final class ProjectIndexer
     {
         // Fresh generation with no committed parents/cursor work yet: clear any
         // orphaned Chroma/lexical state left after browser DB recreation. Never
-        // clear after committed parents/cursor, including equal-revision witness
-        // restarts that reuse existing parent rows.
+        // clear after committed parents/cursor. Counts/cursor are batch-level;
+        // individual parent manifests may already have committed before a retry.
         if (null !== $generation->committedRevision || 0 !== $generation->parentCount || 0 !== $generation->chunkCount) {
             return;
         }
@@ -285,6 +256,9 @@ final class ProjectIndexer
             return;
         }
         if ($generation->active) {
+            return;
+        }
+        if ($this->memoryRepository->countParents((int) $generation->id) > 0) {
             return;
         }
 
@@ -337,6 +311,9 @@ final class ProjectIndexer
         $now = $this->clock->now();
 
         if (null !== $existing && $existing->contentSignature === $memory->contentSignature) {
+            // Also handles A -> failed B -> A: a matching committed signature
+            // does not prove the stores contain no unacknowledged other version.
+            $stores->removeParentChunks($memory->kind->value, $memory->sourceId, $memory->contentSignature);
             $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $now): void {
                 $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
                 $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
@@ -361,14 +338,6 @@ final class ProjectIndexer
         $documents = $this->buildDocuments($generation, $memory, $chunks, $chunkIds);
         if ([] !== $documents) {
             $stores->indexer->index($documents, ['chunk_size' => self::EMBEDDING_BATCH_SIZE]);
-        }
-
-        $obsolete = [];
-        if (null !== $existing) {
-            $obsolete = array_values(array_diff($existing->chunkIds, $chunkIds));
-        }
-        if ([] !== $obsolete) {
-            $stores->combined->remove($obsolete);
         }
 
         $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $chunkIds): void {
@@ -404,6 +373,12 @@ final class ProjectIndexer
                 );
             }
         });
+
+        // Acknowledge the new version before removing the previous one. If the
+        // acknowledgement fails and the source reverts, its old manifest must
+        // still describe intact store entries. Cleanup includes unacknowledged
+        // intermediate versions and is retried on the unchanged-parent path.
+        $stores->removeParentChunks($memory->kind->value, $memory->sourceId, $memory->contentSignature);
     }
 
     /**
@@ -481,17 +456,10 @@ final class ProjectIndexer
         }
 
         $stores = $this->storeFactory->forGeneration($projectId, $generationId);
-        $chunkIds = [];
         $memoryIds = [];
         foreach ($unseen as $memory) {
-            foreach ($memory->chunkIds as $chunkId) {
-                $chunkIds[] = $chunkId;
-            }
+            $stores->removeParentChunks($memory->kind, $memory->sourceId);
             $memoryIds[] = (int) $memory->id;
-        }
-
-        if ([] !== $chunkIds) {
-            $stores->combined->remove($chunkIds);
         }
 
         $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memoryIds): void {
@@ -553,16 +521,8 @@ final class ProjectIndexer
             return true;
         }
 
-        // Same revision with a changed witness: restart reconciliation without
-        // activating a Ready boundary that is already known incomplete.
-        if ($freshSnapshot->revision === $scanRevision
-            && $freshSnapshot->witness !== ($generation->scanWitness ?? '')) {
-            $this->beginRound($generation, $freshSnapshot->revision, $freshSnapshot->witness);
-
-            return true;
-        }
-
-        $commitWitness = $generation->scanWitness ?? $freshSnapshot->witness;
+        // Record the witness for diagnostics, not as a canonical revision signal.
+        $commitWitness = $freshSnapshot->witness;
         $continuationPending = $freshSnapshot->revision > $scanRevision;
 
         $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $commitWitness, $continuationPending, $expectedRoot, $expectedSourceIdentity, &$activated): void {

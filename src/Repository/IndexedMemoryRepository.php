@@ -70,15 +70,32 @@ class IndexedMemoryRepository extends ServiceEntityRepository
         );
     }
 
-    public function isCommittedChunk(int $generationId, string $kind, string $sourceId, string $contentSignature, string $chunkId): bool
+    /**
+     * @param list<array{kind: string, source_id: string, signature: string, chunk_id: string}> $candidates
+     *
+     * @return list<string>
+     */
+    public function findCommittedChunkIds(int $generationId, array $candidates): array
     {
-        return false !== $this->getEntityManager()->getConnection()->fetchOne(
-            'SELECT 1 FROM indexed_memories
-             WHERE generation_id = :generation AND kind = :kind AND source_id = :source
-               AND content_signature = :signature
-               AND EXISTS (SELECT 1 FROM json_each(chunk_ids) WHERE value = :chunk)
-             LIMIT 1',
-            ['generation' => $generationId, 'kind' => $kind, 'source' => $sourceId, 'signature' => $contentSignature, 'chunk' => $chunkId],
+        if ([] === $candidates) {
+            return [];
+        }
+
+        // One bounded JSON input avoids one query per candidate and SQLite's
+        // bind-parameter limit while preserving all provenance predicates.
+        return $this->getEntityManager()->getConnection()->fetchFirstColumn(
+            'SELECT json_extract(c.value, \'$.chunk_id\')
+             FROM json_each(:candidates) c
+             JOIN indexed_memories m
+               ON m.generation_id = :generation
+              AND m.kind = json_extract(c.value, \'$.kind\')
+              AND m.source_id = json_extract(c.value, \'$.source_id\')
+              AND m.content_signature = json_extract(c.value, \'$.signature\')
+             WHERE EXISTS (
+                 SELECT 1 FROM json_each(m.chunk_ids)
+                 WHERE value = json_extract(c.value, \'$.chunk_id\')
+             )',
+            ['generation' => $generationId, 'candidates' => json_encode($candidates, \JSON_THROW_ON_ERROR)],
         );
     }
 }

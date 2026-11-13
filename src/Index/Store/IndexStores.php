@@ -20,6 +20,12 @@ final readonly class IndexStores
     ) {
     }
 
+    public function removeParentChunks(string $kind, string $sourceId, ?string $keepSignature = null): void
+    {
+        $this->vector->removeParentChunks($kind, $sourceId, $keepSignature);
+        $this->text->removeParentChunks($kind, $sourceId, $keepSignature);
+    }
+
     public function wasTruncated(): bool
     {
         return $this->vector->wasTruncated() || $this->text->wasTruncated();

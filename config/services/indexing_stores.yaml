@@ -46,7 +46,6 @@ services:
     App\Index\Model\ValidatingVectorizer:
         arguments:
             $httpClient: null
-    App\Index\Model\ModelGateway: ~
     App\Index\Model\LocalBgeReranker:
         arguments:
             $httpClient: null

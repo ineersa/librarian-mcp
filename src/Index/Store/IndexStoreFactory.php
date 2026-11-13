@@ -8,6 +8,7 @@ use App\Index\IndexException;
 use App\Index\Model\ValidatingVectorizer;
 use Codewithkyrian\ChromaDB\Client;
 use Codewithkyrian\ChromaDB\Exceptions\NotFoundException;
+use Codewithkyrian\ChromaDB\Models\Collection;
 use Symfony\AI\Store\Bridge\ChromaDb\Store as ChromaStore;
 use Symfony\AI\Store\Bridge\Sqlite\Store as SqliteStore;
 use Symfony\AI\Store\CombinedStore;
@@ -52,9 +53,9 @@ final class IndexStoreFactory
     {
         $this->assertIds($projectId, $generationId);
         $collectionName = $this->collectionName($projectId, $generationId);
-        $this->ensureCosineCollection($collectionName, $initialize);
+        $collection = $this->ensureCosineCollection($collectionName, $initialize);
 
-        $vector = new ChromaVectorStoreAdapter(new ChromaStore($this->client, $collectionName));
+        $vector = new ChromaVectorStoreAdapter(new ChromaStore($this->client, $collectionName), $collection);
         [$lexicalStore, $pdo] = $this->lexicalStore($projectId, $generationId, $initialize);
         $text = new SqliteLexicalStoreAdapter($lexicalStore, $pdo);
         $combined = new CombinedStore($vector, $text, self::RRF_K);
@@ -94,7 +95,7 @@ final class IndexStoreFactory
         return \sprintf('librarian_p%d_g%d', $projectId, $generationId);
     }
 
-    private function ensureCosineCollection(string $collectionName, bool $initialize): void
+    private function ensureCosineCollection(string $collectionName, bool $initialize): Collection
     {
         try {
             try {
@@ -112,6 +113,8 @@ final class IndexStoreFactory
             if (self::COSINE_SPACE !== $space) {
                 throw IndexException::sanitized(\sprintf('Chroma collection "%s" is not configured for cosine distance.', $collectionName));
             }
+
+            return $existing;
         } catch (IndexException $error) {
             throw $error;
         } catch (\Throwable $error) {
