@@ -49,6 +49,12 @@ class ProjectCrudController extends AbstractCrudController
     public const string CSRF_SCAN_SOURCES = 'project-scan-sources';
     public const string CSRF_INDEX_NOW = 'project-index-now';
 
+    private const string ACTION_SCAN_SOURCES = 'scanSources';
+    private const string ACTION_INDEX_NOW = 'indexNow';
+    private const string ACTION_SEARCH_MEMORY = 'searchMemory';
+    private const string INDEX_STATUS_NONE = 'none';
+    private const string INDEX_STATUS_STALE = 'stale';
+
     public function __construct(
         private readonly ProjectManager $projectManager,
         private readonly ProjectIndexManager $projectIndexManager,
@@ -185,18 +191,18 @@ class ProjectCrudController extends AbstractCrudController
 
     public function configureActions(Actions $actions): Actions
     {
-        $scanSources = Action::new('scanSources', 'Scan sources', 'fa fa-search')
-            ->linkToCrudAction('scanSources')
+        $scanSources = Action::new(self::ACTION_SCAN_SOURCES, 'Scan sources', 'fa fa-search')
+            ->linkToCrudAction(self::ACTION_SCAN_SOURCES)
             ->setTemplatePath('admin/project/action/scan_sources.html.twig')
             ->addCssClass('btn btn-primary');
 
-        $indexNow = Action::new('indexNow', 'Index now', 'fa fa-database')
-            ->linkToCrudAction('indexNow')
+        $indexNow = Action::new(self::ACTION_INDEX_NOW, 'Index now', 'fa fa-database')
+            ->linkToCrudAction(self::ACTION_INDEX_NOW)
             ->setTemplatePath('admin/project/action/index_now.html.twig')
             ->addCssClass('btn btn-secondary');
 
-        $searchMemory = Action::new('searchMemory', 'Search memory', 'fa fa-magnifying-glass')
-            ->linkToCrudAction('searchMemory')
+        $searchMemory = Action::new(self::ACTION_SEARCH_MEMORY, 'Search memory', 'fa fa-magnifying-glass')
+            ->linkToCrudAction(self::ACTION_SEARCH_MEMORY)
             ->addCssClass('btn btn-outline-primary');
 
         return $actions
@@ -217,7 +223,7 @@ class ProjectCrudController extends AbstractCrudController
             ->update(Crud::PAGE_INDEX, Action::DELETE, static fn (Action $action) => $action
                 ->setLabel('Delete')
                 ->setIcon('fa fa-trash'))
-            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, 'scanSources', 'indexNow', Action::EDIT, Action::DELETE])
+            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_SCAN_SOURCES, self::ACTION_INDEX_NOW, Action::EDIT, Action::DELETE])
             ->setPermission(Action::DELETE, 'ROLE_ADMIN');
     }
 
@@ -274,7 +280,7 @@ class ProjectCrudController extends AbstractCrudController
     /**
      * @param AdminContext<Project> $context
      */
-    #[AdminRoute(path: '/{entityId}/scan-sources', name: 'scan-sources', options: ['methods' => ['POST']])]
+    #[AdminRoute(path: '/{entityId}/scan-sources', name: 'scan-sources', options: ['methods' => [Request::METHOD_POST]])]
     public function scanSources(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
     {
         $request = $context->getRequest();
@@ -298,7 +304,7 @@ class ProjectCrudController extends AbstractCrudController
     /**
      * @param AdminContext<Project> $context
      */
-    #[AdminRoute(path: '/{entityId}/index-now', name: 'index-now', options: ['methods' => ['POST']])]
+    #[AdminRoute(path: '/{entityId}/index-now', name: 'index-now', options: ['methods' => [Request::METHOD_POST]])]
     public function indexNow(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
     {
         $request = $context->getRequest();
@@ -321,7 +327,7 @@ class ProjectCrudController extends AbstractCrudController
     /**
      * @param AdminContext<Project> $context
      */
-    #[AdminRoute(path: '/{entityId}/search-memory', name: 'search-memory', options: ['methods' => ['GET']])]
+    #[AdminRoute(path: '/{entityId}/search-memory', name: 'search-memory', options: ['methods' => [Request::METHOD_GET]])]
     public function searchMemory(AdminContext $context, Request $request, AdminUrlGenerator $urlGenerator): Response
     {
         /** @var Project $project */
@@ -333,7 +339,7 @@ class ProjectCrudController extends AbstractCrudController
         $form = $this->createForm(ProjectMemorySearchType::class, null, [
             'action' => $urlGenerator
                 ->setController(self::class)
-                ->setAction('searchMemory')
+                ->setAction(self::ACTION_SEARCH_MEMORY)
                 ->setEntityId((string) $project->id)
                 ->generateUrl(),
         ]);
@@ -408,7 +414,7 @@ class ProjectCrudController extends AbstractCrudController
             $stale = true;
         }
 
-        $statusValue = 'none';
+        $statusValue = self::INDEX_STATUS_NONE;
         $statusLabel = 'Not indexed';
         $error = null;
 
@@ -420,7 +426,7 @@ class ProjectCrudController extends AbstractCrudController
                 $statusLabel = IndexState::Building === $latest->state ? 'Indexing' : 'Updating index';
             } elseif ($stale && $latest->state->isUsable()) {
                 $statusLabel = 'Index stale vs source revision';
-                $statusValue = 'stale';
+                $statusValue = self::INDEX_STATUS_STALE;
             }
         }
 

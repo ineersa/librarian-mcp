@@ -7,6 +7,7 @@ namespace App\Command;
 use App\Index\ProjectIndexer;
 use App\Index\ProjectIndexManager;
 use App\Repository\ProjectRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -25,6 +26,7 @@ final class IndexProjectCommand extends Command
         private readonly ProjectRepository $projectRepository,
         private readonly ProjectIndexManager $projectIndexManager,
         private readonly ProjectIndexer $projectIndexer,
+        private readonly EntityManagerInterface $entityManager,
     ) {
         parent::__construct();
     }
@@ -58,6 +60,8 @@ final class IndexProjectCommand extends Command
             $rounds = 0;
             do {
                 $continue = $this->projectIndexer->process($projectId);
+                // Synchronous draining has no Messenger reset between units.
+                $this->entityManager->clear();
                 ++$rounds;
             } while ($continue);
 
