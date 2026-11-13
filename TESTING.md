@@ -16,7 +16,7 @@ This document does **not** claim that validation has already passed.
 
 ## Native-network suite
 
-Browser journeys use Playwright against the isolated stack URL supplied as `LIBRARIAN_BROWSER_URL` (`http://php:8080` inside the private browser network). Stack tasks also print the loopback-published URL for host browser exploration. They do not boot a kernel, intercept HTTP in-process, or roll back database writes for cross-process isolation.
+Browser journeys use Playwright against the isolated stack URL supplied as `LIBRARIAN_BROWSER_URL` (`http://php:8080` inside the private browser network). Stack tasks also print the loopback-published URL for host browser exploration. Only fixture preparation boots a test kernel; browser requests are real HTTP, not intercepted in-process. PHPUnit cannot roll back web/worker writes for cross-process isolation.
 
 Each scenario opens and closes its own browser/context and signs in through the real login form. Headed launches request a 2560×1440 window with native 1000ms slow motion and `viewport: null`. Headless launches use a 1920×1080 viewport without slow motion.
 
@@ -97,7 +97,7 @@ vendor/bin/castor browser:stack:up
 vendor/bin/castor browser:stack:status
 ```
 
-Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture preparation. `browser:live:test` intentionally reuses current storage and therefore does not promise restarted IDs; use it only for deliberate live-stack diagnosis. To watch only Projects with fresh IDs, use `vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php`.
+Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture preparation. `browser:live:test` intentionally reuses current storage and therefore does not promise restarted IDs; use it only for deliberate live-stack diagnosis. It sets `LIBRARIAN_BROWSER_REUSE_STORAGE=1` so Alice treats the existing database as already populated and neither purges rows nor reloads fixtures. Prepare the stack with `test` first; the selected live journey still performs its normal application writes and cleanup. To watch only Projects with fresh IDs, use `vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php`.
 
 After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
 

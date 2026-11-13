@@ -10,7 +10,9 @@ Librarian registers **local directories**, not GitHub libraries. It discovers Ha
 
 - `Project.id` is an auto-increment integer, stable across scans, renaming, and explicit administrator path rebinding.
 - Trimmed, case-insensitive display names must be unique. Canonical directories and normalized Git origins must also be unique. A second checkout with the same origin is rejected, not silently merged. Non-Git/no-origin directories are supported.
+- Git inspection failures are registration errors, not evidence of a non-Git/no-origin directory. For mounted worktrees, make the linked worktree and common Git metadata available read-only at the paths recorded in `.git`; Librarian does not repair metadata or silently bypass repository uniqueness.
 - Editing the directory rebinds the **same registration ID**. Nothing infers identity from a basename, session number, name, or origin.
+- A scan publishes results only if the registration still refers to its scanned directory. The final reload, comparison, and write share a short Doctrine transaction; filesystem discovery runs outside that write transaction. Obsolete results are discarded after rebinding or deletion.
 - Deletion removes only the Librarian registration. It never removes the project directory, `.hatfield`, OM database, journals, or any external/symlink destination.
 - Legacy `libraries` rows and old migration history are preserved in place. The retired table is excluded from ORM schema ownership; the generated migration adds `projects` and its unique indexes only. Existing clone/index directories are not automatically cleaned up.
 
@@ -29,6 +31,8 @@ Associative maps merge recursively; lists, scalars, and null replace the precedi
 - `HATFIELD_USER_HOME` is the explicit logical Hatfield user home. It is required even when no user settings file exists; its mapped directory must be available. Never implicitly use the container's `/root`.
 - `HATFIELD_APP_ROOT` is required when session configuration uses `%kernel.project_dir%`.
 - `HATFIELD_PATH_MAPPINGS` is a JSON object of absolute logical-host prefix to service-visible prefix. Longest matching path-segment prefix wins. It maps global settings and configured source paths; a mapping does not mount anything by itself.
+
+The complete logical user-settings filename is mapped, so a more specific mapping for `.hatfield` or `settings.yaml` takes precedence over the home-directory mapping. OM parent traversal (`..`) is resolved in logical host-path space before choosing the final mount, not against the container's mount layout. A visible symlink before `..` must first resolve to a logical destination using its target's unambiguous mapping. Unavailable or ambiguous metadata produces an actionable mapping error: mount the relevant target read-only or configure an already resolved absolute database path. Prefix mappings cannot reconstruct host symlink metadata hidden by a bind mount; use canonical host prefixes for those mounts.
 
 Existing source paths are canonicalized, including symlinks, and their actual destinations are reported. Per the owner's local single-admin utility decision, **there is no security root allowlist or external-path approval workflow**. `PROJECT_BROWSE_ROOT` is only the directory picker's starting point. Administrators may choose any readable, deliberately mounted path. Do not expose this relaxed utility as though it had a filesystem sandbox.
 

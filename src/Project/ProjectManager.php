@@ -19,40 +19,7 @@ final class ProjectManager
         private readonly EntityManagerInterface $entityManager,
         private readonly MessageBusInterface $messageBus,
         private readonly ClockInterface $clock,
-        private readonly ProjectPathNormalizer $pathNormalizer,
-        private readonly GitOriginNormalizer $gitOriginNormalizer,
     ) {
-    }
-
-    /**
-     * Normalize identity fields and persist them before queueing discovery.
-     */
-    public function prepareIdentity(Project $project): void
-    {
-        $name = trim($project->name);
-        $rootPath = trim($project->rootPath);
-        $canonical = $this->pathNormalizer->canonicalizeRoot($rootPath);
-        if (null === $canonical) {
-            // Leave uniqueness fields empty-ish; form/root validators report the path error.
-            $canonical = $rootPath;
-        }
-
-        $origin = null;
-        if (is_dir($canonical)) {
-            $origin = $this->gitOriginNormalizer->detectNormalizedOrigin($canonical);
-            if ('' === $origin) {
-                $origin = null;
-            }
-        }
-
-        $project->assignIdentity(
-            name: $name,
-            nameNormalized: $this->pathNormalizer->normalizeName($name),
-            rootPath: $rootPath,
-            rootCanonical: $canonical,
-            repositoryOrigin: $origin,
-            now: $this->clock->now(),
-        );
     }
 
     public function queueScan(Project $project): void

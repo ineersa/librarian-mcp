@@ -10,6 +10,7 @@ use App\Project\HatfieldSourceDiscovery;
 use App\Project\ProjectDiscoveryResult;
 use App\Project\ProjectSourceIssueCode;
 use App\Repository\ProjectRepository;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -63,16 +64,26 @@ final class ScanProjectMessageHandler
             );
         }
 
-        $project = $this->projectRepository->find($projectId);
-        if (null === $project) {
-            $this->logger->info('Skipping project scan persistence because registration was removed.', [
-                'projectId' => $projectId,
-            ]);
+        // Reload, compare and publish in one short transaction, never during discovery.
+        $this->entityManager->wrapInTransaction(function () use ($projectId, $root, $result): void {
+            $project = $this->entityManager->find(Project::class, $projectId, LockMode::PESSIMISTIC_WRITE);
+            if (null === $project) {
+                $this->logger->info('Skipping project scan persistence because registration was removed.', [
+                    'projectId' => $projectId,
+                ]);
 
-            return;
-        }
+                return;
+            }
 
-        $this->persistResult($project, $result);
+            $currentRoot = '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
+            if ($currentRoot !== $root) {
+                $this->logger->info('Discarding obsolete project scan after directory rebinding.', ['projectId' => $projectId]);
+
+                return;
+            }
+
+            $this->persistResult($project, $result);
+        });
     }
 
     private function persistResult(Project $project, ProjectDiscoveryResult $result): void
@@ -111,7 +122,5 @@ final class ScanProjectMessageHandler
                 sourceChangeCount: $result->sourceChangeCount,
             );
         }
-
-        $this->entityManager->flush();
     }
 }

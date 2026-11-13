@@ -7,6 +7,7 @@ namespace App\Validator;
 use App\Entity\Project;
 use App\Project\GitOriginNormalizer;
 use App\Project\ProjectPathNormalizer;
+use App\Project\ProjectSourceException;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
@@ -57,7 +58,15 @@ final class ProjectRegistrationValidator extends ConstraintValidator
             return;
         }
 
-        $origin = $this->gitOriginNormalizer->detectNormalizedOrigin($canonical);
+        try {
+            $origin = $this->gitOriginNormalizer->detectNormalizedOrigin($canonical);
+        } catch (ProjectSourceException $exception) {
+            $this->context->buildViolation($exception->getMessage())
+                ->atPath('rootPath')
+                ->addViolation();
+
+            return;
+        }
         if ('' === $origin) {
             $origin = null;
         }

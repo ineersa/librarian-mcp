@@ -16,30 +16,14 @@ final class HatfieldSourceDiscovery
 
     private const string DEFAULT_OM_DATABASE_PATH = '.hatfield/extensions-data/observational-memory/om.sqlite';
 
-    private readonly HatfieldSettingsOverlay $overlay;
-
-    private readonly HatfieldPathResolver $pathResolver;
-
-    private readonly ServicePathMapper $pathMapper;
-
-    private readonly OmSourceReader $omSourceReader;
-
-    /**
-     * @param array<string, string> $pathMappings
-     */
     public function __construct(
         private readonly string $hatfieldUserHome,
         private readonly string $hatfieldAppRoot,
-        array $pathMappings = [],
-        ?HatfieldSettingsOverlay $overlay = null,
-        ?OmSourceReader $omSourceReader = null,
-        ?ServicePathMapper $pathMapper = null,
-        ?HatfieldPathResolver $pathResolver = null,
+        private readonly HatfieldSettingsOverlay $overlay,
+        private readonly OmSourceReader $omSourceReader,
+        private readonly ServicePathMapper $pathMapper,
+        private readonly HatfieldPathResolver $pathResolver,
     ) {
-        $this->overlay = $overlay ?? new HatfieldSettingsOverlay();
-        $this->omSourceReader = $omSourceReader ?? new OmSourceReader();
-        $this->pathMapper = $pathMapper ?? new ServicePathMapper($pathMappings);
-        $this->pathResolver = $pathResolver ?? new HatfieldPathResolver($hatfieldUserHome, $hatfieldAppRoot);
     }
 
     public function discover(string $projectRoot): ProjectDiscoveryResult
@@ -90,7 +74,7 @@ final class HatfieldSourceDiscovery
         }
 
         try {
-            $effective = $this->loadEffectiveSettings($projectRoot, $mappedUserHome, $details);
+            $effective = $this->loadEffectiveSettings($projectRoot, $details);
         } catch (ProjectSourceException $exception) {
             return ProjectDiscoveryResult::error(
                 $exception->getMessage(),
@@ -113,6 +97,10 @@ final class HatfieldSourceDiscovery
         try {
             $logicalSessionsPath = $this->resolveSessionsPath($effective, $projectRoot);
             $logicalDatabasePath = $this->resolveOmDatabasePath($effective, $projectRoot);
+            $details['logicalSessionsPath'] = $logicalSessionsPath;
+            $details['logicalDatabasePath'] = $logicalDatabasePath;
+            $sessionsPath = $this->canonicalizeExistingPath($this->pathMapper->map($logicalSessionsPath));
+            $databasePath = $this->canonicalizeExistingPath($this->pathMapper->mapSourcePath($logicalDatabasePath));
         } catch (ProjectSourceException $exception) {
             return ProjectDiscoveryResult::error(
                 $exception->getMessage(),
@@ -121,11 +109,6 @@ final class HatfieldSourceDiscovery
             );
         }
 
-        $sessionsPath = $this->canonicalizeExistingPath($this->pathMapper->map($logicalSessionsPath));
-        $databasePath = $this->canonicalizeExistingPath($this->pathMapper->map($logicalDatabasePath));
-
-        $details['logicalSessionsPath'] = $logicalSessionsPath;
-        $details['logicalDatabasePath'] = $logicalDatabasePath;
         $details['sessionsPath'] = $sessionsPath;
         $details['databasePath'] = $databasePath;
 
@@ -163,13 +146,11 @@ final class HatfieldSourceDiscovery
      *
      * @return array<string, mixed>
      */
-    private function loadEffectiveSettings(string $projectRoot, string $mappedUserHome, array &$details): array
+    private function loadEffectiveSettings(string $projectRoot, array &$details): array
     {
         $logicalUserSettingsPath = rtrim($this->hatfieldUserHome, '/').'/.hatfield/settings.yaml';
-        // Always resolve the service-visible settings path from the mapped home so
-        // host-prefix mappings are honored before availability checks/reads.
         $userSettingsPath = $this->canonicalizeExistingPath(
-            rtrim($mappedUserHome, '/').'/.hatfield/settings.yaml',
+            $this->pathMapper->map($logicalUserSettingsPath),
         );
         $projectSettingsPath = $this->canonicalizeExistingPath(
             rtrim($projectRoot, '/').'/.hatfield/settings.yaml',

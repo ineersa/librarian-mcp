@@ -6,6 +6,7 @@ namespace App\Tests\Support;
 
 use DAMA\DoctrineTestBundle\PHPUnit\SkipDatabaseRollback;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
+use Hautelook\AliceBundle\PhpUnit\RefreshDatabaseState;
 use Hautelook\AliceBundle\PhpUnit\RefreshDatabaseTrait;
 use Playwright\Browser\BrowserContextBuilder;
 use Playwright\Browser\BrowserContextInterface;
@@ -40,8 +41,12 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
                 throw new \LogicException('Refusing symlinked browser fixture storage.');
             }
         }
+        if ('1' === getenv('LIBRARIAN_BROWSER_REUSE_STORAGE')) {
+            // A live diagnostic must not let Alice purge an already prepared stack.
+            RefreshDatabaseState::setDbPopulated(true);
+        }
         self::bootKernel();
-        // RefreshDatabaseTrait loads Alice fixtures, then opens a transaction.
+        // The trait opens a transaction, loading Alice fixtures only for fresh runs.
         // Commit it before real HTTP so fixture data is visible outside PHPUnit.
         self::getContainer()->get('doctrine')->getConnection()->commit();
         $this->url = rtrim((string) getenv('LIBRARIAN_BROWSER_URL'), '/');

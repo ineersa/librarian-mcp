@@ -22,19 +22,4 @@ class ProjectRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Project::class);
     }
-
-    public function findOneByNameNormalized(string $nameNormalized): ?Project
-    {
-        return $this->findOneBy(['nameNormalized' => $nameNormalized]);
-    }
-
-    public function findOneByRootCanonical(string $rootCanonical): ?Project
-    {
-        return $this->findOneBy(['rootCanonical' => $rootCanonical]);
-    }
-
-    public function findOneByRepositoryOrigin(string $repositoryOrigin): ?Project
-    {
-        return $this->findOneBy(['repositoryOrigin' => $repositoryOrigin]);
-    }
 }

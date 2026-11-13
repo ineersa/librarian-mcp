@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
+
+require dirname(__DIR__, 2).'/vendor/autoload.php';
+
 /**
  * Builds synthetic Hatfield project-source fixtures for plan 03 browser acceptance.
  *
@@ -318,25 +323,9 @@ function writeFile(string $path, string $contents): void
  */
 function runCommand(array $command, bool $allowFailure = false): void
 {
-    $process = proc_open(
-        $command,
-        [
-            0 => ['pipe', 'r'],
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ],
-        $pipes,
-    );
-    if (!is_resource($process)) {
-        throw new RuntimeException('Unable to start command: '.implode(' ', $command));
-    }
-    fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1]) ?: '';
-    $stderr = stream_get_contents($pipes[2]) ?: '';
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    $exit = proc_close($process);
-    if (0 !== $exit && !$allowFailure) {
-        throw new RuntimeException(sprintf("Command failed (%d): %s\n%s%s", $exit, implode(' ', $command), $stdout, $stderr));
+    $process = new Process($command);
+    $process->run();
+    if (!$process->isSuccessful() && !$allowFailure) {
+        throw new ProcessFailedException($process);
     }
 }

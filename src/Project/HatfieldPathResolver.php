@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Project;
 
+use Symfony\Component\Filesystem\Path;
+
 /**
  * Mirrors Hatfield SettingsPathResolver for sessions.path-style keys.
  *
@@ -30,28 +32,6 @@ final class HatfieldPathResolver
             $resolved = rtrim($this->hatfieldUserHome, '/').substr($resolved, 1);
         }
 
-        if (str_starts_with($resolved, '/')) {
-            return $this->normalizeAbsolute($resolved);
-        }
-
-        return $this->normalizeAbsolute(rtrim($baseDir, '/').'/'.$resolved);
-    }
-
-    private function normalizeAbsolute(string $path): string
-    {
-        $path = str_replace('\\', '/', $path);
-        $parts = [];
-        foreach (explode('/', $path) as $segment) {
-            if ('' === $segment || '.' === $segment) {
-                continue;
-            }
-            if ('..' === $segment) {
-                array_pop($parts);
-                continue;
-            }
-            $parts[] = $segment;
-        }
-
-        return '/'.implode('/', $parts);
+        return Path::makeAbsolute($resolved, $baseDir);
     }
 }
