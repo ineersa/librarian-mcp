@@ -29,8 +29,8 @@ use Symfony\Component\Lock\LockFactory;
  * Owns one project's indexing checkpoint under a framework flock lock.
  *
  * Source reads stay short and read-only. Derived store writes happen outside
- * relational transactions. Relational parent manifests and cursors advance only
- * after both backends acknowledge the corresponding work.
+ * relational transactions. Content manifests acknowledge both backend writes;
+ * a durable parent attempt covers cleanup before the batch cursor advances.
  */
 final class ProjectIndexer
 {
@@ -116,6 +116,14 @@ final class ProjectIndexer
 
         $signature = $this->settings->signature();
         $generation = $this->selectOrCreateGeneration($project, $snapshot, $signature, $rootBinding);
+
+        // Resolve the one recorded attempt even if its source parent has been
+        // deleted and therefore cannot appear in the canonical traversal.
+        if (null !== $generation->pendingParent) {
+            $generationId = (int) $generation->id;
+            $this->recoverPendingParent($generationId, $projectId, $rootBinding, $snapshot->identity);
+            $generation = $this->requireGeneration($generationId);
+        }
 
         if (!$this->needsWork($generation, $snapshot)) {
             if ($generation->active) {
@@ -311,9 +319,6 @@ final class ProjectIndexer
         $now = $this->clock->now();
 
         if (null !== $existing && $existing->contentSignature === $memory->contentSignature) {
-            // Also handles A -> failed B -> A: a matching committed signature
-            // does not prove the stores contain no unacknowledged other version.
-            $stores->removeParentChunks($memory->kind->value, $memory->sourceId, $memory->contentSignature);
             $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $now): void {
                 $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
                 $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
@@ -336,6 +341,16 @@ final class ProjectIndexer
         ));
         $chunkIds = $this->buildChunkIds($generation, $memory, $chunks);
         $documents = $this->buildDocuments($generation, $memory, $chunks, $chunkIds);
+        $attemptIds = array_merge($existing->chunkIds ?? [], $chunkIds);
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $attemptIds): void {
+            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
+            if (null === $generation) {
+                throw IndexException::sanitized('Index generation disappeared before parent write.');
+            }
+            $generation->beginParentWrite($memory->kind->value, $memory->sourceId, $attemptIds, $this->clock->now());
+        });
+
         if ([] !== $documents) {
             $stores->indexer->index($documents, ['chunk_size' => self::EMBEDDING_BATCH_SIZE]);
         }
@@ -374,11 +389,42 @@ final class ProjectIndexer
             }
         });
 
-        // Acknowledge the new version before removing the previous one. If the
-        // acknowledgement fails and the source reverts, its old manifest must
-        // still describe intact store entries. Cleanup includes unacknowledged
-        // intermediate versions and is retried on the unchanged-parent path.
-        $stores->removeParentChunks($memory->kind->value, $memory->sourceId, $memory->contentSignature);
+        // The durable attempt records all IDs to retire. Keep the acknowledged
+        // version; exact-ID deletion needs no metadata scans or unchanged-parent
+        // requests. Failure leaves the attempt for the next bounded job.
+        $this->recoverPendingParent($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $stores);
+    }
+
+    private function recoverPendingParent(
+        int $generationId,
+        int $projectId,
+        string $expectedRoot,
+        string $expectedSourceIdentity,
+        ?IndexStores $stores = null,
+    ): void {
+        $generation = $this->requireGeneration($generationId);
+        $pending = $generation->pendingParent;
+        if (null === $pending) {
+            return;
+        }
+
+        $committed = $this->memoryRepository->findCommitted($generationId, $pending['kind'], $pending['source_id']);
+        $obsolete = array_values(array_diff($pending['chunk_ids'], $committed->chunkIds ?? []));
+        if ([] !== $obsolete) {
+            $stores ??= $this->storeFactory->forGeneration($projectId, $generationId);
+            $stores->removeChunks($obsolete);
+        }
+
+        // Keep the marker through either backend's failure, including attempts
+        // for new parents that disappeared before their first acknowledgement.
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity): void {
+            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
+            if (null === $generation) {
+                throw IndexException::sanitized('Index generation disappeared during parent cleanup.');
+            }
+            $generation->completeParentWrite($this->clock->now());
+        });
     }
 
     /**
@@ -396,6 +442,7 @@ final class ProjectIndexer
                 $generation->signature,
                 $memory->kind->value,
                 $memory->sourceId,
+                $memory->contentSignature,
                 $position,
                 hash('sha256', $chunk),
             ], \JSON_THROW_ON_ERROR));
@@ -456,24 +503,26 @@ final class ProjectIndexer
         }
 
         $stores = $this->storeFactory->forGeneration($projectId, $generationId);
-        $memoryIds = [];
         foreach ($unseen as $memory) {
-            $stores->removeParentChunks($memory->kind, $memory->sourceId);
-            $memoryIds[] = (int) $memory->id;
+            $memoryId = (int) $memory->id;
+            $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memoryId): void {
+                $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
+                $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
+                $memory = $this->entityManager->find(IndexedMemory::class, $memoryId, LockMode::PESSIMISTIC_WRITE);
+                if (null === $generation || null === $memory) {
+                    throw IndexException::sanitized('Index parent disappeared before removal.');
+                }
+                // Remove acknowledgement and record its IDs atomically before
+                // external deletion. A reappearing parent must then reindex;
+                // it cannot take a signature fast path over deleted chunks.
+                $generation->beginParentWrite($memory->kind, $memory->sourceId, $memory->chunkIds, $this->clock->now());
+                $this->entityManager->remove($memory);
+            });
+            $this->recoverPendingParent($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $stores);
         }
 
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memoryIds): void {
+        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity): void {
             $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-
-            foreach ($memoryIds as $memoryId) {
-                $memory = $this->entityManager->find(IndexedMemory::class, $memoryId, LockMode::PESSIMISTIC_WRITE);
-                if (null !== $memory) {
-                    $this->entityManager->remove($memory);
-                }
-            }
-
-            // Flush removals before counting so parent/chunk totals are current.
-            $this->entityManager->flush();
 
             $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
             if (null !== $generation) {

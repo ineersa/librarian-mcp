@@ -31,7 +31,6 @@ use Symfony\AI\Store\StoreInterface;
 final class SqliteLexicalStoreAdapter implements StoreInterface
 {
     public const int DEFAULT_LIMIT = 100;
-    private const int CLEANUP_BATCH_SIZE = 100;
     private const string TABLE = 'librarian_document';
 
     private bool $limitReached = false;
@@ -60,29 +59,6 @@ final class SqliteLexicalStoreAdapter implements StoreInterface
     public function remove(array|string $ids, array $options = []): void
     {
         $this->store->remove($ids, $options);
-    }
-
-    public function removeParentChunks(string $kind, string $sourceId, ?string $keepSignature = null): void
-    {
-        $sql = 'SELECT id FROM '.self::TABLE
-            .' WHERE json_extract(metadata, \'$.'.IndexFields::KIND.'\') = :kind'
-            .' AND json_extract(metadata, \'$.'.IndexFields::SOURCE_ID.'\') = :source';
-        $params = [':kind' => $kind, ':source' => $sourceId];
-        if (null !== $keepSignature) {
-            $sql .= ' AND json_extract(metadata, \'$.'.IndexFields::CONTENT_HASH.'\') != :signature';
-            $params[':signature'] = $keepSignature;
-        }
-        $statement = $this->connection->prepare($sql.' LIMIT '.self::CLEANUP_BATCH_SIZE);
-        do {
-            $statement->execute($params);
-            /** @var list<string> $ids */
-            $ids = $statement->fetchAll(\PDO::FETCH_COLUMN);
-            $statement->closeCursor();
-            if ([] !== $ids) {
-                // Vendor removal keeps the document and FTS tables atomic.
-                $this->store->remove($ids);
-            }
-        } while (self::CLEANUP_BATCH_SIZE === \count($ids));
     }
 
     public function clear(array $options = []): void

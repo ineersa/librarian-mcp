@@ -12,6 +12,8 @@ use Symfony\AI\Store\Indexer\DocumentIndexer;
  */
 final readonly class IndexStores
 {
+    private const int REMOVE_BATCH_SIZE = 100;
+
     public function __construct(
         public CombinedStore $combined,
         public DocumentIndexer $indexer,
@@ -20,10 +22,14 @@ final readonly class IndexStores
     ) {
     }
 
-    public function removeParentChunks(string $kind, string $sourceId, ?string $keepSignature = null): void
+    /**
+     * @param list<string> $ids
+     */
+    public function removeChunks(array $ids): void
     {
-        $this->vector->removeParentChunks($kind, $sourceId, $keepSignature);
-        $this->text->removeParentChunks($kind, $sourceId, $keepSignature);
+        foreach (array_chunk($ids, self::REMOVE_BATCH_SIZE) as $batch) {
+            $this->combined->remove($batch);
+        }
     }
 
     public function wasTruncated(): bool

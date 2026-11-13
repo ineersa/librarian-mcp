@@ -11,6 +11,7 @@ final readonly class IndexSettings
 {
     public const string QUERY_PREFIX = 'Represent this query for searching relevant code: ';
     public const int NORMALIZATION_VERSION = 1;
+    public const int CHUNK_ID_VERSION = 2;
     public const int DEFAULT_DIMENSIONS = 768;
 
     public function __construct(
@@ -37,7 +38,7 @@ final readonly class IndexSettings
     }
 
     /**
-     * Signature of everything that changes stored document embeddings.
+     * Signature of the stored embedding and chunk-identity format.
      */
     public function signature(): string
     {
@@ -49,6 +50,7 @@ final readonly class IndexSettings
             MemoryChunker::OVERLAP_BYTES,
             MemoryChunker::CHUNK_LINES,
             self::NORMALIZATION_VERSION,
+            self::CHUNK_ID_VERSION,
             self::QUERY_PREFIX,
         ], \JSON_THROW_ON_ERROR));
     }

@@ -46,6 +46,15 @@ class IndexGeneration
     #[ORM\Column(name: 'source_cursor', type: 'text', nullable: true)]
     public private(set) ?string $sourceCursor = null;
 
+    /**
+     * One parent attempt under the project execution lock, persisted before any
+     * backend write. IDs include both the previous and attempted versions.
+     *
+     * @var array{kind: string, source_id: string, chunk_ids: list<string>}|null
+     */
+    #[ORM\Column(name: 'pending_parent', type: 'json', nullable: true)]
+    public private(set) ?array $pendingParent = null;
+
     #[ORM\Column(name: 'scan_round')]
     public private(set) int $scanRound = 0;
 
@@ -190,6 +199,25 @@ class IndexGeneration
     public function advanceCursor(?string $cursor, \DateTimeImmutable $now): void
     {
         $this->sourceCursor = $cursor;
+        $this->touch($now);
+    }
+
+    /**
+     * @param list<string> $chunkIds
+     */
+    public function beginParentWrite(string $kind, string $sourceId, array $chunkIds, \DateTimeImmutable $now): void
+    {
+        if (null !== $this->pendingParent) {
+            throw new \LogicException('Recover the pending parent before starting another write.');
+        }
+
+        $this->pendingParent = ['kind' => $kind, 'source_id' => $sourceId, 'chunk_ids' => array_values(array_unique($chunkIds))];
+        $this->touch($now);
+    }
+
+    public function completeParentWrite(\DateTimeImmutable $now): void
+    {
+        $this->pendingParent = null;
         $this->touch($now);
     }
 

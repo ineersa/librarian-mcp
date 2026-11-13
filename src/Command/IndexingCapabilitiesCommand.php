@@ -75,7 +75,7 @@ final class IndexingCapabilitiesCommand extends Command
                 'limit' => 1,
                 'include' => ['documents', 'embeddings', 'metadatas', 'distances'],
             ];
-            $adapter = new ChromaVectorStoreAdapter($store, $collection);
+            $adapter = new ChromaVectorStoreAdapter($store);
             $hits = iterator_to_array($adapter->query(new VectorQuery(new Vector([1.0, 0.0])), $options), false);
             $this->requireCondition(1 === \count($hits) && self::AXIS_ID === (string) $hits[0]->getId(), 'Native project/date filter or result limit did not match.');
             $score = $hits[0]->getScore();

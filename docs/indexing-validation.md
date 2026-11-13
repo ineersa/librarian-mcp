@@ -37,7 +37,13 @@ Original snapshot/vector/graph hashes remained unchanged. All private source/set
 
 ## Manual-review follow-up
 
-Manual-review follow-up on PR #3: `cs:fix`, `qa:static`, production Compose configuration validation, and the existing Projects journey passed (**1 test / 19 assertions**, 10.8 seconds in PHPUnit; 21.1 seconds including isolated stack preparation). The fixes cover shared production storage/locks, first-batch retry clearing, witness-driven scan restarts, unchanged-source error recovery, and parent-scoped cleanup of intermediate versions. No new scenarios, benchmarks, injected failures, or production lifecycle operations were run. Failure-path reasoning is source inspection, not executed fault coverage.
+At `91a0766`, `cs:fix`, `qa:static`, production Compose configuration validation, and the existing Projects journey passed (**1 test / 19 assertions**). Owner re-review confirmed four fixes (production storage, first-batch clearing, scan progress and error recovery), but found shared chunk IDs, unrecorded new-parent attempts and quadratic cleanup work. The metadata-based cleanup from that commit is superseded below.
+
+The parent-cleanup follow-up includes the full parent signature in chunk identity, records one pending parent attempt before external writes, and retires exact IDs not retained by a committed manifest. Unchanged parents make no backend cleanup requests. `CHUNK_ID_VERSION=2` changes the generation signature so old-format indexes rebuild. No new entities or queue/coordinator were added; a generated nullable JSON column on `index_generations` holds the single pending attempt under the existing execution lock.
+
+The generated migration `Version20261113145408` was inspected before application: its forward change only adds nullable `pending_parent`. Generation, application and `doctrine:schema:validate` ran through Castor against newly created task-owned storage (`var/browser/pr3-pending-parent/application.db`). Latest `cs:fix`, `qa:static`, the existing Projects journey (**1 test / 19 assertions**, 10.9 seconds in PHPUnit; 20.7 seconds including preparation), and `git diff --check` passed.
+
+No new scenarios, benchmarks, injected failures, or production lifecycle operations were run. Failure-path reasoning is source inspection, not executed fault coverage. Earlier populated-corpus measurements predate chunk-identity format version 2 and were not repeated.
 
 ## Unfinished or unverified
 
