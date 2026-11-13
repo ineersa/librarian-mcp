@@ -616,13 +616,22 @@ final class ProjectIndexer
 
     private function removeObsoleteGenerations(int $projectId, int $keepGenerationId): void
     {
-        foreach ($this->generationRepository->findObsoleteForProject($projectId, $keepGenerationId) as $obsolete) {
-            $this->storeFactory->removeGeneration($projectId, (int) $obsolete->id);
-            // Keep the row until both stores acknowledge removal. Its manifest
-            // rows are deleted by the existing database foreign-key cascade.
-            $this->entityManager->wrapInTransaction(function () use ($obsolete): void {
-                $this->entityManager->remove($obsolete);
-            });
+        try {
+            foreach ($this->generationRepository->findObsoleteForProject($projectId, $keepGenerationId) as $obsolete) {
+                $this->storeFactory->removeGeneration($projectId, (int) $obsolete->id);
+                // Keep the row until both stores acknowledge removal. Its manifest
+                // rows are deleted by the existing database foreign-key cascade.
+                $this->entityManager->wrapInTransaction(function () use ($obsolete): void {
+                    $this->entityManager->remove($obsolete);
+                });
+            }
+        } catch (\Throwable) {
+            // Cleanup must not turn a healthy committed index into an error.
+            // The next unchanged tick or completed round retries remaining rows.
+            $this->logger->warning('Obsolete index cleanup deferred until the next indexing tick.', [
+                'projectId' => $projectId,
+                'generationId' => $keepGenerationId,
+            ]);
         }
     }
 
