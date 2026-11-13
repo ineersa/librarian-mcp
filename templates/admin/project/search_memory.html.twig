@@ -28,11 +28,7 @@
 
         {{ form_start(form, { attr: { class: 'mb-4', 'data-turbo': 'false' } }) }}
             {{ form_row(form.question) }}
-            <div class="row">
-                <div class="col-md-4">{{ form_row(form.from) }}</div>
-                <div class="col-md-4">{{ form_row(form.until) }}</div>
-                <div class="col-md-4">{{ form_row(form.limit) }}</div>
-            </div>
+            {{ form_row(form.limit) }}
             {{ form_row(form.search) }}
         {{ form_end(form) }}
 

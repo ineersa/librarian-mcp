@@ -46,41 +46,20 @@ class IndexGeneration
     #[ORM\Column(name: 'source_cursor', type: 'text', nullable: true)]
     public private(set) ?string $sourceCursor = null;
 
-    /**
-     * One parent attempt under the project execution lock, persisted before any
-     * backend write. IDs include both the previous and attempted versions.
-     *
-     * @var array{kind: string, source_id: string, chunk_ids: list<string>}|null
-     */
-    #[ORM\Column(name: 'pending_parent', type: 'json', nullable: true)]
-    public private(set) ?array $pendingParent = null;
-
     #[ORM\Column(name: 'scan_round')]
     public private(set) int $scanRound = 0;
 
     /**
-     * Source revision captured when the current scan round started.
+     * Open scan boundary; null means the round is closed.
      */
     #[ORM\Column(name: 'scan_revision', nullable: true)]
     public private(set) ?int $scanRevision = null;
-
-    /**
-     * Mutable source witness captured when the current scan round started.
-     */
-    #[ORM\Column(name: 'scan_witness', type: 'string', length: 64, nullable: true)]
-    public private(set) ?string $scanWitness = null;
 
     /**
      * Last source revision fully committed for this generation.
      */
     #[ORM\Column(name: 'committed_revision', nullable: true)]
     public private(set) ?int $committedRevision = null;
-
-    /**
-     * Mutable source witness captured with the last committed revision.
-     */
-    #[ORM\Column(name: 'committed_source_witness', type: 'string', length: 64, nullable: true)]
-    public private(set) ?string $committedSourceWitness = null;
 
     #[ORM\Column(name: 'parent_count')]
     public private(set) int $parentCount = 0;
@@ -175,17 +154,10 @@ class IndexGeneration
         $this->touch($now);
     }
 
-    public function deactivate(\DateTimeImmutable $now): void
-    {
-        $this->active = false;
-        $this->touch($now);
-    }
-
-    public function beginScanRound(int $sourceRevision, string $sourceWitness, \DateTimeImmutable $now): void
+    public function beginScanRound(int $sourceRevision, \DateTimeImmutable $now): void
     {
         ++$this->scanRound;
         $this->scanRevision = $sourceRevision;
-        $this->scanWitness = $sourceWitness;
         // Empty string marks the start of the keyset; null means source pass finished.
         $this->sourceCursor = '';
         if (IndexState::Ready === $this->state || IndexState::Error === $this->state) {
@@ -202,45 +174,18 @@ class IndexGeneration
         $this->touch($now);
     }
 
-    /**
-     * @param list<string> $chunkIds
-     */
-    public function beginParentWrite(string $kind, string $sourceId, array $chunkIds, \DateTimeImmutable $now): void
+    public function commitRevision(int $revision, \DateTimeImmutable $now): void
     {
-        if (null !== $this->pendingParent) {
-            throw new \LogicException('Recover the pending parent before starting another write.');
-        }
-
-        $this->pendingParent = ['kind' => $kind, 'source_id' => $sourceId, 'chunk_ids' => array_values(array_unique($chunkIds))];
-        $this->touch($now);
-    }
-
-    public function completeParentWrite(\DateTimeImmutable $now): void
-    {
-        $this->pendingParent = null;
-        $this->touch($now);
-    }
-
-    public function commitRevision(
-        int $revision,
-        string $sourceWitness,
-        int $parentCount,
-        int $chunkCount,
-        \DateTimeImmutable $now,
-    ): void {
         $this->committedRevision = $revision;
-        $this->committedSourceWitness = $sourceWitness;
-        $this->parentCount = $parentCount;
-        $this->chunkCount = $chunkCount;
+        $this->scanRevision = null;
         $this->sourceCursor = null;
         $this->touch($now);
     }
 
-    public function refreshCounts(int $parentCount, int $chunkCount, \DateTimeImmutable $now): void
+    public function adjustCounts(int $parentDelta, int $chunkDelta): void
     {
-        $this->parentCount = $parentCount;
-        $this->chunkCount = $chunkCount;
-        $this->touch($now);
+        $this->parentCount += $parentDelta;
+        $this->chunkCount += $chunkDelta;
     }
 
     public function matchesBinding(string $rootBinding, string $sourceIdentity, string $signature): bool

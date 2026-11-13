@@ -13,24 +13,24 @@ use App\Index\Source\CanonicalMemory;
 use App\Index\Source\CanonicalSourceReader;
 use App\Index\Source\SourceSnapshot;
 use App\Index\Store\IndexStoreFactory;
-use App\Index\Store\IndexStores;
 use App\Repository\IndexedMemoryRepository;
 use App\Repository\IndexGenerationRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\AI\Store\Bridge\Postgres\Store;
 use Symfony\AI\Store\Document\Metadata;
 use Symfony\AI\Store\Document\TextDocument;
+use Symfony\AI\Store\Document\VectorDocumentInterface;
+use Symfony\AI\Store\Document\VectorizerInterface;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Uid\Uuid;
 
 /**
- * Owns one project's indexing checkpoint under a framework flock lock.
- *
- * Source reads stay short and read-only. Derived store writes happen outside
- * relational transactions. Content manifests acknowledge both backend writes;
- * a durable parent attempt covers cleanup before the batch cursor advances.
+ * Bounded reconciliation under a per-project execution lock. Source reads and
+ * embeddings precede the short transaction committing chunks, manifests and cursor.
  */
 final class ProjectIndexer
 {
@@ -45,6 +45,7 @@ final class ProjectIndexer
         private readonly EntityManagerInterface $entityManager,
         private readonly CanonicalSourceReader $sourceReader,
         private readonly IndexStoreFactory $storeFactory,
+        private readonly VectorizerInterface $vectorizer,
         private readonly MemoryChunker $chunker,
         private readonly IndexSettings $settings,
         private readonly LockFactory $indexExecutionLockFactory,
@@ -53,29 +54,18 @@ final class ProjectIndexer
     ) {
     }
 
-    /**
-     * Process one bounded indexing unit for a project.
-     *
-     * @return bool true when another continuation should be queued
-     */
+    /** Returns true when another bounded unit should be queued. */
     public function process(int $projectId): bool
     {
         $lock = $this->indexExecutionLockFactory->createLock('project-index-exec:'.$projectId, 600.0);
         if (!$lock->acquire()) {
-            $this->logger->info('Skipping project index because another worker owns the checkpoint.', [
-                'projectId' => $projectId,
-            ]);
-
             return false;
         }
 
         try {
             return $this->processLocked($projectId);
-        } catch (IndexException $exception) {
-            $this->persistSafeFailure($projectId, $exception);
-            throw $exception;
         } catch (\Throwable $exception) {
-            $safe = IndexException::sanitized('Indexing failed.', $exception);
+            $safe = $exception instanceof IndexException ? $exception : IndexException::sanitized('Indexing failed.', $exception);
             $this->persistSafeFailure($projectId, $safe);
             throw $safe;
         } finally {
@@ -86,386 +76,140 @@ final class ProjectIndexer
     private function processLocked(int $projectId): bool
     {
         $project = $this->projectRepository->find($projectId);
-        if (null === $project) {
-            $this->logger->info('Skipping project index because registration is missing.', [
-                'projectId' => $projectId,
-            ]);
-
+        if (null === $project || ProjectHealth::Ready !== $project->health) {
             return false;
         }
-
-        if (ProjectHealth::Ready !== $project->health) {
-            $this->logger->info('Skipping project index until source discovery is ready.', [
-                'projectId' => $projectId,
-                'health' => $project->health->value,
-            ]);
-
-            return false;
-        }
-
-        $databasePath = $project->databasePath;
-        if (null === $databasePath || '' === $databasePath) {
+        if (null === $project->databasePath || '' === $project->databasePath) {
             throw IndexException::sanitized('Project has no observational memory database path.');
         }
 
-        $rootBinding = $this->rootBinding($project);
-        $snapshot = $this->sourceReader->snapshot($databasePath);
-        if (null === $snapshot->revision) {
-            throw IndexException::sanitized('Observational memory source revision is missing.');
-        }
-
-        $signature = $this->settings->signature();
-        $generation = $this->selectOrCreateGeneration($project, $snapshot, $signature, $rootBinding);
-
-        // Resolve the one recorded attempt even if its source parent has been
-        // deleted and therefore cannot appear in the canonical traversal.
-        if (null !== $generation->pendingParent) {
-            $generationId = (int) $generation->id;
-            $this->recoverPendingParent($generationId, $projectId, $rootBinding, $snapshot->identity);
-            $generation = $this->requireGeneration($generationId);
-        }
-
-        if (!$this->needsWork($generation, $snapshot)) {
-            if ($generation->active) {
-                // A successful source validation repairs a transient read error;
-                // no new round is required for an unchanged committed boundary.
+        $snapshot = $this->sourceReader->snapshot($project->databasePath);
+        $generation = $this->selectOrCreateGeneration($project, $snapshot);
+        if (null === $generation->scanRevision) {
+            if ($generation->committedRevision === $snapshot->revision) {
                 if (IndexState::Error === $generation->state) {
                     $generation->markReady($this->clock->now());
                     $this->entityManager->flush();
                 }
                 $this->removeObsoleteGenerations($projectId, (int) $generation->id);
+
+                return false;
             }
-
-            return false;
+            $generation->beginScanRound($snapshot->revision, $this->clock->now());
+            $this->entityManager->flush();
         }
 
-        if (!$this->roundOpen($generation)) {
-            $this->beginRound($generation, $snapshot->revision, $snapshot->witness);
-            $generation = $this->requireGeneration((int) $generation->id);
-        }
-
-        // Empty never-active first generation must clear orphaned stores even when
-        // the round was already open after a failure before the first write.
-        $this->initializeFreshStoresIfNeeded($generation);
-
+        // setup() is idempotent, including a retry after generation creation.
+        $store = $this->storeFactory->forGeneration($projectId, (int) $generation->id);
         if (null !== $generation->sourceCursor) {
-            if ($this->processSourceBatch($generation, $snapshot, $rootBinding)) {
-                return true;
-            }
-            $generation = $this->requireGeneration((int) $generation->id);
+            $this->processSourceBatch($generation, $snapshot, $store);
+
+            return true;
         }
 
-        if ($this->hasUnseenParents($generation)) {
-            if ($this->cleanupUnseen($generation, $rootBinding)) {
-                return true;
-            }
-            $generation = $this->requireGeneration((int) $generation->id);
+        $unseen = $this->memoryRepository->findUnseen((int) $generation->id, $generation->scanRound, self::CLEANUP_BATCH_SIZE);
+        if ([] !== $unseen) {
+            $this->removeUnseen($generation, $store, $unseen);
+
+            return true;
         }
 
-        return $this->finishRound($generation, $snapshot, $rootBinding);
+        return $this->finishRound($generation);
     }
 
-    private function needsWork(IndexGeneration $generation, SourceSnapshot $snapshot): bool
+    private function selectOrCreateGeneration(Project $project, SourceSnapshot $snapshot): IndexGeneration
     {
-        if ($this->roundOpen($generation)) {
-            return true;
-        }
-
-        if (null === $generation->committedRevision) {
-            return true;
-        }
-
-        // Whole-file/WAL witnesses include unrelated Hatfield activity writes.
-        // Canonical revisions drive work; identity changes and revision rollback
-        // are handled separately when selecting the generation.
-        return $snapshot->revision > $generation->committedRevision;
-    }
-
-    private function roundOpen(IndexGeneration $generation): bool
-    {
-        if (null === $generation->scanRevision) {
-            return false;
-        }
-
-        if (null !== $generation->sourceCursor || $this->hasUnseenParents($generation)) {
-            return true;
-        }
-
-        return $generation->committedRevision !== $generation->scanRevision;
-    }
-
-    private function selectOrCreateGeneration(
-        Project $project,
-        SourceSnapshot $snapshot,
-        string $signature,
-        string $rootBinding,
-    ): IndexGeneration {
+        $signature = $this->settings->signature();
+        $root = $this->rootBinding($project);
         $latest = $this->generationRepository->findLatestForProject((int) $project->id);
-        if (null !== $latest && $latest->matchesBinding($rootBinding, $snapshot->identity, $signature)) {
-            // Revision rollback against the same filesystem identity still needs a
-            // fresh generation so committed parents cannot mix eras.
-            if (null !== $snapshot->revision && (
-                (null !== $latest->committedRevision && $snapshot->revision < $latest->committedRevision)
-                || (null !== $latest->scanRevision && $snapshot->revision < $latest->scanRevision)
-            )) {
-                return $this->createGeneration($project, $snapshot, $signature, $rootBinding);
-            }
-
+        if (null !== $latest && $latest->matchesBinding($root, $snapshot->identity, $signature)
+            && $snapshot->revision >= ($latest->committedRevision ?? 0)
+            && $snapshot->revision >= ($latest->scanRevision ?? 0)) {
             return $latest;
         }
 
-        return $this->createGeneration($project, $snapshot, $signature, $rootBinding);
-    }
-
-    private function createGeneration(
-        Project $project,
-        SourceSnapshot $snapshot,
-        string $signature,
-        string $rootBinding,
-    ): IndexGeneration {
-        $now = $this->clock->now();
-        $generation = new IndexGeneration(
-            project: $project,
-            signature: $signature,
-            sourceIdentity: $snapshot->identity,
-            sourcePath: $snapshot->path,
-            rootBinding: $rootBinding,
-            now: $now,
-        );
-        $generation->markBuilding($now);
+        $generation = new IndexGeneration($project, $signature, $snapshot->identity, $snapshot->path, $root, $this->clock->now());
         $this->entityManager->persist($generation);
         $this->entityManager->flush();
 
         return $generation;
     }
 
-    private function beginRound(IndexGeneration $generation, int $revision, string $witness): void
+    private function processSourceBatch(IndexGeneration $generation, SourceSnapshot $snapshot, Store $store): void
     {
         $generationId = (int) $generation->id;
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $revision, $witness): void {
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation) {
-                throw IndexException::sanitized('Index generation disappeared before scan round start.');
-            }
-            $generation->beginScanRound($revision, $witness, $this->clock->now());
-        });
-    }
-
-    private function initializeFreshStoresIfNeeded(IndexGeneration $generation): void
-    {
-        // Fresh generation with no committed parents/cursor work yet: clear any
-        // orphaned Chroma/lexical state left after browser DB recreation. Never
-        // clear after committed parents/cursor. Counts/cursor are batch-level;
-        // individual parent manifests may already have committed before a retry.
-        if (null !== $generation->committedRevision || 0 !== $generation->parentCount || 0 !== $generation->chunkCount) {
-            return;
-        }
-        if ('' !== ($generation->sourceCursor ?? '')) {
-            return;
-        }
-        if ($generation->active) {
-            return;
-        }
-        if ($this->memoryRepository->countParents((int) $generation->id) > 0) {
-            return;
+        $batch = $this->sourceReader->fetchBatch($snapshot->path, $generation->sourceCursor, self::SOURCE_BATCH_SIZE);
+        $parents = $this->memoryRepository->findParents($generationId, array_map(static fn (CanonicalMemory $memory): string => $memory->sourceId, $batch));
+        $byKey = [];
+        foreach ($parents as $parent) {
+            $byKey[$parent->kind."\0".$parent->sourceId] = $parent;
         }
 
-        $stores = $this->storeFactory->forGeneration((int) $generation->project->id, (int) $generation->id);
-        $stores->combined->clear(['batch_size' => 100]);
-    }
-
-    private function processSourceBatch(IndexGeneration $generation, SourceSnapshot $snapshot, string $expectedRoot): bool
-    {
-        $generationId = (int) $generation->id;
-        $projectId = (int) $generation->project->id;
-        $cursor = $generation->sourceCursor;
-        $batch = $this->sourceReader->fetchBatch($snapshot->path, $cursor, self::SOURCE_BATCH_SIZE);
-
-        if ([] === $batch) {
-            $this->commitCursor($generationId, $projectId, $expectedRoot, $snapshot->identity, null);
-
-            return false;
-        }
-
-        $stores = $this->storeFactory->forGeneration($projectId, $generationId);
-        $lastCursor = $cursor;
-        foreach ($batch as $memory) {
-            $this->reconcileParent($generation, $memory, $stores, $expectedRoot, $snapshot->identity);
-            $lastCursor = $memory->cursorKey();
-        }
-
-        $morePages = \count($batch) >= self::SOURCE_BATCH_SIZE;
-        $this->commitCursor(
-            $generationId,
-            $projectId,
-            $expectedRoot,
-            $snapshot->identity,
-            $morePages ? $lastCursor : null,
-        );
-
-        return $morePages;
-    }
-
-    private function reconcileParent(
-        IndexGeneration $generation,
-        CanonicalMemory $memory,
-        IndexStores $stores,
-        string $expectedRoot,
-        string $expectedSourceIdentity,
-    ): void {
-        $generationId = (int) $generation->id;
-        $projectId = (int) $generation->project->id;
-        $existing = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
-        $now = $this->clock->now();
-
-        if (null !== $existing && $existing->contentSignature === $memory->contentSignature) {
-            $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $now): void {
-                $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-                $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
-                if (null === $managed) {
-                    return;
-                }
-                $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-                if (null === $generation) {
-                    return;
-                }
-                $managed->markSeen($generation->scanRound, $now);
-            });
-
-            return;
-        }
-
-        $chunks = array_values(array_filter(
-            $this->chunker->split($memory->content),
-            static fn (string $chunk): bool => '' !== trim($chunk),
-        ));
-        $chunkIds = $this->buildChunkIds($generation, $memory, $chunks);
-        $documents = $this->buildDocuments($generation, $memory, $chunks, $chunkIds);
-        $attemptIds = array_merge($existing->chunkIds ?? [], $chunkIds);
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $attemptIds): void {
-            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation) {
-                throw IndexException::sanitized('Index generation disappeared before parent write.');
-            }
-            $generation->beginParentWrite($memory->kind->value, $memory->sourceId, $attemptIds, $this->clock->now());
-        });
-
-        if ([] !== $documents) {
-            $stores->indexer->index($documents, ['chunk_size' => self::EMBEDDING_BATCH_SIZE]);
-        }
-
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memory, $chunkIds): void {
-            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation) {
-                throw IndexException::sanitized('Index generation disappeared during parent commit.');
-            }
-
-            $now = $this->clock->now();
-            $managed = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
-            if (null === $managed) {
-                $row = new IndexedMemory(
-                    generation: $generation,
-                    kind: $memory->kind->value,
-                    sourceId: $memory->sourceId,
-                    sessionId: $memory->sessionId,
-                    occurredAt: $memory->occurredAt,
-                    contentSignature: $memory->contentSignature,
-                    chunkIds: $chunkIds,
-                    lastSeenRound: $generation->scanRound,
-                    now: $now,
-                );
-                $this->entityManager->persist($row);
-            } else {
-                $managed->replaceContent(
-                    sessionId: $memory->sessionId,
-                    occurredAt: $memory->occurredAt,
-                    contentSignature: $memory->contentSignature,
-                    chunkIds: $chunkIds,
-                    lastSeenRound: $generation->scanRound,
-                    now: $now,
-                );
-            }
-        });
-
-        // The durable attempt records all IDs to retire. Keep the acknowledged
-        // version; exact-ID deletion needs no metadata scans or unchanged-parent
-        // requests. Failure leaves the attempt for the next bounded job.
-        $this->recoverPendingParent($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $stores);
-    }
-
-    private function recoverPendingParent(
-        int $generationId,
-        int $projectId,
-        string $expectedRoot,
-        string $expectedSourceIdentity,
-        ?IndexStores $stores = null,
-    ): void {
-        $generation = $this->requireGeneration($generationId);
-        $pending = $generation->pendingParent;
-        if (null === $pending) {
-            return;
-        }
-
-        $committed = $this->memoryRepository->findCommitted($generationId, $pending['kind'], $pending['source_id']);
-        $obsolete = array_values(array_diff($pending['chunk_ids'], $committed->chunkIds ?? []));
-        if ([] !== $obsolete) {
-            $stores ??= $this->storeFactory->forGeneration($projectId, $generationId);
-            $stores->removeChunks($obsolete);
-        }
-
-        // Keep the marker through either backend's failure, including attempts
-        // for new parents that disappeared before their first acknowledgement.
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity): void {
-            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation) {
-                throw IndexException::sanitized('Index generation disappeared during parent cleanup.');
-            }
-            $generation->completeParentWrite($this->clock->now());
-        });
-    }
-
-    /**
-     * @param list<string> $chunks
-     *
-     * @return list<string>
-     */
-    private function buildChunkIds(IndexGeneration $generation, CanonicalMemory $memory, array $chunks): array
-    {
-        $ids = [];
-        foreach ($chunks as $position => $chunk) {
-            $ids[] = hash('sha256', json_encode([
-                (int) $generation->project->id,
-                $generation->sourceIdentity,
-                $generation->signature,
-                $memory->kind->value,
-                $memory->sourceId,
-                $memory->contentSignature,
-                $position,
-                hash('sha256', $chunk),
-            ], \JSON_THROW_ON_ERROR));
-        }
-
-        return $ids;
-    }
-
-    /**
-     * @param list<string> $chunks
-     * @param list<string> $chunkIds
-     *
-     * @return list<TextDocument>
-     */
-    private function buildDocuments(IndexGeneration $generation, CanonicalMemory $memory, array $chunks, array $chunkIds): array
-    {
-        if (\count($chunks) !== \count($chunkIds)) {
-            throw IndexException::sanitized('Chunk identity count diverged from chunk text count.');
-        }
-
+        $unchangedIds = [];
+        $changed = [];
         $documents = [];
-        foreach ($chunks as $position => $chunk) {
-            $metadata = new Metadata([
+        foreach ($batch as $memory) {
+            $existing = $byKey[$memory->kind->value."\0".$memory->sourceId] ?? null;
+            if (null !== $existing && $existing->contentSignature === $memory->contentSignature) {
+                $unchangedIds[] = (int) $existing->id;
+                continue;
+            }
+            $parentDocuments = $this->buildDocuments($generation, $memory);
+            $changed[] = [$memory, array_map(static fn (TextDocument $document): string => (string) $document->getId(), $parentDocuments)];
+            array_push($documents, ...$parentDocuments);
+        }
+
+        // Native Vectorizer makes provider requests before opening a write transaction.
+        $vectors = [];
+        foreach (array_chunk($documents, self::EMBEDDING_BATCH_SIZE) as $chunk) {
+            $result = $this->vectorizer->vectorize($chunk);
+            if (!\is_array($result)) {
+                throw IndexException::sanitized('Document vectorization did not return a batch.');
+            }
+            foreach ($result as $document) {
+                if (!$document instanceof VectorDocumentInterface) {
+                    throw IndexException::sanitized('Document vectorization returned an unexpected result.');
+                }
+                $vectors[] = $document;
+            }
+        }
+
+        $cursor = self::SOURCE_BATCH_SIZE === \count($batch) ? $batch[array_key_last($batch)]->cursorKey() : null;
+        $this->entityManager->clear();
+        $this->entityManager->wrapInTransaction(function () use ($generation, $generationId, $store, $unchangedIds, $changed, $vectors, $cursor): void {
+            $managedGeneration = $this->lockCurrentGeneration($generation);
+            if ([] !== $vectors) {
+                $store->add($vectors);
+            }
+            $this->memoryRepository->markSeen($unchangedIds, $managedGeneration->scanRound);
+            foreach ($changed as [$memory, $chunkIds]) {
+                $existing = $this->memoryRepository->findCommitted($generationId, $memory->kind->value, $memory->sourceId);
+                $previousIds = $existing->chunkIds ?? [];
+                $this->removeChunks($store, array_values(array_diff($previousIds, $chunkIds)));
+                $managedGeneration->adjustCounts(null === $existing ? 1 : 0, \count($chunkIds) - \count($previousIds));
+                if (null === $existing) {
+                    $this->entityManager->persist(new IndexedMemory($managedGeneration, $memory->kind->value, $memory->sourceId, $memory->contentSignature, $chunkIds, $managedGeneration->scanRound));
+                } else {
+                    $existing->replaceContent($memory->contentSignature, $chunkIds, $managedGeneration->scanRound);
+                }
+            }
+            $managedGeneration->advanceCursor($cursor, $this->clock->now());
+        });
+    }
+
+    /** @return list<TextDocument> */
+    private function buildDocuments(IndexGeneration $generation, CanonicalMemory $memory): array
+    {
+        $documents = [];
+        foreach ($this->chunker->split($memory->content) as $position => $chunk) {
+            if ('' === trim($chunk)) {
+                continue;
+            }
+            // UUIDs are confined to the official store schema, as approved by the owner.
+            $id = Uuid::v5(Uuid::fromString(Uuid::NAMESPACE_URL), json_encode([
+                $generation->id, $memory->kind->value, $memory->sourceId, $memory->contentSignature, $position,
+            ], \JSON_THROW_ON_ERROR))->toRfc4122();
+            $documents[] = new TextDocument($id, $chunk, new Metadata([
                 IndexFields::PROJECT_ID => (int) $generation->project->id,
                 IndexFields::GENERATION_ID => (int) $generation->id,
                 IndexFields::KIND => $memory->kind->value,
@@ -474,229 +218,104 @@ final class ProjectIndexer
                 IndexFields::OCCURRED_AT => $memory->occurredAt,
                 IndexFields::CONTENT_HASH => $memory->contentSignature,
                 IndexFields::CHUNK_POSITION => $position,
-            ]);
-            $metadata->setText($chunk);
-
-            $documents[] = new TextDocument($chunkIds[$position], $chunk, $metadata);
+            ]));
         }
 
         return $documents;
     }
 
-    private function hasUnseenParents(IndexGeneration $generation): bool
+    /** @param list<IndexedMemory> $unseen */
+    private function removeUnseen(IndexGeneration $generation, Store $store, array $unseen): void
     {
-        if ($generation->scanRound < 1) {
-            return false;
-        }
-
-        return [] !== $this->memoryRepository->findUnseen((int) $generation->id, $generation->scanRound, 1);
-    }
-
-    private function cleanupUnseen(IndexGeneration $generation, string $expectedRoot): bool
-    {
-        $generationId = (int) $generation->id;
-        $projectId = (int) $generation->project->id;
-        $expectedSourceIdentity = $generation->sourceIdentity;
-        $unseen = $this->memoryRepository->findUnseen($generationId, $generation->scanRound, self::CLEANUP_BATCH_SIZE);
-        if ([] === $unseen) {
-            return false;
-        }
-
-        $stores = $this->storeFactory->forGeneration($projectId, $generationId);
-        foreach ($unseen as $memory) {
-            $memoryId = (int) $memory->id;
-            $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $memoryId): void {
-                $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-                $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-                $memory = $this->entityManager->find(IndexedMemory::class, $memoryId, LockMode::PESSIMISTIC_WRITE);
-                if (null === $generation || null === $memory) {
-                    throw IndexException::sanitized('Index parent disappeared before removal.');
+        $ids = array_map(static fn (IndexedMemory $memory): int => (int) $memory->id, $unseen);
+        $this->entityManager->clear();
+        $this->entityManager->wrapInTransaction(function () use ($generation, $store, $ids): void {
+            $managedGeneration = $this->lockCurrentGeneration($generation);
+            foreach ($ids as $id) {
+                $memory = $this->memoryRepository->find($id);
+                if (null === $memory) {
+                    continue;
                 }
-                // Remove acknowledgement and record its IDs atomically before
-                // external deletion. A reappearing parent must then reindex;
-                // it cannot take a signature fast path over deleted chunks.
-                $generation->beginParentWrite($memory->kind, $memory->sourceId, $memory->chunkIds, $this->clock->now());
+                $this->removeChunks($store, $memory->chunkIds);
+                $managedGeneration->adjustCounts(-1, -\count($memory->chunkIds));
                 $this->entityManager->remove($memory);
-            });
-            $this->recoverPendingParent($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $stores);
-        }
-
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity): void {
-            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null !== $generation) {
-                $generation->refreshCounts(
-                    $this->memoryRepository->countParents($generationId),
-                    $this->memoryRepository->sumChunkCount($generationId),
-                    $this->clock->now(),
-                );
             }
+            $managedGeneration->touch($this->clock->now());
         });
-
-        return \count($unseen) >= self::CLEANUP_BATCH_SIZE;
     }
 
-    private function finishRound(IndexGeneration $generation, SourceSnapshot $snapshot, string $expectedRoot): bool
+    private function finishRound(IndexGeneration $generation): bool
     {
-        $generationId = (int) $generation->id;
-        $projectId = (int) $generation->project->id;
-        if (null === $generation->scanRevision) {
+        $snapshot = $this->sourceReader->snapshot($generation->sourcePath);
+        if ($snapshot->identity !== $generation->sourceIdentity) {
             return false;
         }
-
-        $scanRevision = $generation->scanRevision;
-        $expectedSourceIdentity = $generation->sourceIdentity;
-        $activated = false;
-
-        // Source reads stay outside the short relational publish transaction.
-        $freshSnapshot = $this->sourceReader->snapshot($snapshot->path);
-        if ($freshSnapshot->identity !== $expectedSourceIdentity) {
-            $this->logger->info('Discarding obsolete index publish after source identity replacement.', [
-                'projectId' => $projectId,
-                'generationId' => $generationId,
-            ]);
-
-            return false;
+        $revision = $generation->scanRevision;
+        if (null === $revision) {
+            throw new \LogicException('Cannot finish a closed scan round.');
         }
-
-        if (null === $freshSnapshot->revision) {
-            throw IndexException::sanitized('Observational memory source revision is missing.');
-        }
-
-        // Rollback arriving during the last batch must not publish a known-obsolete
-        // boundary; the next bounded process creates a separate generation.
-        if ($freshSnapshot->revision < $scanRevision) {
+        if ($snapshot->revision < $revision) {
             return true;
         }
 
-        // Record the witness for diagnostics, not as a canonical revision signal.
-        $commitWitness = $freshSnapshot->witness;
-        $continuationPending = $freshSnapshot->revision > $scanRevision;
-
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $scanRevision, $commitWitness, $continuationPending, $expectedRoot, $expectedSourceIdentity, &$activated): void {
-            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            $project = $this->entityManager->find(Project::class, $projectId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation || null === $project) {
-                return;
-            }
-
+        $more = $snapshot->revision > $revision;
+        $projectId = (int) $generation->project->id;
+        $generationId = (int) $generation->id;
+        $this->entityManager->clear();
+        $this->entityManager->wrapInTransaction(function () use ($generation, $revision, $more, $projectId): void {
+            $managed = $this->lockCurrentGeneration($generation);
             $now = $this->clock->now();
-            $generation->commitRevision(
-                $scanRevision,
-                $commitWitness,
-                $this->memoryRepository->countParents($generationId),
-                $this->memoryRepository->sumChunkCount($generationId),
-                $now,
-            );
-            if ($continuationPending) {
-                // Prior boundary is committed and searchable, but the UI must not
-                // claim the index is fully current while another round is queued.
-                $generation->markUpdating($now);
+            $managed->commitRevision($revision, $now);
+            if ($more) {
+                $managed->markUpdating($now);
             } else {
-                $generation->markReady($now);
+                $managed->markReady($now);
             }
-
-            if (!$generation->active) {
+            if (!$managed->active) {
                 $active = $this->generationRepository->findActiveForProject($projectId);
-                if (null !== $active && $active->id !== $generation->id) {
-                    $active->deactivate($now);
-                    $active->markObsolete($now);
-                }
-                $generation->activate($now);
+                $active?->markObsolete($now);
+                $managed->activate($now);
             }
-
-            $project->markSuccessfulIndex($now);
-            $activated = true;
+            $managed->project->markSuccessfulIndex($now);
         });
-
-        if (!$activated) {
-            return false;
-        }
-
-        // Activation has committed; HTTP/filesystem work must not extend that
-        // transaction. The project execution lock still excludes other indexers.
         $this->removeObsoleteGenerations($projectId, $generationId);
 
-        return $continuationPending;
+        return $more;
+    }
+
+    private function lockCurrentGeneration(IndexGeneration $expected): IndexGeneration
+    {
+        $project = $this->entityManager->find(Project::class, (int) $expected->project->id, LockMode::PESSIMISTIC_WRITE);
+        $generation = $this->entityManager->find(IndexGeneration::class, (int) $expected->id, LockMode::PESSIMISTIC_WRITE);
+        if (null === $project || null === $generation
+            || $this->rootBinding($project) !== $expected->rootBinding
+            || $project->databasePath !== $expected->sourcePath
+            || $this->sourceReader->identityFor($expected->sourcePath) !== $expected->sourceIdentity) {
+            throw IndexException::sanitized('Project source rebinding invalidated this index checkpoint.');
+        }
+
+        return $generation;
+    }
+
+    /** @param list<string> $ids */
+    private function removeChunks(Store $store, array $ids): void
+    {
+        foreach (array_chunk($ids, 100) as $batch) {
+            $store->remove($batch);
+        }
     }
 
     private function removeObsoleteGenerations(int $projectId, int $keepGenerationId): void
     {
         try {
             foreach ($this->generationRepository->findObsoleteForProject($projectId, $keepGenerationId) as $obsolete) {
-                $this->storeFactory->removeGeneration($projectId, (int) $obsolete->id);
-                // Keep the row until both stores acknowledge removal. Its manifest
-                // rows are deleted by the existing database foreign-key cascade.
-                $this->entityManager->wrapInTransaction(function () use ($obsolete): void {
+                $this->entityManager->wrapInTransaction(function () use ($projectId, $obsolete): void {
+                    $this->storeFactory->removeGeneration($projectId, (int) $obsolete->id);
                     $this->entityManager->remove($obsolete);
                 });
             }
         } catch (\Throwable) {
-            // Cleanup must not turn a healthy committed index into an error.
-            // The next unchanged tick or completed round retries remaining rows.
-            $this->logger->warning('Obsolete index cleanup deferred until the next indexing tick.', [
-                'projectId' => $projectId,
-                'generationId' => $keepGenerationId,
-            ]);
-        }
-    }
-
-    private function commitCursor(
-        int $generationId,
-        int $projectId,
-        string $expectedRoot,
-        string $expectedSourceIdentity,
-        ?string $cursor,
-    ): void {
-        $this->entityManager->wrapInTransaction(function () use ($generationId, $projectId, $expectedRoot, $expectedSourceIdentity, $cursor): void {
-            $this->assertCurrentBinding($projectId, $generationId, $expectedRoot, $expectedSourceIdentity);
-            $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-            if (null === $generation) {
-                return;
-            }
-            $generation->advanceCursor($cursor, $this->clock->now());
-            $generation->refreshCounts(
-                $this->memoryRepository->countParents($generationId),
-                $this->memoryRepository->sumChunkCount($generationId),
-                $this->clock->now(),
-            );
-        });
-    }
-
-    private function assertCurrentBinding(
-        int $projectId,
-        int $generationId,
-        string $expectedRoot,
-        string $expectedSourceIdentity,
-    ): void {
-        // find(..., PESSIMISTIC_WRITE) does not refresh an already-managed Project
-        // after external store/model work. Clear first so root/source checks see
-        // the latest committed binding before publish.
-        $this->entityManager->clear();
-
-        $project = $this->entityManager->find(Project::class, $projectId, LockMode::PESSIMISTIC_WRITE);
-        $generation = $this->entityManager->find(IndexGeneration::class, $generationId, LockMode::PESSIMISTIC_WRITE);
-        if (null === $project || null === $generation) {
-            throw IndexException::sanitized('Project or index generation disappeared during commit.');
-        }
-
-        $currentRoot = $this->rootBinding($project);
-        if ($currentRoot !== $expectedRoot) {
-            throw IndexException::sanitized('Project directory rebinding invalidated this index checkpoint.');
-        }
-
-        if ($generation->sourceIdentity !== $expectedSourceIdentity) {
-            throw IndexException::sanitized('Source identity replacement invalidated this index checkpoint.');
-        }
-
-        // Live path/dev/ino only. Full snapshot counts/revision/witness stay
-        // outside the short relational write transaction.
-        $currentIdentity = $this->sourceReader->identityFor($generation->sourcePath);
-        if ($currentIdentity !== $expectedSourceIdentity) {
-            throw IndexException::sanitized('Source identity replacement invalidated this index checkpoint.');
+            $this->logger->warning('Obsolete index cleanup deferred until the next indexing tick.', ['projectId' => $projectId]);
         }
     }
 
@@ -705,32 +324,20 @@ final class ProjectIndexer
         return '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
     }
 
-    private function requireGeneration(int $generationId): IndexGeneration
-    {
-        $this->entityManager->clear();
-        $generation = $this->generationRepository->find($generationId);
-        if (null === $generation) {
-            throw IndexException::sanitized('Index generation disappeared during processing.');
-        }
-
-        return $generation;
-    }
-
     private function persistSafeFailure(int $projectId, IndexException $exception): void
     {
+        if (!$this->entityManager->isOpen()) {
+            return; // Messenger resets a closed manager before retrying a failed transaction.
+        }
         try {
             $this->entityManager->clear();
             $generation = $this->generationRepository->findLatestForProject($projectId);
-            if (null === $generation) {
-                return;
+            if (null !== $generation) {
+                $generation->markError($this->clock->now(), $exception->getMessage());
+                $this->entityManager->flush();
             }
-
-            $generation->markError($this->clock->now(), $exception->getMessage());
-            $this->entityManager->flush();
         } catch (\Throwable) {
-            $this->logger->error('Unable to persist sanitized index failure state.', [
-                'projectId' => $projectId,
-            ]);
+            $this->logger->error('Unable to persist sanitized index failure state.', ['projectId' => $projectId]);
         }
     }
 }

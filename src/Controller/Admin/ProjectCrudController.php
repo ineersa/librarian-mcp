@@ -352,7 +352,7 @@ class ProjectCrudController extends AbstractCrudController
 
         if ($form->isSubmitted() && $form->isValid()) {
             $searched = true;
-            /** @var array{question: string, from?: ?\DateTimeImmutable, until?: ?\DateTimeImmutable, limit: int} $data */
+            /** @var array{question: string, limit: int} $data */
             $data = $form->getData();
             if (null === $active || !$active->state->isUsable() || null === $active->id) {
                 $searchError = 'No committed searchable index is active for this project yet.';
@@ -362,8 +362,6 @@ class ProjectCrudController extends AbstractCrudController
                         $project->id,
                         $active->id,
                         trim($data['question']),
-                        $this->inclusiveFromTimestamp($data['from'] ?? null),
-                        $this->exclusiveUntilTimestamp($data['until'] ?? null),
                         (int) $data['limit'],
                     );
                 } catch (IndexException $exception) {
@@ -451,24 +449,6 @@ class ProjectCrudController extends AbstractCrudController
                 ->setEntityId((string) $project->id)
                 ->generateUrl(),
         );
-    }
-
-    private function inclusiveFromTimestamp(?\DateTimeImmutable $from): ?int
-    {
-        if (null === $from) {
-            return null;
-        }
-
-        return $from->setTimezone(new \DateTimeZone('UTC'))->setTime(0, 0, 0)->getTimestamp();
-    }
-
-    private function exclusiveUntilTimestamp(?\DateTimeImmutable $until): ?int
-    {
-        if (null === $until) {
-            return null;
-        }
-
-        return $until->setTimezone(new \DateTimeZone('UTC'))->setTime(0, 0, 0)->getTimestamp();
     }
 
     /**

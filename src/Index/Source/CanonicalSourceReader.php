@@ -18,8 +18,6 @@ use App\Project\ProjectSourceException;
 final class CanonicalSourceReader
 {
     private const array OBSERVATION_RELEVANCE = ['low', 'medium', 'high', 'critical'];
-    private const int DATABASE_HEADER_BYTES = 100;
-    private const int WAL_HEADER_BYTES = 32;
 
     public function __construct(
         private readonly OmSourceReader $omSourceReader,
@@ -39,9 +37,6 @@ final class CanonicalSourceReader
             try {
                 $this->omSourceReader->validateSchema($pdo);
                 $revision = $this->fetchRevision($pdo);
-                $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
-                $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
-                $changeHintCount = (int) $pdo->query('SELECT COUNT(*) FROM om_source_change')->fetchColumn();
                 $pdo->commit();
             } catch (\Throwable $exception) {
                 if ($pdo->inTransaction()) {
@@ -54,11 +49,7 @@ final class CanonicalSourceReader
             return new SourceSnapshot(
                 path: $databasePath,
                 identity: $this->identityFor($databasePath),
-                witness: $this->witnessFor($databasePath, $revision),
                 revision: $revision,
-                observationCount: $observationCount,
-                reflectionCount: $reflectionCount,
-                changeHintCount: $changeHintCount,
             );
         } finally {
             $pdo = null;
@@ -102,8 +93,7 @@ final class CanonicalSourceReader
     /**
      * Cheap stable filesystem identity (path + device + inode).
      *
-     * Does not open SQLite or count source rows. Use snapshot() when revision,
-     * witness, or table counts are required.
+     * Does not open SQLite or count source rows. Use snapshot() to read the revision.
      */
     public function identityFor(string $databasePath): string
     {
@@ -290,71 +280,14 @@ final class CanonicalSourceReader
         return [$kind, $parts[1]];
     }
 
-    private function fetchRevision(\PDO $pdo): ?int
+    private function fetchRevision(\PDO $pdo): int
     {
         $value = $pdo->query('SELECT revision FROM om_source_revision WHERE id = 1')->fetchColumn();
         if (false === $value || null === $value) {
-            return null;
+            throw IndexException::sanitized('Observational memory source revision is missing.');
         }
 
         return (int) $value;
-    }
-
-    private function witnessFor(string $databasePath, ?int $revision): string
-    {
-        clearstatcache(true, $databasePath);
-        $stat = @stat($databasePath);
-        $size = \is_array($stat) ? ($stat['size'] ?? null) : null;
-        $mtime = \is_array($stat) ? ($stat['mtime'] ?? null) : null;
-        $ctime = \is_array($stat) ? ($stat['ctime'] ?? null) : null;
-        $databaseHeader = $this->boundedHeaderHash($databasePath, self::DATABASE_HEADER_BYTES);
-
-        $walPath = $databasePath.'-wal';
-        $walHeader = null;
-        $walSize = null;
-        $walMtime = null;
-        $walCtime = null;
-        if (is_file($walPath)) {
-            clearstatcache(true, $walPath);
-            $walStat = @stat($walPath);
-            $walSize = \is_array($walStat) ? ($walStat['size'] ?? null) : null;
-            $walMtime = \is_array($walStat) ? ($walStat['mtime'] ?? null) : null;
-            $walCtime = \is_array($walStat) ? ($walStat['ctime'] ?? null) : null;
-            $walHeader = $this->boundedHeaderHash($walPath, self::WAL_HEADER_BYTES);
-        }
-
-        // Cheap mutable witness only. Same-revision restores that also preserve
-        // every bounded witness field remain invisible without full verification.
-        return hash('sha256', json_encode([
-            $size,
-            $mtime,
-            $ctime,
-            $databaseHeader,
-            $walSize,
-            $walMtime,
-            $walCtime,
-            $walHeader,
-            $revision,
-        ], \JSON_THROW_ON_ERROR));
-    }
-
-    private function boundedHeaderHash(string $path, int $bytes): ?string
-    {
-        $handle = @fopen($path, 'rb');
-        if (false === $handle) {
-            return null;
-        }
-
-        try {
-            $payload = fread($handle, $bytes);
-            if (!\is_string($payload) || '' === $payload) {
-                return null;
-            }
-
-            return hash('sha256', $payload);
-        } finally {
-            fclose($handle);
-        }
     }
 
     private function wrapReadFailure(\Throwable $exception): IndexException

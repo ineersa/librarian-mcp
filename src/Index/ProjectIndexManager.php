@@ -19,7 +19,6 @@ use Symfony\Component\Messenger\Stamp\DeduplicateStamp;
 final class ProjectIndexManager
 {
     public const string DEDUPE_PREFIX = 'project-index:';
-    public const string TICK_DEDUPE_KEY = 'project-index-tick';
     public const float DEDUPE_TTL_SECONDS = 3600.0;
 
     public function __construct(
@@ -77,25 +76,16 @@ final class ProjectIndexManager
         }
 
         try {
-            $generations = $this->generationRepository->findBy(
-                ['project' => $projectId],
-                ['id' => 'ASC'],
-            );
-
-            foreach ($generations as $generation) {
-                if (null === $generation->id) {
-                    continue;
+            $this->entityManager->wrapInTransaction(function () use ($projectId): void {
+                foreach ($this->generationRepository->findBy(['project' => $projectId]) as $generation) {
+                    $this->storeFactory->removeGeneration($projectId, (int) $generation->id);
                 }
-                $this->storeFactory->removeGeneration($projectId, $generation->id);
-            }
 
-            $managed = $this->entityManager->find(Project::class, $projectId);
-            if (null !== $managed) {
-                $this->entityManager->remove($managed);
-                $this->entityManager->flush();
-            }
-        } catch (IndexException $exception) {
-            throw $exception;
+                $managed = $this->entityManager->find(Project::class, $projectId);
+                if (null !== $managed) {
+                    $this->entityManager->remove($managed);
+                }
+            });
         } catch (\Throwable $exception) {
             throw IndexException::sanitized('Failed to remove project index registration.', $exception);
         } finally {

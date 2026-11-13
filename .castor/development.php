@@ -145,7 +145,7 @@ function postgresDatabaseUrl(string $mode, bool $forHostNetwork): string
         $port = browserPublishedPostgresPort();
     }
 
-    return sprintf(
+    return \sprintf(
         'postgresql://%s:%s@%s:%s/%s?serverVersion=17&charset=utf8',
         rawurlencode($credentials['user']),
         rawurlencode($credentials['password']),
@@ -164,7 +164,7 @@ function assertOwnedBrowserDatabaseUrl(string $databaseUrl): void
 {
     $credentials = postgresCredentials('browser');
     $parts = parse_url($databaseUrl);
-    if (!is_array($parts) || 'postgresql' !== ($parts['scheme'] ?? null)) {
+    if (!\is_array($parts) || 'postgresql' !== ($parts['scheme'] ?? null)) {
         throw new \RuntimeException('Browser fixtures require a PostgreSQL DATABASE_URL.');
     }
     $user = rawurldecode((string) ($parts['user'] ?? ''));
@@ -194,7 +194,7 @@ function isolatedPostgresDatabaseUrl(string $identifier): string
     $credentials = postgresCredentials('dev');
     $db = isolatedPostgresDatabaseName($identifier);
 
-    return sprintf(
+    return \sprintf(
         'postgresql://%s:%s@postgres:5432/%s?serverVersion=17&charset=utf8',
         rawurlencode($credentials['user']),
         rawurlencode($credentials['password']),
@@ -206,7 +206,6 @@ function isolatedPostgresLockDsn(string $identifier): string
 {
     return isolatedPostgresDatabaseUrl($identifier);
 }
-
 
 /** @return list<string> */
 function stackCommand(string $mode): array

@@ -8,29 +8,26 @@ use App\Index\IndexException;
 use App\Index\IndexFields;
 use App\Index\IndexSettings;
 use App\Index\Model\LocalBgeReranker;
-use App\Index\Model\ValidatingVectorizer;
 use App\Index\Source\CanonicalSourceReader;
 use App\Index\Store\IndexStoreFactory;
-use App\Repository\IndexedMemoryRepository;
 use App\Repository\IndexGenerationRepository;
+use Symfony\AI\Platform\Vector\Vector;
 use Symfony\AI\Store\Document\VectorDocumentInterface;
+use Symfony\AI\Store\Document\VectorizerInterface;
 use Symfony\AI\Store\Query\HybridQuery;
 
 /**
- * Vector100 + lexical100 -> RRF k60 -> fused<=200 -> BGE -> parent collapse.
+ * Native PostgreSQL hybrid retrieval, followed by BGE and parent collapse.
  */
 final readonly class HybridSearch
 {
-    public const int VECTOR_LIMIT = 100;
-    public const int TEXT_LIMIT = 100;
-    public const int FUSED_LIMIT = 200;
+    public const int CANDIDATE_LIMIT = 100;
 
     public function __construct(
         private IndexStoreFactory $storeFactory,
-        private ValidatingVectorizer $vectorizer,
+        private VectorizerInterface $vectorizer,
         private LocalBgeReranker $reranker,
         private IndexGenerationRepository $generationRepository,
-        private IndexedMemoryRepository $memoryRepository,
         private CanonicalSourceReader $sourceReader,
         private IndexSettings $settings,
     ) {
@@ -40,8 +37,6 @@ final readonly class HybridSearch
         int $projectId,
         int $generationId,
         string $question,
-        ?int $from = null,
-        ?int $until = null,
         int $limit = 10,
     ): SearchResult {
         if ($projectId < 1 || $generationId < 1) {
@@ -67,20 +62,14 @@ final readonly class HybridSearch
             throw IndexException::sanitized('The active index belongs to an earlier source binding. Wait for indexing to complete.');
         }
 
-        $stores = $this->storeFactory->forGeneration($projectId, $generationId, initialize: false);
-        $vector = $this->vectorizer->embedQuery($question);
-        $options = [
-            'project_id' => $projectId,
-            'generation_id' => $generationId,
-            'from' => $from,
-            'until' => $until,
-            'limit' => self::VECTOR_LIMIT,
-            'maxItems' => self::TEXT_LIMIT,
-        ];
-
         try {
+            $store = $this->storeFactory->forGeneration($projectId, $generationId, initialize: false);
+            $vector = $this->vectorizer->vectorize(IndexSettings::QUERY_PREFIX.$question);
+            if (!$vector instanceof Vector) {
+                throw IndexException::sanitized('Query embedding did not return a single vector.');
+            }
             $fused = iterator_to_array(
-                $stores->combined->query(new HybridQuery($vector, $question), $options),
+                $store->query(new HybridQuery($vector, $question), ['limit' => self::CANDIDATE_LIMIT]),
                 false,
             );
         } catch (IndexException $error) {
@@ -88,34 +77,6 @@ final readonly class HybridSearch
         } catch (\Throwable $error) {
             throw IndexException::sanitized('Hybrid retrieval failed.', $error);
         }
-
-        $candidateLimitReached = \count($fused) > self::FUSED_LIMIT;
-        if ($candidateLimitReached) {
-            $fused = \array_slice($fused, 0, self::FUSED_LIMIT);
-        }
-
-        // A remote write may succeed before the relational acknowledgement. Only
-        // committed parent signatures/chunk IDs may enter reranking or results.
-        $candidates = [];
-        foreach ($fused as $document) {
-            $metadata = $document->getMetadata();
-            $kind = $metadata[IndexFields::KIND] ?? null;
-            $sourceId = $metadata[IndexFields::SOURCE_ID] ?? null;
-            $signature = $metadata[IndexFields::CONTENT_HASH] ?? null;
-            if (!\is_string($kind) || !\is_string($sourceId) || !\is_string($signature)) {
-                throw IndexException::sanitized('Indexed candidate is missing committed provenance.');
-            }
-            $candidates[] = ['kind' => $kind, 'source_id' => $sourceId, 'signature' => $signature, 'chunk_id' => (string) $document->getId()];
-        }
-        $committedIds = array_fill_keys($this->memoryRepository->findCommittedChunkIds($generationId, $candidates), true);
-        $committed = [];
-        foreach ($fused as $document) {
-            if (isset($committedIds[(string) $document->getId()])) {
-                $committed[] = $document;
-            }
-        }
-        $candidateLimitReached = $candidateLimitReached || \count($committed) !== \count($fused);
-        $fused = $committed;
 
         $snippets = [];
         foreach ($fused as $document) {
@@ -144,11 +105,7 @@ final readonly class HybridSearch
             }
         }
 
-        $truncated = $stores->wasTruncated()
-            || $candidateLimitReached
-            || \count($fused) >= self::FUSED_LIMIT;
-
-        return new SearchResult(array_values($parents), $truncated);
+        return new SearchResult(array_values($parents), \count($fused) >= self::CANDIDATE_LIMIT);
     }
 
     /**

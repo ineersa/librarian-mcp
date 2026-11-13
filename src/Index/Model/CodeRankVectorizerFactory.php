@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Index\Model;
 
 use App\Index\IndexSettings;
-use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Symfony\AI\Platform\Bridge\Generic\EmbeddingsModel;
 use Symfony\AI\Platform\Bridge\Generic\Factory as GenericFactory;
 use Symfony\AI\Platform\Bridge\Generic\ModelCatalog;
@@ -28,7 +26,6 @@ final class CodeRankVectorizerFactory
         private readonly IndexSettings $settings,
         private readonly EmbeddingResultValidator $validator,
         private readonly ?HttpClientInterface $httpClient = null,
-        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -69,8 +66,7 @@ final class CodeRankVectorizerFactory
         return new Vectorizer(
             $this->createPlatform(),
             $this->settings->embeddingModel,
-            $this->logger,
-            true,
+            includeText: true,
         );
     }
 

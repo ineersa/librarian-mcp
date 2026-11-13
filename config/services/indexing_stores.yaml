@@ -1,7 +1,6 @@
 # yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 #
-# Model and shared indexing settings. Main owns IndexStoreFactory / HybridSearch
-# rewiring onto the official Postgres store.
+# Native PostgreSQL store and model services.
 
 parameters:
     env(CODERANK_URL): 'http://host.docker.internal:8059/v1'
@@ -28,6 +27,9 @@ services:
 
     App\Index\MemoryChunker: ~
 
+    App\Index\Store\IndexStoreFactory: ~
+    App\Index\Search\HybridSearch: ~
+
     # Scoped only to the CodeRank Generic platform dispatcher created below.
     App\Index\Model\EmbeddingResultValidator:
         autoconfigure: false
@@ -46,7 +48,7 @@ services:
         arguments:
             $httpClient: null
 
-    # Separate from the default SQLite PdoStore used by Messenger DeduplicateStamp.
+    # Separate from the shared PostgreSQL store used by Messenger DeduplicateStamp.
     # Flock releases on process death and owns one project checkpoint at a time.
     index_execution_lock.store:
         class: Symfony\Component\Lock\Store\FlockStore

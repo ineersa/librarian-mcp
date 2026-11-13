@@ -11,7 +11,7 @@ final readonly class IndexSettings
 {
     public const string QUERY_PREFIX = 'Represent this query for searching relevant code: ';
     public const int NORMALIZATION_VERSION = 1;
-    public const int CHUNK_ID_VERSION = 2;
+    public const int CHUNK_ID_VERSION = 3;
     public const int DEFAULT_DIMENSIONS = 768;
 
     public function __construct(

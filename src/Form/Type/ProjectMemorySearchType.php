@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
-use Symfony\Component\Form\Extension\Core\Type\DateType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\SearchType;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
@@ -40,26 +39,6 @@ final class ProjectMemorySearchType extends AbstractType
                     'maxlength' => self::MAX_QUESTION_LENGTH,
                     'autocomplete' => 'off',
                 ],
-            ])
-            ->add('from', DateType::class, [
-                'label' => 'From date (UTC, inclusive)',
-                'required' => false,
-                'widget' => 'single_text',
-                'input' => 'datetime_immutable',
-                'html5' => true,
-                'model_timezone' => 'UTC',
-                'view_timezone' => 'UTC',
-                'help' => 'Optional. Canonical memory dates on or after this UTC day are included.',
-            ])
-            ->add('until', DateType::class, [
-                'label' => 'Until date (UTC, exclusive)',
-                'required' => false,
-                'widget' => 'single_text',
-                'input' => 'datetime_immutable',
-                'html5' => true,
-                'model_timezone' => 'UTC',
-                'view_timezone' => 'UTC',
-                'help' => 'Optional. Canonical memory dates on or after this UTC day are excluded.',
             ])
             ->add('limit', IntegerType::class, [
                 'label' => 'Result limit',
