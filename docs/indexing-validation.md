@@ -7,7 +7,7 @@ Validated on 2026-11-13 after switching to the unmodified Symfony AI Postgres st
 - `vendor/bin/castor tooling:prepare` passed with `pdo_pgsql`; `pdo_sqlite` remains available for read-only Hatfield sources.
 - Generated `migrations/postgres/Version20261113171951.php` through Doctrine against task-owned `librarian_iso_pg_native_schema`. Reviewed its forward changes: application/Messenger tables, integer identity keys, indexes and foreign keys; no existing tables dropped. Applied it there and `doctrine:schema:validate` confirmed the mappings and database agree.
 - `vendor/bin/castor cs:fix` and `qa:static` passed: Composer validation, style, PHPStan and runtime-complete Symfony LSP checks.
-- Latest manual-review follow-up: `vendor/bin/castor cs:fix`, `test` and `qa:static` passed. **5 headless browser journeys, 48 assertions**, zero failures/errors (14.2 seconds browser execution; 34.2 seconds including stack/reset setup; static checks 5.5 seconds). Exactly one Projects journey covers registration/discovery, Index now, native hybrid search + BGE, an ordinary synthetic source update and updated search, path rebinding, and removal with source-hash checks. No saved scenarios or assertions were added by this follow-up.
+- Latest production-usability follow-up: `vendor/bin/castor cs:fix`, `test` and `qa:static` passed. **5 headless browser journeys, 48 assertions**, zero failures/errors. Exactly one Projects journey covers live source/index status, list indexing visibility, optional Check for updates, natural-language native hybrid search + BGE, an ordinary synthetic source update and updated search, path rebinding, and removal with source-hash checks. No scenario matrix was added.
 - A throwaway in-memory SQLite `EXPLAIN QUERY PLAN` confirmed subsequent source pages use primary-key `SEARCH … (observation_id>?)`; the first page scans in primary-key order. This is query-plan evidence, not a corpus benchmark.
 - `vendor/bin/castor dev:stack:up` passed after removing development Compose model overrides, recreating the running development services with the corrected environment configuration.
 
@@ -16,6 +16,18 @@ Validated on 2026-11-13 after switching to the unmodified Symfony AI Postgres st
 The development application and browser stack both run PostgreSQL with the Doctrine-generated baseline. Use `vendor/bin/castor dev:stack:status` for the current shared-proxy URL; see [Castor operations](castor.md#isolated-browser-stack). Schema validation passed. No migration classes or schema SQL were handwritten.
 
 A headless browser verified the actual development homepage → native EasyAdmin login: both HTTP 200, assets loaded, no console errors. This check did not submit credentials. The existing browser journey remains the evidence for authenticated indexing/search behavior.
+
+## Production usability deployment
+
+PR #4 code at `e184c54` was deployed to the existing production stack through Castor `prod:up` and `prod:restart`, without merging the PR. `prod:config` passed. Web/PostgreSQL were healthy; Messenger was running with its inherited HTTP health check disabled. All services used `unless-stopped`; both app containers retained the identical read-only projects mount. No migration, database reset, source mutation or volume removal was performed.
+
+A headless production browser verified:
+
+- Projects list showed Indexed, 26,606 indexed memories at that observation, last success and automatic-update guidance; detail showed separate live source/index panels and normal admin controls, with no meta refresh.
+- The project-specific Mercure subscription returned HTTP 200 `text/event-stream`, with EventSource OPEN. During 70.7 seconds the document did not reload, but no status event arrived: actual production panel replacement remains unproven in that idle observation window.
+- The exact reported natural-language query at limit 10 returned **10 results**, versus two newer question-related records before deployment. Historical OpenCode provider/token-usage work was present, but ranking remained mixed: the first three results were recent question/search-related repetitions. No visible or console errors. Only that query was submitted; no indexing actions or record changes were made.
+
+Private result snapshots remain local and are not part of this documentation.
 
 ## Limits
 
