@@ -43,6 +43,20 @@ A production browser then observed an ordinary automatic cycle without manual sc
 
 Production automatic checks and live status replacement are therefore observed, not merely wired. No owner data was reset or source changes forced.
 
+## Eastern dates and simplified project actions
+
+Code `de1a4ca` was deployed via Castor `prod:up` and `prod:restart`. Formatting, the existing **5 journeys / 48 assertions**, static QA and diff checks passed; the Projects journey now uses row-click details and per-row search, with no edit or manual scan/index actions.
+
+A production browser verified:
+
+- Row actions are Search memory/Delete; registration remains available. Clicking the name cell opens details, whose header contains only Delete and Back to listing.
+- Status dates show EST and native EasyAdmin Last scan/snapshot fields show the matching Eastern evening. The approved query still returned 10 results, with November timestamps EST and September/October timestamps EDT.
+- No visible/console errors or production record/source modifications. Private search snapshots remain local.
+
+Production `about` reports PHP timezone UTC. A read-only `dbal:run-sql` check reports PostgreSQL `Etc/UTC` and UTC stored activity timestamps. The shared `app.display_timezone=America/New_York` changes presentation only; no schema/data conversion was performed.
+
+The first short observation after restart was idle. A subsequent normal automatic cycle proved worker-rendered Eastern dates: source/index checks advanced from 22:04:33 to 22:05:33 EST while last successful indexing stayed at 22:02:09 EST. Three Mercure messages / 12 Turbo render events replaced both panels; the in-memory marker/time origin survived and navigation count stayed one. No console errors or forced actions.
+
 ## Limits
 
 - Native hybrid uses weighted pgvector similarity and PostgreSQL `ts_rank`, requires a lexical match, and has no date-filter UI. Relevance/performance tuning is deferred.
