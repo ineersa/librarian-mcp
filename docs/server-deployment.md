@@ -43,13 +43,16 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
    Production compose receives `--env-file .env.prod.local`. Production web and worker must share the same Postgres database and lock store. Keep lock DSN overrides on shared storage, not container-local paths. See `.env.prod.local.dist`.
 
-3. Configure the published app port and host project bind in `.env` (Compose interpolation, not the container-only `.env.prod.local`), or use exported process environment / an explicit bind in `compose.sources.yaml`:
+3. Configure the published app port and read-only project bind in `.env.prod.local` (Castor loads it for both Compose interpolation and container environment):
 
    ```bash
    APP_HTTP_BIND=127.0.0.1
    APP_HTTP_PORT=8081
    PROJECTS_HOST_PATH=/absolute/host/projects
+   PROJECTS_CONTAINER_PATH=/absolute/host/projects
    ```
+
+   Using the same source and target lets the registration form accept host absolute paths. Omit `PROJECTS_CONTAINER_PATH` to keep the default `/projects` target.
 
    Keep it loopback-only (`127.0.0.1`) when nginx is your public entrypoint.
 
@@ -122,7 +125,7 @@ server {
 
 ## Dedicated host mode (Caddy public 80/443)
 
-If no other service owns host 80/443, set in `.env`:
+If no other service owns host 80/443, set in `.env.prod.local`:
 
 ```bash
 APP_HTTP_BIND=0.0.0.0
@@ -136,10 +139,14 @@ Then publish host 443 with a local compose override.
 - `compose.prod.yaml` loads `.env.prod.local` with `env_file` and Castor passes `--env-file .env.prod.local`.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
 - Symfony environment is baked by `composer dump-env prod` during image build.
-- Castor loads `.env` and `.env.prod` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
+- Castor loads `.env`, `.env.prod` and `.env.prod.local` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
 - Project sources are mounted read-only.
 - Postgres stays on the private network with no host ports. Worker consumes Messenger `async` and `scheduler_default`.
-- Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
+- Web, Messenger and PostgreSQL use `restart: unless-stopped`. The Messenger-only container disables the image's Caddy HTTP health check because it does not run an HTTP server; a running worker is not an HTTP health-check result.
+- Scheduler uses `CallbackMessageProvider` for automatic source discovery followed by incremental indexing (`INDEX_INTERVAL`, default 60s). Check timestamps advance even when unchanged memories do not need rebuilding.
+- Live admin status uses private Mercure + Turbo Streams with native topic-scoped authorization cookies; anonymous hub subscriptions are disabled. Use the configured `MERCURE_PUBLIC_URL` origin for admin access so the app and hub can share the cookie. If a reverse proxy is added, preserve long-lived, unbuffered event-stream responses.
 - Registration deletion removes owned derived indexes only; never source trees.
+- `data-prod/` and private production settings are ignored; preserve them across builds and checkout changes.
 - Do not exercise migrations against the real application database for tests; use isolated storage for validation.
 - Do not reset owner/production data, volumes, or unrelated containers without explicit authorization.
+- Old-checkout cleanup is separate from deployment. Never run `down --volumes` from an old checkout: the stable production Compose project and volumes may already be serving the new checkout. Verify current container bind mounts before removing any old directory.

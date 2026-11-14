@@ -1,0 +1,41 @@
+{% set projectId = project.id %}
+<turbo-stream action="replace" target="project-source-status">
+    <template>
+        {% include 'admin/project/status/_source_panel.html.twig' with {
+            project: project,
+            indexStatus: indexStatus
+        } only %}
+    </template>
+</turbo-stream>
+<turbo-stream action="replace" target="project-index-status">
+    <template>
+        {% include 'admin/project/status/_index_panel.html.twig' with {
+            project: project,
+            indexStatus: indexStatus
+        } only %}
+    </template>
+</turbo-stream>
+<turbo-stream action="replace" target="project-index-list-{{ projectId }}">
+    <template>
+        {% include 'admin/project/status/_list_cell.html.twig' with {
+            project: project,
+            indexStatus: indexStatus
+        } only %}
+    </template>
+</turbo-stream>
+<turbo-stream action="replace" target="project-health-badge-{{ projectId }}">
+    <template>
+        {% set health = indexStatus.health %}
+        {% set badgeClasses = {
+            'pending': 'badge badge-secondary',
+            'scanning': 'badge badge-info',
+            'ready': 'badge badge-success',
+            'error': 'badge badge-danger'
+        } %}
+        <span
+            id="project-health-badge-{{ projectId }}"
+            data-project-health="{{ health.value }}"
+            class="{{ badgeClasses[health.value] ?? badgeClasses['pending'] }}"
+        >{{ health.label() }}</span>
+    </template>
+</turbo-stream>

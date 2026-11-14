@@ -47,7 +47,7 @@ services:
       - caddy_config:/config
       - type: bind
         source: '${PROJECTS_HOST_PATH:-.}'
-        target: /projects
+        target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: true
         bind:
           create_host_path: false
@@ -69,6 +69,8 @@ services:
     environment:
       APP_ENV: prod
     command: ["php", "bin/console", "messenger:consume", "--all", "--exclude-receivers=failed"]
+    healthcheck:
+      disable: true
     depends_on:
       php:
         condition: service_started
@@ -78,7 +80,7 @@ services:
       - ./data-prod:/app/data-prod
       - type: bind
         source: '${PROJECTS_HOST_PATH:-.}'
-        target: /projects
+        target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: true
         bind:
           create_host_path: false

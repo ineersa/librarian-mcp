@@ -75,7 +75,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 ## Testing and browser verification
 
 - Follow [TESTING.md](TESTING.md). Application behavior is verified through real Playwright browsers against an isolated checkout-owned stack.
-- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one CRUD journey**, including registration, discovery, Index now/search, ordinary harness-owned fixture update, edit/rescan, and removal. Do not add separate project discovery, error, uniqueness, or indexing matrices.
+- Keep the suite small: one happy-path journey per feature, covering its related views and actions together. **Projects has exactly one journey**, including registration, row-click details, live automatic discovery/index status, per-row search, ordinary harness-owned fixture update, and removal. Projects has create/delete only; no edit or manual scan/index actions. Do not add separate project discovery, error, uniqueness, or indexing matrices.
 - Obtain explicit owner permission before adding or running special-case tests (negative paths, security matrices, fault injection, concurrency, recovery, layout permutations). A bug fix does not automatically authorize a new regression scenario.
 - Do not add unit, kernel-only, service-only, or API-only suites as the primary coverage model. PHPUnit may harness Playwright; its presence does not authorize non-browser application suites.
 - Use the isolated browser stack and printed shared-proxy URL / `LIBRARIAN_BROWSER_URL`. Do not invent ports or Compose project names. Seed only the verified isolated admin identity for journeys; never purge owner/production data.
@@ -97,7 +97,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.
 - Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`.
-- Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
+- Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs (`INDEX_INTERVAL`, default 60s); successful discovery queues incremental indexing. Unchanged source revisions are checked without rebuilding.
 
 ## Suggested defaults for new features
 

@@ -6,6 +6,7 @@ namespace App\MessageHandler;
 
 use App\Entity\Project;
 use App\Index\ProjectIndexManager;
+use App\Index\Status\ProjectStatusPublisher;
 use App\Message\ScanProjectMessage;
 use App\Project\HatfieldSourceDiscovery;
 use App\Project\ProjectDiscoveryResult;
@@ -27,6 +28,7 @@ final class ScanProjectMessageHandler
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
         private readonly ProjectIndexManager $projectIndexManager,
+        private readonly ProjectStatusPublisher $projectStatusPublisher,
     ) {
     }
 
@@ -43,6 +45,7 @@ final class ScanProjectMessageHandler
 
         $project->markScanning($this->clock->now());
         $this->entityManager->flush();
+        $this->projectStatusPublisher->publish($message->projectId);
 
         $projectId = $project->id;
         $root = '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
@@ -88,6 +91,7 @@ final class ScanProjectMessageHandler
             $this->persistResult($project, $result);
             $queuedIndexing = $result->successful;
         });
+        $this->projectStatusPublisher->publish($projectId);
 
         if ($queuedIndexing) {
             $this->projectIndexManager->queueId($projectId);

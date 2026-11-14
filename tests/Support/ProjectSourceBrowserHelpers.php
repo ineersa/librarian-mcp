@@ -52,22 +52,12 @@ trait ProjectSourceBrowserHelpers
         return $page;
     }
 
-    protected function fillProjectName(string $name): void
-    {
-        $this->page->getByLabel('Name', ['exact' => true])->fill($name);
-    }
-
-    protected function submitRegisterOrEditForm(): void
-    {
-        $this->submitEasyAdminForm();
-    }
-
     protected function registerProject(string $name, string $visibleDirectory): string
     {
         $this->openRegisterProjectForm();
-        $this->fillProjectName($name);
+        $this->page->getByLabel('Name', ['exact' => true])->fill($name);
         $this->page->getByLabel('Project directory', ['exact' => true])->fill($visibleDirectory);
-        $this->submitRegisterOrEditForm();
+        $this->submitEasyAdminForm();
         $this->page->waitForURL('**/admin/projects');
         $id = $this->page->locator('tr[data-project-id]')->filter(['hasText' => $name])->getAttribute('data-project-id');
         self::assertNotNull($id);
@@ -79,25 +69,17 @@ trait ProjectSourceBrowserHelpers
 
     protected function openProjectDetail(string $projectId): PageInterface
     {
-        $page = $this->visit('/admin/projects/'.$projectId);
+        $page = $this->openProjectsIndex();
+        $page->locator('tr[data-project-id="'.$projectId.'"] td[data-column="name"]')->click();
+        $page->waitForURL('**/admin/projects/'.$projectId.'**');
         $page->locator('#project-source-status')->waitFor();
 
         return $page;
     }
 
-    protected function triggerScanSources(): void
-    {
-        $this->page->getByRole('button', ['name' => 'Scan sources'])->click();
-    }
-
-    protected function triggerIndexNow(): void
-    {
-        $this->page->getByRole('button', ['name' => 'Index now'])->click();
-    }
-
     protected function waitForProjectHealth(ProjectHealth $health): void
     {
-        Expect::locator($this->page->locator('[data-project-health]'))
+        Expect::locator($this->page->locator('#project-source-status'))
             ->toHaveAttribute('data-project-health', $health->value, new AssertionOptions(timeoutMs: 60_000));
         if (ProjectHealth::Ready === $health) {
             Expect::locator($this->page->locator('#project-source-status'))
@@ -111,6 +93,8 @@ trait ProjectSourceBrowserHelpers
             ->toBeVisible(new AssertionOptions(timeoutMs: $timeoutMs));
         Expect::locator($this->page->locator('#project-index-status'))
             ->toHaveAttribute('data-index-pending', '0', new AssertionOptions(timeoutMs: $timeoutMs));
+        Expect::locator($this->page->locator('#project-index-status [data-index-status-label]'))
+            ->toContainText('Indexed', new AssertionOptions(timeoutMs: $timeoutMs));
         Expect::locator($this->page->locator('[data-index-parent-count-value]'))
             ->not()->toHaveText('0', new AssertionOptions(timeoutMs: $timeoutMs));
         $parentCount = trim((string) $this->page->locator('[data-index-parent-count-value]')->textContent());
@@ -122,9 +106,10 @@ trait ProjectSourceBrowserHelpers
             ->not()->toHaveText('Never indexed', new AssertionOptions(timeoutMs: 10_000));
     }
 
-    protected function openSearchMemory(): PageInterface
+    protected function openSearchMemory(string $projectId): PageInterface
     {
-        $this->page->getByRole('button', ['name' => 'Search memory'])->click();
+        $this->openProjectsIndex()->locator('tr[data-project-id="'.$projectId.'"]')
+            ->getByRole('button', ['name' => 'Search memory'])->click();
         $this->page->waitForURL('**/search-memory**');
         $this->page->locator('#project-memory-search')->waitFor();
 
@@ -147,7 +132,15 @@ trait ProjectSourceBrowserHelpers
 
     protected function assertSourceCount(string $label, int $expected): void
     {
-        $value = $this->page->locator('.field-group:has(.field-label > :text-is("'.$label.'")) .field-value')->textContent();
+        $selector = match ($label) {
+            'Observations' => '[data-source-count="observations"]',
+            'Reflections' => '[data-source-count="reflections"]',
+            'Sessions' => '[data-source-count="sessions"]',
+            default => throw new \InvalidArgumentException(\sprintf('Unsupported live source count label "%s".', $label)),
+        };
+        $locator = $this->page->locator('#project-source-status '.$selector);
+        Expect::locator($locator)->toHaveText((string) $expected, new AssertionOptions(timeoutMs: 60_000));
+        $value = $locator->textContent();
         self::assertSame((string) $expected, trim((string) $value));
     }
 }

@@ -40,6 +40,26 @@ class IndexGenerationRepository extends ServiceEntityRepository
     }
 
     /**
+     * @param list<int> $projectIds
+     *
+     * @return array<int, IndexGeneration>
+     */
+    public function findLatestByProjectIds(array $projectIds): array
+    {
+        return $this->mapLatestPerProject($projectIds, activeOnly: false);
+    }
+
+    /**
+     * @param list<int> $projectIds
+     *
+     * @return array<int, IndexGeneration>
+     */
+    public function findActiveByProjectIds(array $projectIds): array
+    {
+        return $this->mapLatestPerProject($projectIds, activeOnly: true);
+    }
+
+    /**
      * @return list<IndexGeneration>
      */
     public function findObsoleteForProject(int $projectId, int $keepGenerationId): array
@@ -55,5 +75,42 @@ class IndexGenerationRepository extends ServiceEntityRepository
             ->getResult();
 
         return $generations;
+    }
+
+    /**
+     * @param list<int> $projectIds
+     *
+     * @return array<int, IndexGeneration>
+     */
+    private function mapLatestPerProject(array $projectIds, bool $activeOnly): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            $projectIds,
+            static fn (mixed $id): bool => \is_int($id) && $id > 0,
+        )));
+        if ([] === $ids) {
+            return [];
+        }
+
+        $qb = $this->createQueryBuilder('g')
+            ->andWhere('IDENTITY(g.project) IN (:projectIds)')
+            ->setParameter('projectIds', $ids)
+            ->orderBy('g.id', 'DESC');
+        if ($activeOnly) {
+            $qb->andWhere('g.active = true');
+        }
+
+        /** @var list<IndexGeneration> $generations */
+        $generations = $qb->getQuery()->getResult();
+
+        $byProject = [];
+        foreach ($generations as $generation) {
+            $projectId = (int) $generation->project->id;
+            if (!isset($byProject[$projectId])) {
+                $byProject[$projectId] = $generation;
+            }
+        }
+
+        return $byProject;
     }
 }
