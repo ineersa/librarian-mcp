@@ -5,16 +5,16 @@
 Librarian registers **local directories**. It discovers Hatfield OM/session metadata read-only, then builds Librarian-owned hybrid indexes from retained observations/reflections. It does not boot Hatfield, load extension PHP, run source migrations, or clone repositories.
 
 - **Sources discovered** (`ready`) means discovery succeeded, not that memories are indexed.
-- **Search memory** is an admin action over derived data. Indexing starts automatically after discovery and on the scheduler (default 60s). **Check for updates** is optional and never rebuilds. Search never synchronously ingests or rebuilds a project and has no date-window UI.
+- **Search memory** is a per-project list action over derived data. Discovery and incremental indexing run automatically (default 60s), without manual scan/index buttons. Search never synchronously ingests or rebuilds a project and has no date-window UI.
 - Public MCP memory tools remain **plan 05**.
 - Design and validation status live in [indexing-design.md](indexing-design.md) and [indexing-validation.md](indexing-validation.md).
 
 ## Identity and removal
 
-- `Project.id` is an auto-increment integer, stable across scans, renaming, and explicit administrator path rebinding.
+- `Project.id` is an auto-increment integer, stable across automatic source scans.
 - Trimmed, case-insensitive display names must be unique. Canonical directories and normalized Git origins must also be unique. A second checkout with the same origin is rejected, not silently merged. Non-Git/no-origin directories are supported.
 - Git inspection failures are registration errors, not evidence of a non-Git/no-origin directory. For mounted worktrees, make the linked worktree and common Git metadata available read-only at the paths recorded in `.git`.
-- Editing the directory rebinds the **same registration ID**. Nothing infers identity from a basename, session number, name, or origin.
+- Registration supports create/delete, not editing. To change its name or directory, remove the registration and register it again. Nothing infers identity from a basename, session number, name, or origin.
 - A scan publishes results only if the registration still refers to its scanned directory. Filesystem discovery runs outside the short Doctrine write transaction.
 - Deletion removes the Librarian registration and **owned derived indexes** (generation rows and generation-scoped Postgres store tables). It never removes the project directory, `.hatfield`, OM database, journals, or external/symlink destinations.
 - Generated migrations add Librarian-owned tables only. PostgreSQL migrations live under `migrations/postgres`. The actual development application uses PostgreSQL.
@@ -73,6 +73,6 @@ EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry s
 
 ## Validation evidence
 
-Saved coverage remains **one** Projects journey: register/discover → wait for live automatic indexing status → search a public synthetic observation → ordinary harness-owned fixture content/revision update → optional Check for updates / live status → updated search → stable-ID rebind/delete with source-hash checks. Fixture mutation is harness-owned and restored; app code must not mutate sources.
+Saved coverage remains **one** Projects journey: register → row-click details → wait for live automatic discovery/index status → per-row search of a public synthetic observation → ordinary harness-owned fixture content/revision update → scheduler-only discovery/indexing → updated search → delete with source-hash checks. Fixture mutation is harness-owned and restored; app code must not mutate sources.
 
 Do not claim plan 04 acceptance from docs alone. Prefer [indexing-design.md](indexing-design.md), [indexing-validation.md](indexing-validation.md), and [TESTING.md](../TESTING.md).

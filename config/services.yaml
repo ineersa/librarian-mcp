@@ -11,6 +11,8 @@ imports:
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    # Presentation only; PHP and database timestamps remain UTC.
+    app.display_timezone: 'America/New_York'
     app.hatfield_user_home: '%env(HATFIELD_USER_HOME)%'
     app.hatfield_app_root: '%env(HATFIELD_APP_ROOT)%'
     app.hatfield_path_mappings: '%env(json:HATFIELD_PATH_MAPPINGS)%'

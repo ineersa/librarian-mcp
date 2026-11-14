@@ -16,7 +16,7 @@ final readonly class ProjectIndexStatus
 {
     public const string STATUS_NONE = 'none';
     public const string STATUS_STALE = 'stale';
-    public const string AUTOMATIC_INDEXING_HELP = 'Automatic indexing follows source discovery on each scheduled check. Unchanged memories are skipped. Check for updates is optional.';
+    public const string AUTOMATIC_INDEXING_HELP = 'Automatic indexing follows source discovery on each scheduled check. Unchanged memories are skipped.';
 
     public function __construct(
         public int $projectId,

@@ -52,22 +52,12 @@ trait ProjectSourceBrowserHelpers
         return $page;
     }
 
-    protected function fillProjectName(string $name): void
-    {
-        $this->page->getByLabel('Name', ['exact' => true])->fill($name);
-    }
-
-    protected function submitRegisterOrEditForm(): void
-    {
-        $this->submitEasyAdminForm();
-    }
-
     protected function registerProject(string $name, string $visibleDirectory): string
     {
         $this->openRegisterProjectForm();
-        $this->fillProjectName($name);
+        $this->page->getByLabel('Name', ['exact' => true])->fill($name);
         $this->page->getByLabel('Project directory', ['exact' => true])->fill($visibleDirectory);
-        $this->submitRegisterOrEditForm();
+        $this->submitEasyAdminForm();
         $this->page->waitForURL('**/admin/projects');
         $id = $this->page->locator('tr[data-project-id]')->filter(['hasText' => $name])->getAttribute('data-project-id');
         self::assertNotNull($id);
@@ -79,25 +69,12 @@ trait ProjectSourceBrowserHelpers
 
     protected function openProjectDetail(string $projectId): PageInterface
     {
-        $page = $this->visit('/admin/projects/'.$projectId);
+        $page = $this->openProjectsIndex();
+        $page->locator('tr[data-project-id="'.$projectId.'"] td[data-column="name"]')->click();
+        $page->waitForURL('**/admin/projects/'.$projectId.'**');
         $page->locator('#project-source-status')->waitFor();
 
         return $page;
-    }
-
-    protected function triggerScanSources(): void
-    {
-        $this->page->getByRole('button', ['name' => 'Scan sources'])->click();
-    }
-
-    protected function triggerIndexNow(): void
-    {
-        $button = $this->page->getByRole('button', ['name' => 'Check for updates']);
-        if (0 === $button->count()) {
-            // Automatic indexing may already be running; live status is enough.
-            return;
-        }
-        $button->click();
     }
 
     protected function waitForProjectHealth(ProjectHealth $health): void
@@ -129,9 +106,10 @@ trait ProjectSourceBrowserHelpers
             ->not()->toHaveText('Never indexed', new AssertionOptions(timeoutMs: 10_000));
     }
 
-    protected function openSearchMemory(): PageInterface
+    protected function openSearchMemory(string $projectId): PageInterface
     {
-        $this->page->getByRole('button', ['name' => 'Search memory'])->click();
+        $this->openProjectsIndex()->locator('tr[data-project-id="'.$projectId.'"]')
+            ->getByRole('button', ['name' => 'Search memory'])->click();
         $this->page->waitForURL('**/search-memory**');
         $this->page->locator('#project-memory-search')->waitFor();
 

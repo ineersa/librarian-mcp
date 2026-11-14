@@ -21,7 +21,7 @@
         {% endif %}
         <div class="text-muted" data-index-last-success>
             {% if indexStatus.lastIndexAt %}
-                Last indexed {{ indexStatus.lastIndexAt|date('Y-m-d H:i') }}
+                Last indexed {{ indexStatus.lastIndexAt|date('Y-m-d H:i T') }}
             {% else %}
                 Never indexed
             {% endif %}

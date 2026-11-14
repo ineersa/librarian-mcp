@@ -66,7 +66,7 @@ Hatfield does not notify Librarian. Symfony Scheduler keeps indexes fresh inside
 
 Default interval is `INDEX_INTERVAL=60` seconds. `CallbackMessageProvider` yields existing source-discovery messages for registered projects; successful discovery queues incremental indexing. This refreshes paths, session/source counts and schema metadata as well as detecting memory changes. Both discovery and indexing use queue-only Messenger deduplication; the project execution lock protects index writes. No custom tick message, pagination coordinator, or polling daemon. Bound each source batch, embedding batch, and HTTP request.
 
-Admin list/detail status updates arrive through Mercure + Turbo Streams after committed checkpoints, without document refreshes. Source discovery and indexed-memory counts are separate. Automatic indexing is the default; Check for updates is an optional incremental check. Search memory remains part of the existing Projects journey. MCP memory tools remain plan 05.
+Admin list/detail status updates arrive through Mercure + Turbo Streams after committed checkpoints, without document refreshes. Source discovery and indexed-memory counts are separate. Discovery/indexing are automatic; there are no manual scan/index buttons. Projects supports registration/removal, row-click details and per-row Search memory. Search remains part of the existing Projects journey. MCP memory tools remain plan 05.
 
 An unchanged revision skips embedding/store reconciliation but still touches the generation activity time and publishes status after the short write. The UI shows last source/index check separately from last successful indexing of a new revision. An old successful-index timestamp does not mean automatic checks stopped.
 

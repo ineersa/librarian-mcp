@@ -3,7 +3,7 @@
 {% block main %}
     {{ turbo_stream_from(statusTopics.list) }}
     <p class="text-muted small mb-3">
-        Source discovery and incremental indexing run automatically. Unchanged memories are skipped; Check for updates is optional.
+        Source discovery and incremental indexing run automatically. Click a project row for details or use Search memory to search its index.
     </p>
     {{ parent() }}
 {% endblock %}

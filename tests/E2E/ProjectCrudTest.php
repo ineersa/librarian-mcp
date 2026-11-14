@@ -21,8 +21,6 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
         $visiblePath = ProjectSourceFixture::visibleProjectPath($slug);
         $builderPath = ProjectSourceFixture::builderProjectPath($slug);
         $before = ProjectSourceFixture::hashTree($builderPath);
-        $reboundPath = ProjectSourceFixture::builderProjectPath('custom-relative');
-        $reboundBefore = ProjectSourceFixture::hashTree($reboundPath);
         $restoreFixture = null;
 
         try {
@@ -32,7 +30,6 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
             $projectId = $this->registerProject('Default OM Fixture', $visiblePath);
             $this->openProjectDetail($projectId);
-            $this->triggerScanSources();
             $this->waitForProjectHealth(ProjectHealth::Ready);
 
             $status = $this->page->locator('#project-source-status');
@@ -45,8 +42,7 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $this->assertSourceCount('Reflections', 1);
             $this->assertSourceCount('Sessions', 1);
 
-            // Discovery success queues automatic indexing; Check for updates is optional.
-            $this->triggerIndexNow();
+            // Registration starts discovery and indexing automatically.
             $this->waitForCommittedIndex(3);
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Index status', new AssertionOptions(timeoutMs: 10_000));
@@ -57,8 +53,7 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $indexCell = $this->page->locator('#project-index-list-'.$projectId);
             Expect::locator($indexCell)->toContainText('Indexed');
             Expect::locator($indexCell)->toContainText('3 indexed memories');
-            $this->openProjectDetail($projectId);
-            $this->openSearchMemory();
+            $this->openSearchMemory($projectId);
             $this->searchMemory('where was I working on synthetic observation fx-1');
             $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');
 
@@ -81,7 +76,7 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $this->waitForProjectHealth(ProjectHealth::Ready);
             $this->waitForCommittedIndex(3);
 
-            $this->openSearchMemory();
+            $this->openSearchMemory($projectId);
             $this->searchMemory($updatedContent);
             $this->assertSearchHitContains('fx-obs-1', $updatedContent);
 
@@ -91,18 +86,6 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
                 'default-om after updated search',
             );
 
-            // Explicit path rebinding and rename keep the same stable registration ID.
-            $this->visit('/admin/projects/'.$projectId.'/edit');
-            $this->fillProjectName('Rebound OM Fixture');
-            $this->page->getByLabel('Project directory', ['exact' => true])->fill(ProjectSourceFixture::visibleProjectPath('custom-relative'));
-            $this->submitRegisterOrEditForm();
-            $this->page->waitForURL('**/admin/projects');
-            $this->openProjectDetail($projectId);
-            $this->waitForProjectHealth(ProjectHealth::Ready);
-            Expect::locator($status)->toHaveAttribute('data-project-id', $projectId);
-            Expect::locator($details)->toContainText('.hatfield/custom-om/memory.sqlite');
-            Expect::locator($this->page->getByRole('heading', ['level' => 1]))->toContainText('Rebound OM Fixture');
-
             $this->deleteRecord('/admin/projects/'.$projectId);
             $this->openProjectsIndex();
             self::assertSame(0, $this->page->locator('tr[data-project-id="'.$projectId.'"]')->count());
@@ -111,11 +94,6 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
                 $afterMutation,
                 ProjectSourceFixture::hashTree($builderPath),
                 'default-om removal',
-            );
-            ProjectSourceFixture::assertUnchanged(
-                $reboundBefore,
-                ProjectSourceFixture::hashTree($reboundPath),
-                'rebound source removal',
             );
             self::assertDirectoryExists($builderPath);
             self::assertFileExists($builderPath.'/.hatfield/extensions-data/observational-memory/om.sqlite');
