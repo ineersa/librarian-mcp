@@ -29,6 +29,13 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             self::assertTrue($page->getByRole('heading', ['name' => 'Projects', 'exact' => true])->isVisible());
 
             $projectId = $this->registerProject('Default OM Fixture', $visiblePath);
+            $indexCell = $this->page->locator('#project-index-list-'.$projectId);
+            Expect::locator($indexCell->locator('[data-source-count="observations"]'))
+                ->toHaveText('2', new AssertionOptions(timeoutMs: 60_000));
+            Expect::locator($indexCell->locator('[data-source-count="reflections"]'))->toHaveText('1');
+            Expect::locator($indexCell->locator('[data-index-status-label]'))
+                ->toHaveText('Indexed', new AssertionOptions(timeoutMs: 180_000));
+            Expect::locator($indexCell)->toContainText('3 indexed memories');
             $this->openProjectDetail($projectId);
             $this->waitForProjectHealth(ProjectHealth::Ready);
 
@@ -49,14 +56,12 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Automatic indexing', new AssertionOptions(timeoutMs: 10_000));
 
-            $this->openProjectsIndex();
-            $indexCell = $this->page->locator('#project-index-list-'.$projectId);
-            Expect::locator($indexCell)->toContainText('Indexed');
-            Expect::locator($indexCell)->toContainText('3 indexed memories');
             $this->openSearchMemory($projectId);
             $this->searchMemory('where was I working on synthetic observation fx-1');
             $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');
 
+            $this->openProjectsIndex();
+            $listTimeOrigin = $this->page->evaluate('performance.timeOrigin');
             $updatedContent = 'synthetic observation fx-1 updated for indexing';
             $restoreFixture = ProjectSourceFixture::updateObservationContent(
                 $builderPath,
@@ -69,6 +74,9 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             self::assertNotSame($before, $afterMutation, 'Harness-owned fixture mutation must change the source hash.');
 
             // The scheduler must discover and index the update without either manual action.
+            Expect::locator($indexCell)->toHaveAttribute('data-source-revision', '5', new AssertionOptions(timeoutMs: 60_000));
+            Expect::locator($indexCell->locator('[data-source-last-check]'))->not()->toContainText('Not checked yet');
+            self::assertSame($listTimeOrigin, $this->page->evaluate('performance.timeOrigin'), 'Live list updates must not reload the page.');
             $this->openProjectDetail($projectId);
             Expect::locator($this->page->locator('[data-index-committed-revision-value]'))
                 ->toHaveText('5', new AssertionOptions(timeoutMs: 60_000));

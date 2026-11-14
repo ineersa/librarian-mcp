@@ -40,7 +40,7 @@ final class ProjectStatusPublisher
                 return;
             }
 
-            $status = $this->statusFactory->refresh($project);
+            $status = $this->statusFactory->forProject($project);
             $payload = $this->twig->render('admin/project/status/update.stream.html.twig', [
                 'project' => $project,
                 'indexStatus' => $status,
@@ -52,6 +52,7 @@ final class ProjectStatusPublisher
                     ProjectStatusTopics::LIST_STATUS,
                 ],
                 $payload,
+                private: true,
             ));
         } catch (\Throwable $exception) {
             // Status transport is best-effort; indexing/discovery must remain usable.

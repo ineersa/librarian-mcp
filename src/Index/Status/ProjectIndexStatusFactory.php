@@ -6,16 +6,12 @@ namespace App\Index\Status;
 
 use App\Entity\Project;
 use App\Repository\IndexGenerationRepository;
-use Symfony\Contracts\Service\ResetInterface;
 
 /**
- * Builds and request-caches project index status views.
+ * Builds fresh project index status views, in bulk for the list page.
  */
-final class ProjectIndexStatusFactory implements ResetInterface
+final class ProjectIndexStatusFactory
 {
-    /** @var array<int, ProjectIndexStatus> */
-    private array $cache = [];
-
     public function __construct(
         private readonly IndexGenerationRepository $indexGenerationRepository,
     ) {
@@ -27,22 +23,18 @@ final class ProjectIndexStatusFactory implements ResetInterface
             throw new \InvalidArgumentException('Project id is required for status presentation.');
         }
 
-        if (isset($this->cache[$project->id])) {
-            return $this->cache[$project->id];
-        }
-
         $latest = $this->indexGenerationRepository->findLatestForProject($project->id);
         $active = $this->indexGenerationRepository->findActiveForProject($project->id);
-        $status = ProjectIndexStatus::fromProject($project, $latest, $active);
-        $this->cache[$project->id] = $status;
 
-        return $status;
+        return ProjectIndexStatus::fromProject($project, $latest, $active);
     }
 
     /**
      * @param list<Project> $projects
+     *
+     * @return array<int, ProjectIndexStatus>
      */
-    public function warm(array $projects): void
+    public function forProjects(array $projects): array
     {
         $ids = [];
         $byId = [];
@@ -54,41 +46,20 @@ final class ProjectIndexStatusFactory implements ResetInterface
             $byId[$project->id] = $project;
         }
         if ([] === $ids) {
-            return;
+            return [];
         }
 
         $latestByProject = $this->indexGenerationRepository->findLatestByProjectIds($ids);
         $activeByProject = $this->indexGenerationRepository->findActiveByProjectIds($ids);
+        $statuses = [];
         foreach ($byId as $projectId => $project) {
-            $this->cache[$projectId] = ProjectIndexStatus::fromProject(
+            $statuses[$projectId] = ProjectIndexStatus::fromProject(
                 $project,
                 $latestByProject[$projectId] ?? null,
                 $activeByProject[$projectId] ?? null,
             );
         }
-    }
 
-    public function forget(int $projectId): void
-    {
-        unset($this->cache[$projectId]);
-    }
-
-    public function reset(): void
-    {
-        $this->cache = [];
-    }
-
-    /**
-     * Reloads one project status after committed worker updates.
-     */
-    public function refresh(Project $project): ProjectIndexStatus
-    {
-        if (null === $project->id) {
-            throw new \InvalidArgumentException('Project id is required for status presentation.');
-        }
-
-        $this->forget($project->id);
-
-        return $this->forProject($project);
+        return $statuses;
     }
 }

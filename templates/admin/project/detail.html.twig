@@ -2,7 +2,7 @@
 
 {% block main %}
     {% set project = entity.instance %}
-    {{ turbo_stream_from(statusTopics.project) }}
+    {{ turbo_stream_from(statusTopics.project, private: true) }}
 
     {% include 'admin/project/status/_source_panel.html.twig' with {
         project: project,

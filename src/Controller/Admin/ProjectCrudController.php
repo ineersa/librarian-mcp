@@ -10,7 +10,6 @@ use App\Form\Type\ProjectMemorySearchType;
 use App\Index\IndexException;
 use App\Index\ProjectIndexManager;
 use App\Index\Search\HybridSearch;
-use App\Index\Status\ProjectIndexStatus;
 use App\Index\Status\ProjectIndexStatusFactory;
 use App\Index\Status\ProjectStatusTopics;
 use App\Project\ProjectManager;
@@ -115,13 +114,6 @@ class ProjectCrudController extends AbstractCrudController
         yield TextField::new('indexStatusSummary', 'Indexing')
             ->onlyOnIndex()
             ->setVirtual(true)
-            ->formatValue(function (mixed $value, ?Project $entity): ?ProjectIndexStatus {
-                if (!$entity instanceof Project || null === $entity->id) {
-                    return null;
-                }
-
-                return $this->projectIndexStatusFactory->forProject($entity);
-            })
             ->setTemplatePath('admin/project/field/index_status.html.twig');
 
         yield TextareaField::new('lastError')
@@ -143,10 +135,12 @@ class ProjectCrudController extends AbstractCrudController
 
         yield IntegerField::new('observationCount', 'Observations')
             ->hideOnForm()
+            ->hideOnIndex()
             ->setHelp('Discovered source observations, not indexed memories.');
 
         yield IntegerField::new('reflectionCount', 'Reflections')
             ->hideOnForm()
+            ->hideOnIndex()
             ->setHelp('Discovered source reflections, not indexed memories.');
 
         yield IntegerField::new('sessionCount', 'Sessions')
@@ -174,7 +168,8 @@ class ProjectCrudController extends AbstractCrudController
             });
 
         yield DateTimeField::new('lastScanAt', 'Last scan')
-            ->hideOnForm();
+            ->hideOnForm()
+            ->hideOnIndex();
 
         yield DateTimeField::new('lastSuccessfulScanAt', 'Last successful scan')
             ->hideOnForm()
@@ -219,13 +214,23 @@ class ProjectCrudController extends AbstractCrudController
             $entities = $responseParameters->get('entities');
             if (is_iterable($entities)) {
                 $projects = [];
+                $projectEntities = [];
                 foreach ($entities as $entity) {
-                    $project = $entity instanceof EntityDto ? $entity->getInstance() : null;
-                    if ($project instanceof Project) {
+                    if (!$entity instanceof EntityDto) {
+                        continue;
+                    }
+                    $project = $entity->getInstance();
+                    if ($project instanceof Project && null !== $project->id) {
                         $projects[] = $project;
+                        $projectEntities[$project->id] = $entity;
                     }
                 }
-                $this->projectIndexStatusFactory->warm($projects);
+                $statuses = $this->projectIndexStatusFactory->forProjects($projects);
+                foreach ($projectEntities as $projectId => $entity) {
+                    // EasyAdmin includes field templates without the response context.
+                    // Pass the bulk-built statuses through its already-formatted DTOs.
+                    $entity->getFields()->getByProperty('indexStatusSummary')?->setFormattedValue($statuses[$projectId]);
+                }
             }
 
             $responseParameters->set('statusTopics', [
