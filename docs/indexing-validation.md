@@ -17,7 +17,7 @@ The development application and browser stack both run PostgreSQL with the Doctr
 
 A headless browser verified the actual development homepage → native EasyAdmin login: both HTTP 200, assets loaded, no console errors. This check did not submit credentials. The existing browser journey remains the evidence for authenticated indexing/search behavior.
 
-## Production usability deployment
+## Initial production usability deployment
 
 PR #4 code at `e184c54` was deployed to the existing production stack through Castor `prod:up` and `prod:restart`, without merging the PR. `prod:config` passed. Web/PostgreSQL were healthy; Messenger was running with its inherited HTTP health check disabled. All services used `unless-stopped`; both app containers retained the identical read-only projects mount. No migration, database reset, source mutation or volume removal was performed.
 
@@ -28,6 +28,20 @@ A headless production browser verified:
 - The exact reported natural-language query at limit 10 returned **10 results**, versus two newer question-related records before deployment. Historical OpenCode provider/token-usage work was present, but ranking remained mixed: the first three results were recent question/search-related repetitions. No visible or console errors. Only that query was submitted; no indexing actions or record changes were made.
 
 Private result snapshots remain local and are not part of this documentation.
+
+## Automatic discovery follow-up
+
+Code at `ac95fd9` was deployed through Castor `prod:up` and `prod:restart`. Source and committed revisions had both been 6946 when the owner reported the stale timestamp: unchanged data was already indexed, but full periodic discovery and visible check activity were missing.
+
+The existing Projects browser journey now verifies scheduler-only discovery and indexing after its ordinary fixture update. Formatting, all **5 journeys / 48 assertions**, static QA and diff checks passed.
+
+A production browser then observed an ordinary automatic cycle without manual scan/index actions, searches or agent-made source changes:
+
+- Source-check time advanced from 02:29:15 to 02:30:15 UTC on 2026-11-14, with corresponding index activity; the page transitioned from Updating index to Indexed with 26,638 memories.
+- Actual Mercure messages replaced both status panel DOM nodes. An in-memory marker and time origin survived; navigation count stayed at one. No meta refresh or console errors.
+- The next check advanced both check timestamps to 02:31:15 while last successful index stayed at 02:29:53, proving an unchanged-data check is visible without claiming a new commit. The list showed the separate check time too.
+
+Production automatic checks and live status replacement are therefore observed, not merely wired. No owner data was reset or source changes forced.
 
 ## Limits
 

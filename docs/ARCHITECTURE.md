@@ -76,9 +76,9 @@ Details: [project-sources.md](project-sources.md), [indexing-design.md](indexing
 1. Persist / update project registration
 2. Queue scan message on Messenger `async`
 3. Worker marks health `scanning`, discovers sources read-only
-4. On success: health `ready` with discovered paths/counts/schema/revision; indexing may be queued
+4. On success: health `ready` with discovered paths/counts/schema/revision; incremental indexing is queued
 5. Index worker acquires the project execution lock, reads bounded source batches, embeds outside short DB writes, then upserts/removes store chunks + commits the relational manifest in one short PostgreSQL transaction
-6. Scheduler `CallbackMessageProvider` yields project indexing jobs every `INDEX_INTERVAL` seconds (default 60) without a custom tick protocol or OS cron
+6. Scheduler `CallbackMessageProvider` yields source-discovery jobs for registered projects every `INDEX_INTERVAL` seconds (default 60), reusing the scan → incremental-index path without a custom tick protocol or OS cron. Unchanged revisions record check activity without re-embedding.
 7. On failure: sanitized `lastError` / generation error state; Messenger retries remain replay-safe for deterministic IDs
 
 Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match and does not apply date filters.
