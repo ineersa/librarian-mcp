@@ -27,7 +27,7 @@ Saved journeys in `tests/E2E/` (product path after plan 03):
 | Homepage | Public landing / login entry |
 | Authentication | Login and logout (dashboard title: Projects dashboard) |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
-| Projects | Register via absolute path input, wait for live async discovery/index status without page reloads, optional Check for updates, natural-language search for a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + reindex/search, edit/rescan, detail, remove only its registration |
+| Projects | Register via absolute path input, wait for live async discovery/index status without page reloads, optional Check for updates, natural-language search for a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + scheduler-only discovery/reindex/search without manual actions, edit/rescan, detail, remove only its registration |
 | MCP HTTP | Optional token path: regenerate the isolated admin's token through the UI when used, then initialize / initialized / tools-list over real HTTP (`tools/list` empty until plan 05) |
 
 The Projects journey uses only the two synthetic source trees needed for registration and path rebinding during edit. Intentional fixture mutation is allowed only through harness-owned helpers against verified synthetic paths, with restore in `finally` so repeated runs stay idempotent. It never imports operator `compose.sources.yaml` overlays or private owner projects.

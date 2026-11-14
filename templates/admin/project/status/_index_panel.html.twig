@@ -33,6 +33,8 @@
                     <dd class="col-sm-8">
                         <span data-index-parent-count-value>{{ indexStatus.indexedMemoryCount }}</span>
                     </dd>
+                    <dt class="col-sm-4">{{ indexStatus.pending ? 'Last indexing activity' : 'Last index check' }}</dt>
+                    <dd class="col-sm-8" data-index-last-check>{{ indexStatus.latest.updatedAt|date('Y-m-d H:i:s T') }}</dd>
                     <dt class="col-sm-4">Last successful index</dt>
                     <dd class="col-sm-8" data-index-last-success>
                         {% if indexStatus.lastIndexAt %}
@@ -42,6 +44,9 @@
                         {% endif %}
                     </dd>
                 </dl>
+                <p class="small text-muted mt-2 mb-0">
+                    Checks do not rebuild unchanged memories. The last successful index time changes when a new source revision is committed.
+                </p>
                 {% if indexStatus.active and indexStatus.active.id != indexStatus.latest.id %}
                     <p class="small mt-2 mb-0">
                         Search still uses the previous index of {{ indexStatus.active.parentCount|number_format }} memories.

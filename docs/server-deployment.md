@@ -143,7 +143,7 @@ Then publish host 443 with a local compose override.
 - Project sources are mounted read-only.
 - Postgres stays on the private network with no host ports. Worker consumes Messenger `async` and `scheduler_default`.
 - Web, Messenger and PostgreSQL use `restart: unless-stopped`. The Messenger-only container disables the image's Caddy HTTP health check because it does not run an HTTP server; a running worker is not an HTTP health-check result.
-- Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
+- Scheduler uses `CallbackMessageProvider` for automatic source discovery followed by incremental indexing (`INDEX_INTERVAL`, default 60s). Check timestamps advance even when unchanged memories do not need rebuilding.
 - Live admin status uses Mercure + Turbo Streams. If a reverse proxy is added, preserve long-lived, unbuffered event-stream responses and a browser-reachable `MERCURE_PUBLIC_URL`.
 - Registration deletion removes owned derived indexes only; never source trees.
 - `data-prod/` and private production settings are ignored; preserve them across builds and checkout changes.

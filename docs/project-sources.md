@@ -63,7 +63,7 @@ Config surface:
 - `BGE_URL`, `BGE_MODEL`
 - `INDEX_INTERVAL`, `LOCK_DSN`
 
-Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (default interval 60s).
+Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs for registered projects (default interval 60s); successful discovery queues incremental indexing. Last source/index check is shown separately from last successful index. An unchanged revision is checked, not rebuilt.
 
 ## Docker source mounts
 

@@ -73,13 +73,13 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $afterMutation = ProjectSourceFixture::hashTree($builderPath);
             self::assertNotSame($before, $afterMutation, 'Harness-owned fixture mutation must change the source hash.');
 
+            // The scheduler must discover and index the update without either manual action.
             $this->openProjectDetail($projectId);
-            $this->triggerScanSources();
-            $this->waitForProjectHealth(ProjectHealth::Ready);
-            $this->triggerIndexNow();
-            $this->waitForCommittedIndex(3);
             Expect::locator($this->page->locator('[data-index-committed-revision-value]'))
                 ->toHaveText('5', new AssertionOptions(timeoutMs: 60_000));
+            Expect::locator($this->page->locator('[data-index-source-revision]'))->toHaveText('5');
+            $this->waitForProjectHealth(ProjectHealth::Ready);
+            $this->waitForCommittedIndex(3);
 
             $this->openSearchMemory();
             $this->searchMemory($updatedContent);

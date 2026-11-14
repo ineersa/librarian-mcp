@@ -16,6 +16,9 @@
     >
         <div class="fw-semibold" data-index-status-label>{{ indexStatus.statusLabel }}</div>
         <div class="text-muted" data-index-summary-label>{{ indexStatus.indexedMemoryCount|number_format }} {{ indexStatus.pending ? 'memories processed so far' : 'indexed memories' }}</div>
+        {% if indexStatus.latest %}
+            <div class="text-muted" data-index-last-check>Last checked {{ indexStatus.latest.updatedAt|date('Y-m-d H:i:s T') }}</div>
+        {% endif %}
         <div class="text-muted" data-index-last-success>
             {% if indexStatus.lastIndexAt %}
                 Last indexed {{ indexStatus.lastIndexAt|date('Y-m-d H:i') }}

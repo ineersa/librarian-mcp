@@ -7,7 +7,7 @@ Validated on 2026-11-13 after switching to the unmodified Symfony AI Postgres st
 - `vendor/bin/castor tooling:prepare` passed with `pdo_pgsql`; `pdo_sqlite` remains available for read-only Hatfield sources.
 - Generated `migrations/postgres/Version20261113171951.php` through Doctrine against task-owned `librarian_iso_pg_native_schema`. Reviewed its forward changes: application/Messenger tables, integer identity keys, indexes and foreign keys; no existing tables dropped. Applied it there and `doctrine:schema:validate` confirmed the mappings and database agree.
 - `vendor/bin/castor cs:fix` and `qa:static` passed: Composer validation, style, PHPStan and runtime-complete Symfony LSP checks.
-- Latest production-usability follow-up: `vendor/bin/castor cs:fix`, `test` and `qa:static` passed. **5 headless browser journeys, 48 assertions**, zero failures/errors. Exactly one Projects journey covers live source/index status, list indexing visibility, optional Check for updates, natural-language native hybrid search + BGE, an ordinary synthetic source update and updated search, path rebinding, and removal with source-hash checks. No scenario matrix was added.
+- Latest production-usability follow-up: `vendor/bin/castor cs:fix`, `test` and `qa:static` passed. **5 headless browser journeys, 48 assertions**, zero failures/errors. Exactly one Projects journey covers live source/index status, list indexing visibility, optional Check for updates, natural-language native hybrid search + BGE, an ordinary synthetic source update picked up by scheduled discovery/indexing **without either manual action**, updated search, path rebinding, and removal with source-hash checks. No scenario matrix was added.
 - A throwaway in-memory SQLite `EXPLAIN QUERY PLAN` confirmed subsequent source pages use primary-key `SEARCH … (observation_id>?)`; the first page scans in primary-key order. This is query-plan evidence, not a corpus benchmark.
 - `vendor/bin/castor dev:stack:up` passed after removing development Compose model overrides, recreating the running development services with the corrected environment configuration.
 
@@ -33,7 +33,7 @@ Private result snapshots remain local and are not part of this documentation.
 
 - Native hybrid uses weighted pgvector similarity and PostgreSQL `ts_rank`, requires a lexical match, and has no date-filter UI. Relevance/performance tuning is deferred.
 - The bridge creates no full-text index, and HNSW cannot satisfy hybrid's weighted ordering. The 100-candidate limit bounds returned results and reranking, not database scanning. Realistic-corpus search performance is unestablished; a matching GIN expression index is a future upstream improvement, not part of this change.
-- The Scheduler callback is wired, but autonomous periodic pickup is not separately browser-proven: the existing journey explicitly requests indexing after its fixture update.
+- Autonomous pickup is browser-proven with the existing synthetic fixture and the browser stack's short scheduler interval. No source changes were forced in production to test ingestion.
 - No benchmarks, fault injection, concurrency or isolation matrix were added or run.
 - Proxy-port conflicts and closed-manager failure paths were inspected, not exercised through new negative/fault scenarios. Happy-path checks do not establish those boundaries.
 - In-place source restores preserving filesystem identity and canonical revision are not reliably detected.

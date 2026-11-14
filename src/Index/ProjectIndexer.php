@@ -93,9 +93,11 @@ final class ProjectIndexer
             if ($generation->committedRevision === $snapshot->revision) {
                 if (IndexState::Error === $generation->state) {
                     $generation->markReady($this->clock->now());
-                    $this->entityManager->flush();
-                    $this->projectStatusPublisher->publish($projectId);
+                } else {
+                    $generation->touch($this->clock->now());
                 }
+                $this->entityManager->flush();
+                $this->projectStatusPublisher->publish($projectId);
                 $this->removeObsoleteGenerations($projectId, (int) $generation->id);
 
                 return false;

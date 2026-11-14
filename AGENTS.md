@@ -97,7 +97,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.
 - Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`.
-- Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield indexing jobs directly (`INDEX_INTERVAL`, default 60s).
+- Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs (`INDEX_INTERVAL`, default 60s); successful discovery queues incremental indexing. Unchanged source revisions are checked without rebuilding.
 
 ## Suggested defaults for new features
 

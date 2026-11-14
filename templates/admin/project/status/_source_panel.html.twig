@@ -12,9 +12,11 @@
             <span data-project-health-label>{{ indexStatus.health.label() }}</span>
         </p>
         <p class="mb-1 text-muted">
-            Source discovery is separate from indexing. Automatic indexing starts after sources are ready.
+            Sources are discovered automatically, followed by an incremental index check. Unchanged memories are skipped.
         </p>
         <dl class="row mb-2 small">
+            <dt class="col-sm-4">Last source check</dt>
+            <dd class="col-sm-8" data-source-last-check>{{ project.lastScanAt ? project.lastScanAt|date('Y-m-d H:i:s T') : 'Not checked yet' }}</dd>
             <dt class="col-sm-4">Observations</dt>
             <dd class="col-sm-8" data-source-count="observations">{{ project.observationCount }}</dd>
             <dt class="col-sm-4">Reflections</dt>
