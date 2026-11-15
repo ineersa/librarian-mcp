@@ -28,13 +28,13 @@ Saved journeys in `tests/E2E/` (product path after plan 03):
 | Authentication | Login and logout (dashboard title: Projects dashboard) |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
 | Projects | Register via absolute path input, click row for detail, wait for live automatic discovery/index status without page reloads, per-row natural-language search for a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + scheduler-only discovery/reindex/search, remove only its registration |
-| MCP HTTP | Plan 05 extends this **single** journey: login, regenerate required MCP token in the UI, register **two** tiny synthetic sources sharing the same OM session id, wait for automatic indexing, then official PHP SDK over real HTTP for discovery (`memory_search` + `recall` only), search with date bounds, recall (current-session default + cross-session), and cross-project header isolation. No new suite; no special negative/security/concurrency matrices without owner approval. Until plan 05 lands, keep initialize / tools-list smoke (`tools/list` empty) |
+| MCP HTTP | Single journey: login, regenerate required MCP token in the UI, register **two** tiny synthetic sources with identical canonical IDs and OM run `108`, wait for automatic indexing, then official PHP SDK over real HTTP for discovery (`memory_search` + `recall` only), search with day+minute bounds, observation prefix recall on current session (header `108`), reflection recall with explicit `session_id=108`, project B search+recall isolation, cleanup with source-hash checks. Explicit `session_id` is proven; do not call that cross-session proof when the header is the same `108`. SDK keeps the printed browser URL and resolves via `LIBRARIAN_PROXY_IP` (Symfony HttpClient `resolve`). No new suite; no special negative/security/concurrency matrices without owner approval |
 
 The Projects journey registers one synthetic source tree. Intentional fixture mutation is allowed only through harness-owned helpers against verified synthetic paths, with restore in `finally` so repeated runs stay idempotent. It never imports operator `compose.sources.yaml` overlays or private owner projects.
 
 CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. After the journey restores any intentional harness mutation, source fixture trees/databases must match the pre-journey hash; registration removal must not change sources.
 
-Do not add unit/API-only suites as the primary coverage model. Public MCP memory tools remain plan 05. Do not claim plan 04 acceptance from docs alone; see [indexing design](docs/indexing-design.md) and [indexing validation](docs/indexing-validation.md).
+Do not add unit/API-only suites as the primary coverage model. Plan 05 MCP tools are covered by the MCP journey above. Recorded on the main implementation worktree: `cs:fix` passed; one headless MCP journey **46 assertions** / **5.059s**; `qa:static` passed. Full existing suite is scheduled next and is **not** claimed here. See [MCP contract](docs/MCP.md), [indexing design](docs/indexing-design.md), and [indexing validation](docs/indexing-validation.md).
 
 ## Prepare the tooling runtime
 
@@ -117,4 +117,4 @@ Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, 
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
 - Speculative Symfony AI backends beyond the approved CodeRank + official Postgres store + local BGE baseline
-- Remote deployments, data backup, and Hatfield semantic removal (plans 06–07). Plan 05 browser proof stays inside the existing MCP journey above; this document does **not** claim those checks have passed
+- Remote deployments, data backup, and Hatfield semantic removal (plans 06–07 remain TODO). Plan 05 MCP journey proof is recorded above; full-suite result is not claimed here

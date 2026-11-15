@@ -1,4 +1,4 @@
-# Librarian MCP — MCP Contract (current + plan 05)
+# Librarian MCP — MCP Contract
 
 ## 1) Transport and endpoint
 
@@ -13,70 +13,67 @@ Current mode:
 - **STDIO transport disabled**
 - Endpoint path: **`/_mcp`**
 
-MCP bundle **0.15** (with `mcp/sdk` **0.9**) configures the application server as `mcp.servers.librarian` and requires an **explicit tool registry**.
+MCP bundle **0.15** (with `mcp/sdk` **0.9**) configures `mcp.servers.librarian` with an explicit tool registry. Attribute namespace on the locked SDK is `Mcp\Capability\Attribute` (`McpTool`, `Schema`).
 
-Protocol versions (plan 05): configure **2026-07-28** as primary and **2025-11-25** as fallback explicitly. Allowed HTTP hosts remain `MCP_ALLOWED_HOSTS` (CSV).
+Protocol versions: **2026-07-28** primary (exercised by the MCP journey) and **2025-11-25** fallback (configured, not separately proven). Allowed HTTP hosts: `MCP_ALLOWED_HOSTS` (CSV).
+
+Upstream HybridQuery date-filter provenance: https://github.com/symfony/ai/pull/2950 — see also [postgres-hybrid-filters.md](postgres-hybrid-filters.md).
 
 ---
 
-## 2) Authentication model
+## 2) Authentication
 
-MCP auth is separate from browser session auth.
+MCP auth is separate from browser session auth (no cookies on the MCP channel).
 
 Firewall:
 
 - `security.firewalls.mcp` (stateless, path `^/_mcp`)
-- custom authenticator: `App\Security\McpTokenAuthenticator`
+- `App\Security\McpTokenAuthenticator`
 
-**Plan 05 auth (approved; supersedes earlier optional-auth empty-registry smoke):**
+Token is **required** for the endpoint:
 
-- MCP token is **required** for tool use (private memory data).
-- Accepted headers only:
-  1. `Authorization: Bearer <token>`
-  2. `X-MCP-Token: <token>`
-- **Remove** URL query-token fallbacks (`token` / `access_token`) and raw `Authorization: mcp_...` compatibility once plan 05 lands.
-- Successful auth requires `ROLE_MCP`. Catalog is single-admin, not per-user ACL.
+1. `Authorization: Bearer <token>`
+2. `X-MCP-Token: <token>`
 
-Token lifecycle (`App\Security\McpTokenManager`):
+URL query-token fallbacks (`token` / `access_token`) and raw `Authorization: mcp_...` are removed. Failed auth is HTTP **401**. Successful auth requires `ROLE_MCP`. Access is the single-admin registered catalog, not a per-user ACL. Registration remains an administrator operation.
 
-- plaintext format: `mcp_<random>`
-- only SHA-256 hash stored
-- regeneration updates hash + created timestamp
-- successful auth updates `mcpTokenLastUsedAt`
-
-MCP callers still cannot register projects. Registration remains an administrator operation.
+Token lifecycle (`App\Security\McpTokenManager`): plaintext `mcp_<random>`; SHA-256 hash stored; regeneration updates hash + created timestamp; successful auth updates `mcpTokenLastUsedAt`.
 
 ---
 
 ## 3) Connection headers (not tool arguments)
 
-Configure once on the official client `HttpTransport` additional headers; resolve on every HTTP request:
+Configure once on official client `HttpTransport` additional headers; resolve on every HTTP request:
 
 | Header | Required when | Meaning |
 |---|---|---|
 | `X-Librarian-Project` | every tool call | Absolute registered **canonical** project root |
-| `X-Hatfield-Session` | `recall` when `session_id` omitted | Hatfield OM `run_id` (journal session). **Not** the MCP protocol session id |
+| `X-Hatfield-Session` | `recall` when `session_id` is omitted | Hatfield OM `run_id` (journal session). **Not** the MCP protocol session id |
 
-No ambient shared MCP-session project selection. Missing/relative/unregistered project context → structured domain error (`invalid_project_context` / `project_not_found`). No auto-registration, global search, or arbitrary file tool.
+No ambient shared MCP-session project selection. Missing/relative/unregistered project → domain error `invalid_project_context` / `project_not_found`. No auto-registration, global search, or arbitrary file tool.
 
 ---
 
-## 4) Tool surface (plan 05)
+## 4) Tools
 
-`tools/list` exposes exactly:
+`tools/list` exposes exactly `memory_search` and `recall`.
 
 ### `memory_search`
 
 | Argument | Constraint |
 |---|---|
-| `query` | required string, `minLength` 1 (no schema `maxLength`; operational size cap may apply separately) |
+| `query` | required string, `minLength` 1; **no** schema `maxLength`; operational UTF-8 byte cap **16384** |
 | `after` | optional `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` |
 | `before` | optional same format |
-| `limit` | optional integer, min 1, max 50, default **20** |
+| `limit` | optional integer, min 1, max **50**, default **20** |
 
-Uses the existing Symfony AI hybrid pipeline on the selected project’s generation table. Date bounds filter inside PostgreSQL via HybridQuery `where`/`params` (Composer-pinned fork until upstream; see [postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Bounded candidates (~100) + BGE; report truncation and index freshness separately.
+Uses the project’s active generation table from candidate retrieval onward. Date bounds filter inside PostgreSQL via HybridQuery `where`/`params` before order/limit (UTC inclusive day/minute via exclusive next-day/minute upper bound). Hybrid stays bounded candidates + BGE (batches of 8). Parents are authoritative canonical full content and original timestamps. Empty results are valid success. Do not claim exhaustive absence from bounded retrieval.
 
-Success payload (structured + JSON text): top-level `ok`, `query`, `limit`, `count`, `results`, `truncated`, `partial`, `candidate_truncated`, `result_truncated`, `project`, `index`. Each result: `kind`, `id`, `display_id`, `session_id`, `timestamp`, `content`, and observation `importance` (source metadata, not rank score). Empty results are valid success.
+Success top-level: `ok`, `query`, `limit`, `count`, `results`, `truncated`, `partial`, `candidate_truncated`, `result_truncated`, `project`, `index`.
+
+`index` freshness: `{generation_id, state, committed_revision, source_revision}`. `partial` is true when the source revision is ahead, the generation is updating, or stale canonical parents were omitted. Candidate vs result truncation are reported separately.
+
+Each result: `kind`, `id`, `display_id`, `session_id`, `timestamp`, `content`, and observation `importance` (source metadata, not rank score).
 
 ### `recall`
 
@@ -85,22 +82,84 @@ Success payload (structured + JSON text): top-level `ok`, `query`, `limit`, `cou
 | `id` | required, pattern `^[a-f0-9]{12,64}$` |
 | `session_id` | optional nonblank; default from `X-Hatfield-Session` |
 
-Full OM evidence (observation/reflection, supports, `events.jsonl` hydration), unique prefix resolution, current-session default vs explicit cross-session. Enrich with selected-project provenance. Native `CallToolResult` (`isError` for domain failures). Attribute namespace on installed SDK: `Mcp\Capability\Attribute`.
+Unique short-id / prefix resolution within the selected session. Observation payload includes `source_refs` / `events` (plus `timestamp`, `importance`). Reflection payload includes `supporting_observation_ids` / `source_refs` / `events`. Both include selected-project provenance. Derived chunk/store IDs are not recall identities.
 
-Until plan 05 is implemented, the registry remains without public tools and older optional-auth smoke wording is historical only.
+Native `CallToolResult`: JSON text content + the same object as `structuredContent`; domain failures set `isError: true`.
 
 ---
 
 ## 5) Errors and limits
 
-Domain errors: `CallToolResult` with `isError` and structured codes (main finalizes the typed table). Likely: `invalid_project_context`, `project_not_found`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `timeout`, `response_too_large`, plus native recall validation/not-found codes. SDK schema/type failures remain protocol-level.
+Domain failure payload: `{ok: false, error, message, retryable}` with `isError: true`. Native schema/type failures stay protocol-level; authentication failures are HTTP 401.
 
-Provider HTTP calls each use `max_duration` 30s. Do not claim a hard aggregate deadline or cancellation beyond what the stack provides.
+| Area | Codes |
+|---|---|
+| Shared / search | `invalid_project_context`, `project_not_found`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `invalid_session_context`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `timeout`, `response_too_large`, `internal_error` |
+| Recall | `invalid_id`, `invalid_session_id`, `ambiguous_id`, `not_found`, `sessions_unavailable`, `events_unreadable`, `resource_limit_exceeded` |
 
-Admin Search memory remains a browser UI over the same derived indexes; it is not an MCP tool and still has no date-window UI. Source discovery health (`pending` / `scanning` / `ready` / `error`) means sources discovered, not indexed.
+Limits (honest):
+
+- Response payload max **1 MiB** (JSON text + identical `structuredContent` means the wire duplicates the object).
+- Recall default cooperative clock deadline **30s** between DB/journal checkpoints — not a hard I/O timeout on every read.
+- Source evidence caps: **10 000** refs / support IDs; **1 MiB** physical journal line / evidence; **64 MiB** scanned journal bytes.
+- Search provider HTTP `max_duration` **30s** per model request. BGE batches of 8 mean there is **no** aggregate hard deadline or cancellation claim beyond that.
+
+MCP channel logs stay informational and exclude SDK debug argument logging. Prefer project id, latency, and non-sensitive error class — not query text, source content, tokens, or credentials.
+
+Admin Search memory remains a browser UI over the same derived indexes (no date-window UI). Source discovery health means sources discovered, not indexed.
 
 ---
 
-## 6) Logging / observability
+## 6) Official SDK client example (sanitized)
 
-Keep credentials, observation text, session journals, and plaintext MCP tokens out of routine logs. Prefer structured operational fields (project id, latency, non-sensitive error class).
+```php
+use Mcp\Client\Client;
+use Mcp\Client\Transport\HttpTransport;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Component\HttpClient\Psr18Client;
+
+$endpoint = 'http://example.browser.librarian.localhost:8082/_mcp'; // printed browser URL
+$proxyIp = getenv('LIBRARIAN_PROXY_IP'); // supplied by Castor for hostname resolve
+$hostname = parse_url($endpoint, \PHP_URL_HOST);
+
+$transport = new HttpTransport(
+    $endpoint,
+    headers: [
+        'Authorization' => 'Bearer mcp_REDACTED',
+        'X-Librarian-Project' => '/project-sources/example-a', // registered synthetic root
+        'X-Hatfield-Session' => '108', // OM run_id when recall omits session_id
+    ],
+    httpClient: new Psr18Client(HttpClient::create([
+        'resolve' => [$hostname => $proxyIp], // keep printed URL; do not rewrite endpoint
+    ])),
+);
+
+$client = null;
+try {
+    $client = Client::make()->withTransport($transport)->getClient();
+    $client->connect();
+
+    $tools = $client->listTools();
+    // expect memory_search + recall only
+
+    $search = $client->callTool('memory_search', [
+        'query' => 'synthetic fixture observation',
+        'after' => '2026-01-01',
+        'before' => '2026-12-31 23:59',
+        'limit' => 10,
+    ]);
+
+    $recall = $client->callTool('recall', [
+        'id' => 'aaaaaaaaaaaa', // 12–64 hex prefix / full id
+        // optional session_id; header 108 used when omitted
+    ]);
+} finally {
+    $client?->disconnect();
+}
+```
+
+---
+
+## 7) Validation recorded for plan 05
+
+On the main implementation worktree: `cs:fix` passed; one headless MCP journey, **46 assertions**, **5.059s**; `qa:static` passed. The full existing suite was **not** claimed here (scheduled next). No production deploy and no owner-data reset as part of this contract update.

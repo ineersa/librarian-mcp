@@ -7,7 +7,7 @@ The app is a Symfony web/admin application that:
 1. Stores a catalog of registered local Hatfield projects
 2. Asynchronously discovers each project's OM database and session roots read-only
 3. Builds Librarian-owned hybrid indexes from retained observations/reflections
-4. Exposes HTTP MCP at `/_mcp` (plan 05: required-token `memory_search` + `recall`; project via connection headers)
+4. Exposes HTTP MCP at `/_mcp` (required-token `memory_search` + `recall`; project via connection headers)
 
 Core runtime pieces:
 
@@ -81,9 +81,7 @@ Details: [project-sources.md](project-sources.md), [indexing-design.md](indexing
 6. Scheduler `CallbackMessageProvider` yields source-discovery jobs for registered projects every `INDEX_INTERVAL` seconds (default 60), reusing the scan → incremental-index path without a custom tick protocol or OS cron. Unchanged revisions record check activity without re-embedding.
 7. On failure: sanitized `lastError` / generation error state; Messenger retries remain replay-safe for deterministic IDs
 
-Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match and does not apply date filters.
-
-Plan 05 MCP date bounds use HybridQuery `where`/`params` against existing chunk timestamp metadata (Composer-pinned fork until upstream; [postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Admin Search memory still has no date-window UI.
+Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match. MCP `memory_search` date bounds use HybridQuery `where`/`params` against existing chunk timestamp metadata (upstream https://github.com/symfony/ai/pull/2950; [postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Admin Search memory still has no date-window UI.
 
 ---
 
@@ -124,7 +122,7 @@ Do not commit private project settings, OM databases, session journals, or deriv
 - Long-running discovery/indexing is async (Messenger worker required; consumes `async` + `scheduler_default`)
 - Source access is strictly read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
-- MCP transport at `/_mcp`; plan 05 tools use OM schemas + `X-Librarian-Project` / `X-Hatfield-Session` (see [MCP.md](MCP.md)). Until implemented, the public registry stays empty
+- MCP transport at `/_mcp`; `memory_search` + `recall` use OM schemas with `X-Librarian-Project` / `X-Hatfield-Session` (see [MCP.md](MCP.md))
 - Browser database is `librarian_browser` in the checkout-scoped Postgres volume. Native browser tooling joins the private network; PostgreSQL publishes no host ports in any stack
 
 ## 8) Framework / MCP compatibility
