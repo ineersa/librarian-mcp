@@ -7,7 +7,7 @@ The app is a Symfony web/admin application that:
 1. Stores a catalog of registered local Hatfield projects
 2. Asynchronously discovers each project's OM database and session roots read-only
 3. Builds Librarian-owned hybrid indexes from retained observations/reflections
-4. Exposes HTTP MCP at `/_mcp` (public memory tools arrive in plan 05)
+4. Exposes HTTP MCP at `/_mcp` (plan 05: required-token `memory_search` + `recall`; project via connection headers)
 
 Core runtime pieces:
 
@@ -63,7 +63,7 @@ Discovery:
 - validates supported OM schema versions through `20261021_006_semantic_source_revisions`
 - never writes source trees, never boots Hatfield runtime/extension code, never migrates source DBs
 
-Successful discovery may enqueue indexing. Explicit **Index now** also queues through `ProjectIndexManager` only. Search uses the active committed generation and never synchronously rebuilds.
+Successful discovery may enqueue indexing. Search (admin UI and MCP) uses the active committed generation and never synchronously rebuilds. There is no manual Index now action.
 
 Removal deletes Librarian registration and owned derived indexes. Source projects, `.hatfield`, OM databases, and journals are never deleted by Librarian.
 
@@ -82,6 +82,8 @@ Details: [project-sources.md](project-sources.md), [indexing-design.md](indexing
 7. On failure: sanitized `lastError` / generation error state; Messenger retries remain replay-safe for deterministic IDs
 
 Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match and does not apply date filters.
+
+Plan 05 MCP date bounds use HybridQuery `where`/`params` against existing chunk timestamp metadata (Composer-pinned fork until upstream; [postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Admin Search memory still has no date-window UI.
 
 ---
 
@@ -122,7 +124,7 @@ Do not commit private project settings, OM databases, session journals, or deriv
 - Long-running discovery/indexing is async (Messenger worker required; consumes `async` + `scheduler_default`)
 - Source access is strictly read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
-- MCP transport remains available; public tools are empty until plan 05
+- MCP transport at `/_mcp`; plan 05 tools use OM schemas + `X-Librarian-Project` / `X-Hatfield-Session` (see [MCP.md](MCP.md)). Until implemented, the public registry stays empty
 - Browser database is `librarian_browser` in the checkout-scoped Postgres volume. Native browser tooling joins the private network; PostgreSQL publishes no host ports in any stack
 
 ## 8) Framework / MCP compatibility

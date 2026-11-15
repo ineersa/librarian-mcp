@@ -28,7 +28,7 @@ Saved journeys in `tests/E2E/` (product path after plan 03):
 | Authentication | Login and logout (dashboard title: Projects dashboard) |
 | Users | Administrator create, list, edit, verify login, detail, delete only its own user |
 | Projects | Register via absolute path input, click row for detail, wait for live automatic discovery/index status without page reloads, per-row natural-language search for a public synthetic observation (no date-window UI), ordinary harness-owned fixture update + scheduler-only discovery/reindex/search, remove only its registration |
-| MCP HTTP | Optional token path: regenerate the isolated admin's token through the UI when used, then initialize / initialized / tools-list over real HTTP (`tools/list` empty until plan 05) |
+| MCP HTTP | Plan 05 extends this **single** journey: login, regenerate required MCP token in the UI, register **two** tiny synthetic sources sharing the same OM session id, wait for automatic indexing, then official PHP SDK over real HTTP for discovery (`memory_search` + `recall` only), search with date bounds, recall (current-session default + cross-session), and cross-project header isolation. No new suite; no special negative/security/concurrency matrices without owner approval. Until plan 05 lands, keep initialize / tools-list smoke (`tools/list` empty) |
 
 The Projects journey registers one synthetic source tree. Intentional fixture mutation is allowed only through harness-owned helpers against verified synthetic paths, with restore in `finally` so repeated runs stay idempotent. It never imports operator `compose.sources.yaml` overlays or private owner projects.
 
@@ -117,4 +117,4 @@ Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, 
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
 - Speculative Symfony AI backends beyond the approved CodeRank + official Postgres store + local BGE baseline
-- Remote deployments, data backup, Hatfield semantic removal, and MCP memory-tool plan 05
+- Remote deployments, data backup, and Hatfield semantic removal (plans 06–07). Plan 05 browser proof stays inside the existing MCP journey above; this document does **not** claim those checks have passed

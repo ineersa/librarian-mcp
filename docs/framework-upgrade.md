@@ -20,7 +20,7 @@ Explicit core constraints allow required prerelease transitive dependencies with
 
 ## Active integrations
 
-- MCP 0.15 uses `mcp.servers.librarian`, an explicit registry, native filesystem sessions, and optional token authentication at `/_mcp`. Public memory tools remain plan 05. Production sets the `MCP_ALLOWED_HOSTS` CSV allowlist to its external hostname without scheme or port.
+- MCP 0.15 uses `mcp.servers.librarian`, an explicit registry, and native filesystem sessions at `/_mcp`. Historical note: token auth was optional at upgrade time; plan 05 requires token auth for tools and documents `memory_search` / `recall` (see [MCP.md](MCP.md)). Production sets the `MCP_ALLOWED_HOSTS` CSV allowlist to its external hostname without scheme or port.
 - Mercure uses `protocol_version_compatibility 8` for the existing JWT/topic contract.
 - Doctrine metadata and the official Symfony AI store share PostgreSQL + pgvector. Hatfield SQLite sources are opened read-only.
 - Castor is the host entry point for containerized Composer, console, static QA, Playwright, and selected Mate diagnostics.
