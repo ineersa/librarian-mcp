@@ -18,7 +18,7 @@ Locked dependency: Symfony AI Store + official Postgres bridge **0.15.0** with P
 - One store table per project/generation (isolation by table name, not metadata filters)
 - Store document IDs are deterministic **UUIDv5** values derived from `[generation ID, kind, sourceId, full parent signature, chunk position]`. Format version **3** participates in the generation signature. This is the only approved UUID exception; application entities keep auto-increment integers
 - `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match. The application passes whitespace-separated question terms as the vendor's OR-text array, not one text that would AND every significant word. The full question still drives embeddings and BGE reranking
-- Native hybrid does **not** apply metadata/date filters; admin Search memory has no date-window UI
+- Stock 0.15.0 hybrid did not apply metadata/date filters. Plan 05 temporarily pins a reviewed fork so HybridQuery accepts the same `where`/`params` path as vector queries ([postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Admin Search memory still has no date-window UI; MCP `memory_search` keeps OM `after`/`before`
 - Ranking is stock weighted hybrid, not BM25 and not RRF. Behavior preservation vs earlier backends is out of scope; testing/tuning comes later
 
 Embeddings use the official Generic platform for the local OpenAI-compatible CodeRank endpoint and Symfony's native `Vectorizer`, with a small `ResultConvertedEvent` listener for dimension/cardinality/finite-vector checks. Query prefix remains `Represent this query for searching relevant code: `. Configured baseline remains **768** dimensions.
@@ -84,3 +84,4 @@ Stock Postgres `HybridQuery` candidates (OR across question terms) → BGE on ra
 - https://symfony.com/doc/current/lock.html
 - https://symfony.com/doc/current/messenger.html
 - Official Postgres bridge source (`Symfony\AI\Store\Bridge\Postgres\Store`) for HybridQuery / UUID schema behavior
+- HybridQuery date-filter pin: [postgres-hybrid-filters.md](postgres-hybrid-filters.md)

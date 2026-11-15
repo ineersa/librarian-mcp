@@ -1,6 +1,14 @@
 monolog:
     channels:
         - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
+        - mcp
+    handlers:
+        mcp:
+            # The SDK logs tools/call arguments at debug; never retain that payload.
+            type: stream
+            path: "%kernel.logs_dir%/%kernel.environment%.log"
+            level: info
+            channels: [mcp]
 
 when@dev:
     monolog:
@@ -9,11 +17,11 @@ when@dev:
                 type: stream
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
                 level: debug
-                channels: ["!event", "!deprecation"]
+                channels: ["!event", "!deprecation", "!mcp"]
             console:
                 type: console
                 process_psr_3_messages: false
-                channels: ["!event", "!doctrine", "!console"]
+                channels: ["!event", "!doctrine", "!console", "!mcp"]
 
 when@test:
     monolog:
@@ -23,7 +31,7 @@ when@test:
                 action_level: error
                 handler: nested
                 excluded_http_codes: [404, 405]
-                channels: ["!event"]
+                channels: ["!event", "!mcp"]
             nested:
                 type: stream
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
@@ -32,12 +40,15 @@ when@test:
 when@prod:
     monolog:
         handlers:
+            mcp:
+                path: php://stderr
+                formatter: monolog.formatter.json
             main:
                 type: fingers_crossed
                 action_level: error
                 handler: nested
                 excluded_http_codes: [404, 405]
-                channels: ["!deprecation"]
+                channels: ["!deprecation", "!mcp"]
                 buffer_size: 50 # How many messages should be saved? Prevent memory leaks
             nested:
                 type: stream
@@ -47,7 +58,7 @@ when@prod:
             console:
                 type: console
                 process_psr_3_messages: false
-                channels: ["!event", "!doctrine"]
+                channels: ["!event", "!doctrine", "!mcp"]
             deprecation:
                 type: stream
                 channels: [deprecation]

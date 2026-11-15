@@ -7,8 +7,8 @@ It provides:
 - an admin UI (EasyAdmin) to register/manage local projects
 - async read-only source discovery (Messenger worker)
 - project health, discovered source metadata, and index status in admin
-- Index now / Search memory over the committed active generation
-- HTTP MCP at `/_mcp` (token optional; memory tools arrive in plan 05)
+- per-row Search memory over the committed active generation (admin UI; no date-window UI)
+- HTTP MCP at `/_mcp` (setup-selectable token authentication; native `memory_search` + `recall`)
 
 Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its shared PostgreSQL + pgvector database (Doctrine metadata and official Symfony AI Postgres store tables). It does not clone repositories.
 
@@ -32,8 +32,8 @@ This is a shared local memory service for registered Hatfield projects:
 - **Async read-only discovery** (so scans do not block web requests)
 - **Derived hybrid indexing** (CodeRank 768-dim vectors via the official Symfony AI Postgres store + local BGE; stock weighted hybrid/`ts_rank`, not BM25/RRF)
 - **Stable project identity** (auto-increment ID survives rescans and explicit path rebinds)
-- **Optional MCP token auth** (admin/login remain protected; supplied tokens are still validated)
-- **No public MCP tools yet** — `tools/list` is empty until plan 05
+- **Setup-selectable MCP token auth** (`MCP_AUTH_REQUIRED=1` by default; set `0` for trusted-network anonymous access; admin/login remain protected)
+- **MCP tools** — `memory_search` and `recall` with OM schemas; project via `X-Librarian-Project` (not a tool arg). See [MCP contract](docs/MCP.md)
 
 Architecture docs:
 
@@ -132,10 +132,10 @@ Summary:
 
 - Register a project by entering its absolute, service-visible directory path in admin
 - Unique case-insensitive trimmed names, canonical directories, and normalized Git origins
-- Explicit admin path changes rebind the same project ID; they do not merge by name/origin
+- Registration is create/delete only (no edit); uniqueness is by name, canonical directory, and normalized Git origin
 - Discovery is read-only; removing a registration deletes owned derived indexes but never source trees, `.hatfield`, OM databases, or journals
 - `ready` means sources were discovered, not indexed; source journal counts are not an index backlog
-- Admin Index now / Search memory operate on Librarian-owned derived data; MCP memory tools remain plan 05
+- Admin Search memory operates on Librarian-owned derived data (no date-window UI). MCP exposes `memory_search` / `recall`; see [MCP contract](docs/MCP.md) and [HybridQuery date filters](docs/postgres-hybrid-filters.md)
 - Design details: [indexing design](docs/indexing-design.md); validation status: [indexing validation](docs/indexing-validation.md)
 
 ---
@@ -187,14 +187,16 @@ Summary:
 ### Security / MCP
 
 - MCP endpoint: `/_mcp`
-- Auth headers (optional; when supplied they are validated):
+- `MCP_AUTH_REQUIRED` — `1` (default) requires a valid token; `0` allows tokenless requests. This is server configuration, not a client-header bypass. Anonymous mode exposes registered-project memory to anyone who can reach the endpoint; use only on a trusted network. Supplied credentials are still validated.
+- Auth headers (required when `MCP_AUTH_REQUIRED=1`; URL query-token fallbacks removed):
   - `Authorization: Bearer <token>`
   - `X-MCP-Token: <token>`
+- Connection headers (not tool args): `X-Librarian-Project` (absolute registered root), `X-Hatfield-Session` (OM `run_id` for recall default)
 - Admin/login remain protected (`ROLE_ADMIN`)
 - Tokens are stored hashed (SHA-256) when used
 - `MCP_ALLOWED_HOSTS` — CSV allow-list for MCP HTTP hosts (default `localhost,127.0.0.1,php,server,192.168.2.38`); override with production external hostnames
 - Bundle config: `mcp.servers.librarian` with an explicit registry (MCP bundle 0.15)
-- No public tools until plan 05 (`tools/list` is empty)
+- Public tools: `memory_search`, `recall` (OM parameter schemas). Details: [docs/MCP.md](docs/MCP.md)
 
 ### Storage
 

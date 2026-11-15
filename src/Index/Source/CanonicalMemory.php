@@ -17,6 +17,7 @@ final readonly class CanonicalMemory
         public int $occurredAt,
         public ?string $relevance,
         public string $contentSignature,
+        public ?string $timestamp = null,
     ) {
     }
 

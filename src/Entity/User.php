@@ -14,6 +14,8 @@ use Symfony\Component\Security\Core\User\UserInterface;
 #[ORM\UniqueConstraint(name: 'uniq_user_email', columns: ['email'])]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
+    public const string ROLE_MCP = 'ROLE_MCP';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]

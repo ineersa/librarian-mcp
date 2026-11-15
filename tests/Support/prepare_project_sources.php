@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Index\Source\MemoryKind;
+use App\Tests\Support\ProjectSourceFixture;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
@@ -38,6 +40,7 @@ assertExactNonSymlinkedPath($projectDir.'/var/browser-live');
 if (file_exists($targetRoot)) {
     assertExactNonSymlinkedPath($targetRoot);
     assertPreparedProjectSources($targetRoot);
+    prepareMemoryToolProjects($targetRoot);
     echo "Synthetic project sources already prepared at {$targetRoot}\n";
     exit(0);
 }
@@ -63,6 +66,7 @@ buildCustomRelativeProject($projectsRoot.'/custom-relative');
 
 writeFile($targetRoot.'/'.PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME, PROJECT_SOURCES_OWNERSHIP_MARKER);
 assertPreparedProjectSources($targetRoot);
+prepareMemoryToolProjects($targetRoot);
 echo "Prepared synthetic project sources at {$targetRoot}\n";
 echo "Visible mount: /project-sources\n";
 echo "HATFIELD_USER_HOME=/synthetic-home -> /project-sources/context-home\n";
@@ -139,6 +143,26 @@ YAML);
     writeSessionJournal($path.'/.hatfield/custom-sessions/7/events.jsonl', '7', 1);
 }
 
+function prepareMemoryToolProjects(string $targetRoot): void
+{
+    // Add only missing, harness-owned fixtures; never rebuild existing source trees.
+    foreach (['mcp-a', 'mcp-b'] as $slug) {
+        $path = $targetRoot.'/projects/'.$slug;
+        if (file_exists($path)) {
+            assertExactNonSymlinkedPath($path);
+            continue;
+        }
+        initGitProject($path, 'git://librarian-fixtures/'.$slug.'.git');
+        writeFile($path.'/.hatfield/settings.yaml', "sessions:\n    path: '.hatfield/sessions'\n");
+        createSupportedOmDatabase(
+            $path.'/.hatfield/extensions-data/observational-memory/om.sqlite',
+            observationCount: 2, reflectionCount: 1, sourceRevision: 3, sourceChangeCount: 3,
+            runId: '108', idPrefix: $slug, canonicalIds: true,
+        );
+        writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 2);
+    }
+}
+
 function initGitProject(string $path, string $origin): void
 {
     if (!is_dir($path) && !mkdir($path, 0775, true) && !is_dir($path)) {
@@ -165,6 +189,7 @@ function createSupportedOmDatabase(
     int $sourceChangeCount,
     string $runId = '108',
     string $idPrefix = 'fx',
+    bool $canonicalIds = false,
 ): void {
     if (!is_dir(dirname($dbPath)) && !mkdir(dirname($dbPath), 0775, true) && !is_dir(dirname($dbPath))) {
         throw new RuntimeException(sprintf('Unable to create OM directory for %s', $dbPath));
@@ -234,16 +259,16 @@ SQL);
     for ($i = 1; $i <= $observationCount; ++$i) {
         $content = sprintf('synthetic observation %s-%d', $idPrefix, $i);
         $insertObservation->execute([
-            sprintf('%s-obs-%d', $idPrefix, $i),
+            $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Observation, $i) : sprintf('%s-obs-%d', $idPrefix, $i),
             $runId,
             'boundary-1',
             $i,
             $i,
-            '[]',
+            $canonicalIds ? json_encode([['run_id' => $runId, 'seq' => $i]], \JSON_THROW_ON_ERROR) : '[]',
             $content,
             hash('sha256', $content),
             'medium',
-            '2026-01-01 00:00',
+            $canonicalIds ? sprintf('2026-01-%02d 10:30', $i) : '2026-01-01 00:00',
             12,
             'fixture-model',
             '1',
@@ -260,12 +285,12 @@ SQL);
     for ($i = 1; $i <= $reflectionCount; ++$i) {
         $content = sprintf('synthetic reflection %s-%d', $idPrefix, $i);
         $insertReflection->execute([
-            sprintf('%s-ref-%d', $idPrefix, $i),
+            $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Reflection, $i) : sprintf('%s-ref-%d', $idPrefix, $i),
             $runId,
             sprintf('%s-req-%d', $idPrefix, $i),
             hash('sha256', $idPrefix.'-set-'.$i),
             $content,
-            '[]',
+            $canonicalIds ? json_encode([ProjectSourceFixture::memoryId(MemoryKind::Observation, 1)], \JSON_THROW_ON_ERROR) : '[]',
             'low',
             20,
             'fixture-model',
@@ -278,11 +303,11 @@ SQL);
     $insertChange = $pdo->prepare('INSERT INTO om_source_change (kind, source_id, revision) VALUES (?, ?, ?)');
     $written = 0;
     for ($i = 1; $i <= $observationCount && $written < $sourceChangeCount; ++$i) {
-        $insertChange->execute(['observation', sprintf('%s-obs-%d', $idPrefix, $i), $i]);
+        $insertChange->execute([MemoryKind::Observation->value, $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Observation, $i) : sprintf('%s-obs-%d', $idPrefix, $i), $i]);
         ++$written;
     }
     for ($i = 1; $i <= $reflectionCount && $written < $sourceChangeCount; ++$i) {
-        $insertChange->execute(['reflection', sprintf('%s-ref-%d', $idPrefix, $i), $observationCount + $i]);
+        $insertChange->execute([MemoryKind::Reflection->value, $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Reflection, $i) : sprintf('%s-ref-%d', $idPrefix, $i), $observationCount + $i]);
         ++$written;
     }
 }

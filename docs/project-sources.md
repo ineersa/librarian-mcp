@@ -6,7 +6,7 @@ Librarian registers **local directories**. It discovers Hatfield OM/session meta
 
 - **Sources discovered** (`ready`) means discovery succeeded, not that memories are indexed.
 - **Search memory** is a per-project list action over derived data. Discovery and incremental indexing run automatically (default 60s), without manual scan/index buttons. Search never synchronously ingests or rebuilds a project and has no date-window UI.
-- Public MCP memory tools remain **plan 05**.
+- Public MCP tools (**plan 05**): `memory_search` and `recall` with OM schemas; project selected by `X-Librarian-Project`, not a tool argument. See [MCP.md](MCP.md).
 - Design and validation status live in [indexing-design.md](indexing-design.md) and [indexing-validation.md](indexing-validation.md).
 
 ## Identity and removal
@@ -43,7 +43,7 @@ Approved baseline:
 - CodeRankEmbed explicit **768-dim** vectors (existing local endpoint)
 - Official Symfony AI **Postgres** store **0.15.0** on shared PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`)
 - Stock `HybridQuery` weighted similarity + PostgreSQL `ts_rank` (lexical match required; not BM25/RRF)
-- Isolation by per-project/per-generation store table names (no native date filters)
+- Isolation by per-project/per-generation store table names; MCP date bounds use HybridQuery `where`/`params` ([postgres-hybrid-filters.md](postgres-hybrid-filters.md))
 - Local BGE rerank batches **8**, 768-character truncation, floor **-4**
 - Deterministic UUIDv5 store document IDs from `[generation ID, kind, sourceId, full parent signature, chunk position]`; format version **3** participates in the generation signature. Application entities keep auto-increment integers
 

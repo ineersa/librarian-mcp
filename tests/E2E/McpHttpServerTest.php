@@ -4,25 +4,31 @@ declare(strict_types=1);
 
 namespace App\Tests\E2E;
 
+use App\Entity\ProjectHealth;
+use App\Index\Source\MemoryKind;
+use App\Mcp\MemoryContextResolver;
+use App\Mcp\MemoryTools;
 use App\Tests\Support\LibrarianNetworkBrowserTest;
+use App\Tests\Support\ProjectSourceBrowserHelpers;
+use App\Tests\Support\ProjectSourceFixture;
+use Mcp\Client;
+use Mcp\Client\Transport\HttpTransport;
 use Mcp\Schema\Enum\ProtocolVersion;
-use Mcp\Schema\JsonRpc\MessageInterface;
-use Mcp\Schema\Notification\InitializedNotification;
-use Mcp\Schema\Request\InitializeRequest;
-use Mcp\Schema\Request\ListToolsRequest;
-use Mcp\Server\Transport\StreamableHttpTransport;
-use Symfony\Component\HttpFoundation\Response;
+use Mcp\Schema\Result\CallToolResult;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Component\HttpClient\Psr18Client;
 
 final class McpHttpServerTest extends LibrarianNetworkBrowserTest
 {
-    public function testOptionalAuthenticationAndRetiredToolRegistry(): void
+    use ProjectSourceBrowserHelpers;
+
+    public function testProjectScopedMemorySearchAndRecall(): void
     {
         $this->login();
         $page = $this->visit('/admin/users?query='.rawurlencode('admin@test.com'));
         $adminRow = $page->locator('tbody tr')->filter(['hasText' => 'admin@test.com']);
         $adminEditUrl = $adminRow->locator('a.action-edit')->getAttribute('href');
         self::assertNotNull($adminEditUrl);
-
         $page->goto($adminEditUrl);
         $page->getByRole('button', ['name' => 'Regenerate MCP token'])->click();
         $page->locator('#flash-messages')->waitFor();
@@ -31,50 +37,107 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         preg_match('/mcp_[0-9a-f]{48}/', $flashText, $matches);
         $token = $matches[0];
 
+        $beforeA = ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-a'));
+        $beforeB = ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-b'));
+        $projectA = $this->registerProject('MCP alpha', ProjectSourceFixture::visibleProjectPath('mcp-a'));
+        $this->openProjectDetail($projectA);
+        $this->waitForProjectHealth(ProjectHealth::Ready);
+        $this->waitForCommittedIndex(3);
+        $projectB = $this->registerProject('MCP beta', ProjectSourceFixture::visibleProjectPath('mcp-b'));
+        $this->openProjectDetail($projectB);
+        $this->waitForProjectHealth(ProjectHealth::Ready);
+        $this->waitForCommittedIndex(3);
+
+        // Exercise anonymous retrieval when the deployment explicitly permits it.
+        $first = $this->client(0 === self::getContainer()->getParameter('app.mcp_auth_required') ? null : $token, 'mcp-a');
+        $second = null;
+        try {
+            self::assertSame(ProtocolVersion::V2026_07_28, $first->getProtocolVersion());
+            $tools = [];
+            foreach ($first->listTools()->tools as $tool) {
+                $tools[$tool->name] = $tool->inputSchema;
+            }
+            ksort($tools);
+            self::assertSame([MemoryTools::SEARCH, MemoryTools::RECALL], array_keys($tools));
+            self::assertSame(MemoryTools::SEARCH_SCHEMA, $tools[MemoryTools::SEARCH]);
+            self::assertSame(MemoryTools::RECALL_SCHEMA, $tools[MemoryTools::RECALL]);
+
+            $search = $this->payload($first->callTool(MemoryTools::SEARCH, ['query' => 'synthetic']));
+            self::assertSame(MemoryTools::DEFAULT_LIMIT, $search['limit']);
+            self::assertSame(3, $search['count']);
+            self::assertSame((int) $projectA, $search['project']['id']);
+            self::assertFalse($search['partial']);
+
+            $dated = $this->payload($first->callTool(MemoryTools::SEARCH, [
+                'query' => 'synthetic', 'after' => '2026-01-02', 'before' => '2026-01-02 10:30',
+            ]));
+            self::assertSame([ProjectSourceFixture::memoryId(MemoryKind::Observation, 2)], array_column($dated['results'], 'id'));
+            self::assertSame('synthetic observation mcp-a-2', $dated['results'][0]['content']);
+            self::assertSame('medium', $dated['results'][0]['importance']);
+
+            $recalled = $this->payload($first->callTool(MemoryTools::RECALL, ['id' => substr($dated['results'][0]['id'], 0, 12)]));
+            self::assertSame($dated['results'][0]['id'], $recalled['id']);
+            self::assertSame('108', $recalled['session_id']);
+            self::assertSame([2], array_column($recalled['events'], 'seq'));
+            self::assertTrue($recalled['events'][0]['payload']['fixture']);
+
+            $byId = array_column($search['results'], null, 'id');
+            $reflectionHit = $byId[ProjectSourceFixture::memoryId(MemoryKind::Reflection, 1)];
+            $reflection = $this->payload($first->callTool(MemoryTools::RECALL, [
+                'id' => $reflectionHit['id'], 'session_id' => $reflectionHit['session_id'],
+            ]));
+            self::assertSame('108', $reflection['session_id']);
+            self::assertSame([ProjectSourceFixture::memoryId(MemoryKind::Observation, 1)], $reflection['supporting_observation_ids']);
+            self::assertSame([1], array_column($reflection['events'], 'seq'));
+
+            // Same canonical IDs and OM session, but a separately configured project connection.
+            $second = $this->client($token, 'mcp-b');
+            $other = $this->payload($second->callTool(MemoryTools::SEARCH, ['query' => 'synthetic', 'after' => '2026-01-02']));
+            self::assertSame((int) $projectB, $other['project']['id']);
+            self::assertSame('synthetic observation mcp-b-2', $other['results'][0]['content']);
+            $otherRecall = $this->payload($second->callTool(MemoryTools::RECALL, ['id' => $other['results'][0]['id']]));
+            self::assertSame('synthetic observation mcp-b-2', $otherRecall['content']);
+        } finally {
+            $second?->disconnect();
+            $first->disconnect();
+            $this->deleteRecord('/admin/projects/'.$projectB);
+            $this->deleteRecord('/admin/projects/'.$projectA);
+            ProjectSourceFixture::assertUnchanged($beforeA, ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-a')), 'MCP alpha');
+            ProjectSourceFixture::assertUnchanged($beforeB, ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-b')), 'MCP beta');
+        }
+    }
+
+    private function client(?string $token, string $slug): Client
+    {
+        $hostname = parse_url($this->url, \PHP_URL_HOST);
+        $proxyIp = getenv('LIBRARIAN_PROXY_IP');
+        if (!\is_string($hostname) || false === $proxyIp || '' === $proxyIp) {
+            throw new \LogicException('The SDK client requires the isolated browser proxy hostname and IP.');
+        }
+        $client = Client::builder()
+            ->setClientInfo('librarian-browser-journey', '1.0')
+            ->setProtocolVersion(ProtocolVersion::V2026_07_28)
+            ->setFallbackProtocolVersion(null)
+            ->setMaxRetries(0)
+            ->build();
         $headers = [
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json, text/event-stream',
+            MemoryContextResolver::PROJECT_HEADER => ProjectSourceFixture::visibleProjectPath($slug),
+            MemoryContextResolver::SESSION_HEADER => '108',
         ];
-        $initialize = $this->page->request()->post($this->url.'/_mcp', [
-            'headers' => $headers,
-            'data' => [
-                'jsonrpc' => MessageInterface::JSONRPC_VERSION,
-                'method' => InitializeRequest::getMethod(),
-                'params' => [
-                    'protocolVersion' => ProtocolVersion::V2025_03_26->value,
-                    'capabilities' => new \stdClass(),
-                    'clientInfo' => ['name' => 'phpunit-browser', 'version' => '1.0'],
-                ],
-                'id' => 1,
-            ],
-        ]);
-        self::assertSame(Response::HTTP_OK, $initialize->status());
-        $sessionId = $initialize->headers()[strtolower(StreamableHttpTransport::SESSION_HEADER)] ?? null;
-        self::assertNotNull($sessionId);
-        $headers[StreamableHttpTransport::SESSION_HEADER] = $sessionId;
-        $headers[StreamableHttpTransport::PROTOCOL_VERSION_HEADER] = ProtocolVersion::V2025_03_26->value;
+        if (null !== $token) {
+            $headers['Authorization'] = 'Bearer '.$token;
+        }
+        $client->connect(new HttpTransport($this->url.'/_mcp', $headers, httpClient: new Psr18Client(HttpClient::create(['resolve' => [$hostname => $proxyIp]]))));
 
-        $initialized = $this->page->request()->post($this->url.'/_mcp', [
-            'headers' => $headers,
-            'data' => [
-                'jsonrpc' => MessageInterface::JSONRPC_VERSION,
-                'method' => InitializedNotification::getMethod(),
-            ],
-        ]);
-        self::assertSame(Response::HTTP_ACCEPTED, $initialized->status());
+        return $client;
+    }
 
-        // Anonymous requests work; an explicitly supplied token is still accepted.
-        $headers['Authorization'] = 'Bearer '.$token;
-        $toolsList = $this->page->request()->post($this->url.'/_mcp', [
-            'headers' => $headers,
-            'data' => [
-                'jsonrpc' => MessageInterface::JSONRPC_VERSION,
-                'method' => ListToolsRequest::getMethod(),
-                'id' => 2,
-            ],
-        ]);
-        self::assertSame(Response::HTTP_OK, $toolsList->status());
-        $body = $toolsList->text();
-        self::assertStringContainsString('"tools":[]', $body);
+    /** @return array<string, mixed> */
+    private function payload(CallToolResult $result): array
+    {
+        self::assertFalse($result->isError, json_encode($result->structuredContent, \JSON_THROW_ON_ERROR));
+        self::assertIsArray($result->structuredContent);
+
+        return $result->structuredContent;
     }
 }

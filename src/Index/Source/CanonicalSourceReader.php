@@ -91,6 +91,64 @@ final class CanonicalSourceReader
     }
 
     /**
+     * Load retained memories by exact source ids for one kind.
+     *
+     * Bound at 50 ids so callers can hydrate ranked parents without scanning the
+     * full source table. Missing ids are omitted. Results reuse hydrate() so the
+     * contentSignature matches indexing.
+     *
+     * @param list<string> $ids
+     *
+     * @return list<CanonicalMemory>
+     */
+    public function fetchByIds(string $databasePath, MemoryKind $kind, array $ids): array
+    {
+        $normalized = [];
+        foreach ($ids as $id) {
+            if (!\is_string($id)) {
+                continue;
+            }
+            $id = trim($id);
+            if ('' === $id) {
+                continue;
+            }
+            $normalized[$id] = $id;
+        }
+        $normalized = array_values($normalized);
+        if ([] === $normalized) {
+            return [];
+        }
+        if (\count($normalized) > 50) {
+            throw new \InvalidArgumentException('Source id lookup is limited to 50 ids per kind.');
+        }
+
+        try {
+            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
+        } catch (ProjectSourceException $exception) {
+            throw IndexException::sanitized($exception->getMessage(), $exception);
+        }
+
+        try {
+            $pdo->beginTransaction();
+            try {
+                $this->omSourceReader->validateSchema($pdo);
+                $rows = $this->queryByIds($pdo, $kind, $normalized);
+                $pdo->commit();
+            } catch (\Throwable $exception) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+
+                throw $this->wrapReadFailure($exception);
+            }
+
+            return $rows;
+        } finally {
+            $pdo = null;
+        }
+    }
+
+    /**
      * Cheap stable filesystem identity (path + device + inode).
      *
      * Does not open SQLite or count source rows. Use snapshot() to read the revision.
@@ -189,6 +247,52 @@ final class CanonicalSourceReader
     }
 
     /**
+     * @param list<string> $ids
+     *
+     * @return list<CanonicalMemory>
+     */
+    private function queryByIds(\PDO $pdo, MemoryKind $kind, array $ids): array
+    {
+        $idColumn = $kind->idColumn();
+        $dateColumn = $kind->dateColumn();
+        $relevanceSelect = MemoryKind::Observation === $kind ? 'relevance' : 'NULL AS relevance';
+        $placeholders = [];
+        $params = [];
+        foreach ($ids as $index => $id) {
+            $name = 'id_'.$index;
+            $placeholders[] = ':'.$name;
+            $params[$name] = $id;
+        }
+
+        $sql = \sprintf(
+            'SELECT %s AS source_id, run_id AS session_id, content, %s AS occurred_raw, %s
+             FROM %s
+             WHERE %s IN (%s)
+             ORDER BY %s ASC',
+            $idColumn,
+            $dateColumn,
+            $relevanceSelect,
+            $kind->table(),
+            $idColumn,
+            implode(', ', $placeholders),
+            $idColumn,
+        );
+
+        $statement = $pdo->prepare($sql);
+        foreach ($params as $name => $value) {
+            $statement->bindValue(':'.$name, $value);
+        }
+        $statement->execute();
+
+        $memories = [];
+        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            $memories[] = $this->hydrate($kind, $row);
+        }
+
+        return $memories;
+    }
+
+    /**
      * @param array<string, mixed> $row
      */
     private function hydrate(MemoryKind $kind, array $row): CanonicalMemory
@@ -237,6 +341,7 @@ final class CanonicalSourceReader
             occurredAt: $occurredAt,
             relevance: $relevanceValue,
             contentSignature: $signature,
+            timestamp: \is_string($occurredRaw) ? $occurredRaw : null,
         );
     }
 

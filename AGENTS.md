@@ -2,6 +2,12 @@
 
 Librarian registers local Hatfield projects, discovers their OM/session sources read-only, and builds Librarian-owned hybrid indexes for shared retrieval. It is a Symfony web/admin application with EasyAdmin, Messenger, Scheduler, Mercure, MCP HTTP transport, Castor, and Docker/FrankenPHP. Librarian-owned Doctrine metadata and generation-scoped store tables share PostgreSQL + pgvector through the official Symfony AI Postgres store. Preserve current deployment topology unless a later plan explicitly replaces it. See [docs/project-sources.md](docs/project-sources.md) and [docs/indexing-design.md](docs/indexing-design.md).
 
+## MCP memory contract (plan 05)
+
+- Expose exactly `memory_search` and `recall`, with OM's unchanged parameter schemas. Select the registered project using `X-Librarian-Project` transport headers, never a tool argument or shared MCP-session state. `X-Hatfield-Session` supplies the default OM session for recall.
+- MCP authentication is a server setup option: `MCP_AUTH_REQUIRED=1` (default) requires the existing `ROLE_MCP` token through `Authorization: Bearer` or `X-MCP-Token`; `0` permits anonymous retrieval on trusted networks. Missing headers never bypass required mode, supplied tokens are always validated, and URL credentials are not accepted. See [docs/MCP.md](docs/MCP.md).
+- The approved temporary Postgres store fork (`0.15.0.1`, locked commit `790eaadc`) adds only HybridQuery `where`/`params` support. Date predicates run before the candidate limit; do not replace this with bounded post-filtering. Remove the fork when a compatible upstream release provides the fix. See [dependency provenance](docs/postgres-hybrid-filters.md).
+
 ## Framework upgrade note (plan 01)
 
 On 2026-11-12 the owner approved proceeding with the named **Symfony 8.2.0-BETA1** prerelease because stable Symfony 8.2 was not yet available. Use package-scoped stability allowances and keep global `minimum-stability` stable. Do not silently substitute another minor or relax stability globally.

@@ -28,6 +28,8 @@ final readonly class SearchResult
     public function __construct(
         public array $results,
         public bool $truncated,
+        public bool $candidateTruncated = false,
+        public bool $resultTruncated = false,
     ) {
     }
 }
