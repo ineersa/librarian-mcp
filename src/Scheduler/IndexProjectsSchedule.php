@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace App\Scheduler;
 
-use App\Entity\ProjectHealth;
-use App\Index\ProjectIndexManager;
-use App\Message\IndexProjectMessage;
+use App\Message\ScanProjectMessage;
+use App\Project\ProjectManager;
 use App\Repository\ProjectRepository;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Stamp\DeduplicateStamp;
@@ -16,7 +15,7 @@ use Symfony\Component\Scheduler\Schedule;
 use Symfony\Component\Scheduler\ScheduleProviderInterface;
 use Symfony\Component\Scheduler\Trigger\CallbackMessageProvider;
 
-/** Periodically checks registered sources for a new canonical revision. */
+/** Periodically discovers registered sources; successful discovery queues indexing. */
 #[AsSchedule('default')]
 final class IndexProjectsSchedule implements ScheduleProviderInterface
 {
@@ -36,7 +35,7 @@ final class IndexProjectsSchedule implements ScheduleProviderInterface
     {
         return $this->schedule ??= (new Schedule())->add(RecurringMessage::every(
             $this->indexIntervalSeconds,
-            new CallbackMessageProvider($this->messages(...), self::PROVIDER_ID, 'Check project source revisions'),
+            new CallbackMessageProvider($this->messages(...), self::PROVIDER_ID, 'Discover project sources and check indexes'),
         ));
     }
 
@@ -44,13 +43,12 @@ final class IndexProjectsSchedule implements ScheduleProviderInterface
     private function messages(): iterable
     {
         $projects = $this->projectRepository->createQueryBuilder('p')->select('p.id')
-            ->andWhere('p.health = :health')->setParameter('health', ProjectHealth::Ready)
             ->orderBy('p.id', 'ASC')->getQuery()->toIterable();
         foreach ($projects as $project) {
             $id = (int) $project['id'];
-            yield new Envelope(new IndexProjectMessage($id), [new DeduplicateStamp(
-                ProjectIndexManager::DEDUPE_PREFIX.$id,
-                ProjectIndexManager::DEDUPE_TTL_SECONDS,
+            yield new Envelope(new ScanProjectMessage($id), [new DeduplicateStamp(
+                ProjectManager::SCAN_DEDUPE_PREFIX.$id,
+                ProjectManager::SCAN_DEDUPE_TTL_SECONDS,
                 true,
             )]);
         }

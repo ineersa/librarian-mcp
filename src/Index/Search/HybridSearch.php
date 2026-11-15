@@ -68,8 +68,11 @@ final readonly class HybridSearch
             if (!$vector instanceof Vector) {
                 throw IndexException::sanitized('Query embedding did not return a single vector.');
             }
+            // Postgres ANDs words within each text, but ORs multiple texts.
+            // Natural-language questions must not require every word to occur in a chunk.
+            $terms = preg_split('/\s+/u', trim($question), flags: \PREG_SPLIT_NO_EMPTY);
             $fused = iterator_to_array(
-                $store->query(new HybridQuery($vector, $question), ['limit' => self::CANDIDATE_LIMIT]),
+                $store->query(new HybridQuery($vector, false === $terms ? $question : $terms), ['limit' => self::CANDIDATE_LIMIT]),
                 false,
             );
         } catch (IndexException $error) {

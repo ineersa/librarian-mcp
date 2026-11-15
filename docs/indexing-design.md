@@ -17,7 +17,7 @@ Locked dependency: Symfony AI Store + official Postgres bridge **0.15.0** with P
 
 - One store table per project/generation (isolation by table name, not metadata filters)
 - Store document IDs are deterministic **UUIDv5** values derived from `[generation ID, kind, sourceId, full parent signature, chunk position]`. Format version **3** participates in the generation signature. This is the only approved UUID exception; application entities keep auto-increment integers
-- `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match
+- `HybridQuery` uses weighted pgvector similarity + PostgreSQL `ts_rank` and requires a lexical match. The application passes whitespace-separated question terms as the vendor's OR-text array, not one text that would AND every significant word. The full question still drives embeddings and BGE reranking
 - Native hybrid does **not** apply metadata/date filters; admin Search memory has no date-window UI
 - Ranking is stock weighted hybrid, not BM25 and not RRF. Behavior preservation vs earlier backends is out of scope; testing/tuning comes later
 
@@ -64,13 +64,17 @@ Source identity remains path + filesystem device/inode. A changed filesystem ide
 
 Hatfield does not notify Librarian. Symfony Scheduler keeps indexes fresh inside the existing Messenger worker — not a separate OS cron.
 
-Default interval is `INDEX_INTERVAL=60` seconds. Use `CallbackMessageProvider` so each tick yields project indexing jobs directly. No custom tick message, pagination coordinator, or polling daemon. Queue-only Messenger deduplication plus the project execution lock remain the admission/execution barriers. Bound each source batch, embedding batch, and HTTP request.
+Default interval is `INDEX_INTERVAL=60` seconds. `CallbackMessageProvider` yields existing source-discovery messages for registered projects; successful discovery queues incremental indexing. This refreshes paths, session/source counts and schema metadata as well as detecting memory changes. Both discovery and indexing use queue-only Messenger deduplication; the project execution lock protects index writes. No custom tick message, pagination coordinator, or polling daemon. Bound each source batch, embedding batch, and HTTP request.
 
-Admin exposes index status, Index now, and Search memory in the existing Projects journey. MCP memory tools remain plan 05.
+Admin list/detail status updates arrive through Mercure + Turbo Streams after committed checkpoints, without document refreshes. Source discovery and indexed-memory counts are separate. Discovery/indexing are automatic; there are no manual scan/index buttons. Projects supports registration/removal, row-click details and per-row Search memory. Search remains part of the existing Projects journey. MCP memory tools remain plan 05.
+
+Status updates are private. Only the authenticated admin pages grant topic-scoped Mercure subscription cookies through native `turbo_stream_from(..., private: true)`; the hub does not allow anonymous subscriptions. Detail pages also grant the shared list topic through `subscribe`, keeping the single hub cookie valid across tabs and reconnections while each detail listens only to its own project. Every status update includes that shared topic. The list builds its status map with two bulk generation queries after EasyAdmin field processing and passes the results through field DTOs to the templates, without a mutable factory cache. Discovered observation/reflection counts and source-check time live in the same streamed list fragment as indexing status. Stored parent counts are labeled indexed memories, not scan progress.
+
+An unchanged revision skips embedding/store reconciliation but still touches the generation activity time and publishes status after the short write. The UI shows last source/index check separately from last successful indexing of a new revision. An old successful-index timestamp does not mean automatic checks stopped.
 
 ## Ranking shape
 
-Stock Postgres `HybridQuery` candidates → BGE on raw question/chunks (batches 8, 768 Unicode characters, floor -4) → stable order/ties → parent collapse. Report truncation and stale/partial status explicitly. Do not treat hybrid score as calibrated confidence.
+Stock Postgres `HybridQuery` candidates (OR across question terms) → BGE on raw question/chunks (batches 8, 768 Unicode characters, floor -4) → stable order/ties → parent collapse. Report truncation and stale/partial status explicitly. Do not treat hybrid score as calibrated confidence.
 
 ## Documentation consulted
 

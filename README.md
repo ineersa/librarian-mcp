@@ -173,7 +173,7 @@ Summary:
 - `BGE_URL`, `BGE_MODEL`
   Local BGE reranker endpoint/model (Voyage request client used only as protocol adapter).
 - `INDEX_INTERVAL`, `LOCK_DSN`
-  Scheduler interval (`CallbackMessageProvider` yields indexing jobs) and shared lock DSN.
+  Automatic source-discovery/index-check interval (`CallbackMessageProvider` yields discovery jobs; successful scans queue incremental indexing) and shared lock DSN.
 
 ### Mercure
 

@@ -28,7 +28,7 @@ Source and indexing contracts: [project-sources.md](project-sources.md) and [ind
 
 Main fields (product contract):
 
-- `id` (int auto-increment; stable identity across rescans and explicit path rebinds)
+- `id` (int auto-increment; stable identity across automatic source scans)
 - `name` (unique after trim + case-insensitive compare)
 - `rootPath` (unique canonical project directory)
 - `repositoryOrigin` (unique normalized Git origin when present)
@@ -36,7 +36,7 @@ Main fields (product contract):
 - discovered source paths / schema / counts / revision / source-change journal entries
 - `lastError`, `lastScanAt`, `lastSuccessfulScanAt`, `lastSuccessfulIndexAt`
 
-Uniqueness is case-insensitive for names, canonical for directories, and normalized for Git origins. Explicit admin path edits rebind the same project ID; they do not merge registrations by name or origin.
+Uniqueness is case-insensitive for names, canonical for directories, and normalized for Git origins. Registrations support create/delete only; changing a name or directory requires removing and registering again.
 
 `ready` means sources were discovered successfully. It does **not** mean indexed. Source journal / change counts are Hatfield OM source entries, not a Librarian index backlog.
 
@@ -76,9 +76,9 @@ Details: [project-sources.md](project-sources.md), [indexing-design.md](indexing
 1. Persist / update project registration
 2. Queue scan message on Messenger `async`
 3. Worker marks health `scanning`, discovers sources read-only
-4. On success: health `ready` with discovered paths/counts/schema/revision; indexing may be queued
+4. On success: health `ready` with discovered paths/counts/schema/revision; incremental indexing is queued
 5. Index worker acquires the project execution lock, reads bounded source batches, embeds outside short DB writes, then upserts/removes store chunks + commits the relational manifest in one short PostgreSQL transaction
-6. Scheduler `CallbackMessageProvider` yields project indexing jobs every `INDEX_INTERVAL` seconds (default 60) without a custom tick protocol or OS cron
+6. Scheduler `CallbackMessageProvider` yields source-discovery jobs for registered projects every `INDEX_INTERVAL` seconds (default 60), reusing the scan → incremental-index path without a custom tick protocol or OS cron. Unchanged revisions record check activity without re-embedding.
 7. On failure: sanitized `lastError` / generation error state; Messenger retries remain replay-safe for deterministic IDs
 
 Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match and does not apply date filters.
@@ -88,10 +88,11 @@ Search remains available against the last committed usable index while newer wor
 ## 5) Admin + UX integration
 
 - EasyAdmin dashboard shows registered-project counts and recent health
-- Project CRUD at `/admin/projects` with inlined actions
+- Projects at `/admin/projects`: create/delete only, row click opens details, per-row Search memory
 - Project registration uses an editable absolute directory path visible to the service
-- Explicit **Scan sources**, **Index now**, and **Search memory** actions (no date-window UI)
-- Detail page exposes source health (`#project-source-status`) and index status (`#project-index-status`) with bounded meta refresh while pending
+- Source discovery and incremental indexing are automatic; no manual scan/index buttons (no date-window UI)
+- Detail page exposes source health (`#project-source-status`) and index status (`#project-index-status`) through Mercure + Turbo Streams, without document refreshes; actions are Delete and Back only
+- Display dates use `app.display_timezone` (`America/New_York`, EST/EDT); PHP/database timestamps remain UTC
 - Admin uses the separate `admin` AssetMapper entry (no public Tailwind reset)
 
 There is no security allowlist beyond admin authentication. Symlinks / external configured paths are allowed by the owner's local-tool policy; actual resolved paths are reported in project health.

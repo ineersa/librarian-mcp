@@ -1,0 +1,44 @@
+{% set project = project|default(null) %}
+{% set indexStatus = indexStatus|default(null) %}
+{% if project is not null and indexStatus is not null %}
+    <div
+        id="project-index-list-{{ project.id }}"
+        class="small"
+        data-project-id="{{ project.id }}"
+        data-source-revision="{{ project.sourceRevision ?? '' }}"
+        data-index-status="{{ indexStatus.statusValue }}"
+        data-index-pending="{{ indexStatus.pending ? '1' : '0' }}"
+        data-index-stale="{{ indexStatus.stale ? '1' : '0' }}"
+        data-index-can-check="{{ indexStatus.canCheckUpdates ? '1' : '0' }}"
+        {% if indexStatus.latest %}
+            data-index-generation-id="{{ indexStatus.latest.id }}"
+            data-index-parent-count="{{ indexStatus.indexedMemoryCount }}"
+        {% endif %}
+    >
+        <div class="fw-semibold" data-index-status-label>{{ indexStatus.statusLabel }}</div>
+        <div class="text-muted" data-index-summary-label>{{ indexStatus.indexedMemoryCount|number_format }} indexed memories</div>
+        <div class="text-muted">
+            Sources: <span data-source-count="observations">{{ project.observationCount|number_format }}</span> observations,
+            <span data-source-count="reflections">{{ project.reflectionCount|number_format }}</span> reflections
+        </div>
+        <div class="text-muted" data-source-last-check>
+            Last source check: {{ project.lastScanAt ? project.lastScanAt|date('Y-m-d H:i:s T') : 'Not checked yet' }}
+        </div>
+        {% if indexStatus.latest %}
+            <div class="text-muted" data-index-last-check>Last checked {{ indexStatus.latest.updatedAt|date('Y-m-d H:i:s T') }}</div>
+        {% endif %}
+        <div class="text-muted" data-index-last-success>
+            {% if indexStatus.lastIndexAt %}
+                Last indexed {{ indexStatus.lastIndexAt|date('Y-m-d H:i T') }}
+            {% else %}
+                Never indexed
+            {% endif %}
+        </div>
+        <div class="text-muted" data-index-auto-help>
+            Updates are automatic
+        </div>
+        {% if indexStatus.error %}
+            <div class="text-danger" data-index-error>{{ indexStatus.error }}</div>
+        {% endif %}
+    </div>
+{% endif %}

@@ -1,0 +1,53 @@
+{% set project = project|default(null) %}
+{% set indexStatus = indexStatus|default(null) %}
+{% if project is not null and indexStatus is not null %}
+    <div
+        id="project-source-status"
+        class="mb-3"
+        data-project-health="{{ indexStatus.health.value }}"
+        data-project-id="{{ project.id }}"
+    >
+        <p class="mb-1">
+            <strong>Source health:</strong>
+            <span data-project-health-label>{{ indexStatus.health.label() }}</span>
+        </p>
+        <p class="mb-1 text-muted">
+            Sources are discovered automatically, followed by an incremental index check. Unchanged memories are skipped.
+        </p>
+        <dl class="row mb-2 small">
+            <dt class="col-sm-4">Last source check</dt>
+            <dd class="col-sm-8" data-source-last-check>{{ project.lastScanAt ? project.lastScanAt|date('Y-m-d H:i:s T') : 'Not checked yet' }}</dd>
+            <dt class="col-sm-4">Observations</dt>
+            <dd class="col-sm-8" data-source-count="observations">{{ project.observationCount }}</dd>
+            <dt class="col-sm-4">Reflections</dt>
+            <dd class="col-sm-8" data-source-count="reflections">{{ project.reflectionCount }}</dd>
+            <dt class="col-sm-4">Sessions</dt>
+            <dd class="col-sm-8" data-source-count="sessions">{{ project.sessionCount }}</dd>
+        </dl>
+        {% if project.databasePath or project.sessionsPath or project.schemaVersion %}
+            <div class="small text-muted" data-source-details>
+                {% if project.databasePath %}
+                    <p class="mb-1">
+                        <strong>OM database:</strong>
+                        <span data-source-database-path>{{ project.databasePath }}</span>
+                    </p>
+                {% endif %}
+                {% if project.sessionsPath %}
+                    <p class="mb-1">
+                        <strong>Sessions path:</strong>
+                        <span data-source-sessions-path>{{ project.sessionsPath }}</span>
+                    </p>
+                {% endif %}
+                {% if project.schemaVersion %}
+                    <p class="mb-1">
+                        <strong>Schema version:</strong>
+                        <span data-source-schema-version>{{ project.schemaVersion }}</span>
+                    </p>
+                {% endif %}
+            </div>
+        {% endif %}
+        {% if indexStatus.sourceError %}
+            <p class="mb-0 text-danger" data-project-error>{{ indexStatus.sourceError }}</p>
+        {% endif %}
+    </div>
+{% endif %}

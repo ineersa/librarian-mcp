@@ -19,7 +19,6 @@
         protocol_version_compatibility 8
         publisher_jwt {env.MERCURE_PUBLISHER_JWT_KEY} {env.MERCURE_PUBLISHER_JWT_ALG}
         subscriber_jwt {env.MERCURE_SUBSCRIBER_JWT_KEY} {env.MERCURE_SUBSCRIBER_JWT_ALG}
-        anonymous
         subscriptions
         cors_origins {$MERCURE_CORS_ORIGINS}
         {$MERCURE_EXTRA_DIRECTIVES}

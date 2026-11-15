@@ -4,6 +4,7 @@
     {% set health = field.value %}
     {% set status = health.value|default(field.value|default('')) %}
     {% set label = health is not null ? health.label() : (status|replace({'_': ' '})|title) %}
+    {% set projectId = entity.primaryKeyValueAsString|default(entity.primaryKeyValue|default('')) %}
 
     {% set badgeClasses = {
         'pending': 'badge badge-secondary',
@@ -13,6 +14,7 @@
     } %}
 
     <span
+        id="project-health-badge-{{ projectId }}"
         data-project-health="{{ status }}"
         class="{{ badgeClasses[status] ?? badgeClasses['pending'] }}"
     >{{ label }}</span>

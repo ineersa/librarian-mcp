@@ -1,0 +1,76 @@
+{% set project = project|default(null) %}
+{% set indexStatus = indexStatus|default(null) %}
+{% if project is not null and indexStatus is not null %}
+    <div
+        id="project-index-status"
+        class="card mb-3"
+        data-index-status="{{ indexStatus.statusValue }}"
+        data-index-pending="{{ indexStatus.pending ? '1' : '0' }}"
+        data-index-stale="{{ indexStatus.stale ? '1' : '0' }}"
+        data-index-can-check="{{ indexStatus.canCheckUpdates ? '1' : '0' }}"
+        {% if indexStatus.latest %}
+            data-index-generation-id="{{ indexStatus.latest.id }}"
+            data-index-committed-revision="{{ indexStatus.latest.committedRevision ?? '' }}"
+            data-index-parent-count="{{ indexStatus.latest.parentCount }}"
+            data-index-chunk-count="{{ indexStatus.latest.chunkCount }}"
+        {% endif %}
+        {% if indexStatus.active %}
+            data-index-active-generation-id="{{ indexStatus.active.id }}"
+        {% endif %}
+    >
+        <div class="card-body">
+            <h2 class="h5 mb-3">Index status</h2>
+            <p class="mb-1">
+                <strong>Status:</strong>
+                <span data-index-status-label>{{ indexStatus.statusLabel }}</span>
+            </p>
+            <p class="mb-2 text-muted small" data-index-auto-help>
+                {{ indexStatus.automaticIndexingHelp }}
+            </p>
+            {% if indexStatus.latest %}
+                <dl class="row mb-0 small">
+                    <dt class="col-sm-4">Indexed memories</dt>
+                    <dd class="col-sm-8">
+                        <span data-index-parent-count-value>{{ indexStatus.indexedMemoryCount }}</span>
+                    </dd>
+                    <dt class="col-sm-4">{{ indexStatus.pending ? 'Last indexing activity' : 'Last index check' }}</dt>
+                    <dd class="col-sm-8" data-index-last-check>{{ indexStatus.latest.updatedAt|date('Y-m-d H:i:s T') }}</dd>
+                    <dt class="col-sm-4">Last successful index</dt>
+                    <dd class="col-sm-8" data-index-last-success>
+                        {% if indexStatus.lastIndexAt %}
+                            {{ indexStatus.lastIndexAt|date('Y-m-d H:i:s T') }}
+                        {% else %}
+                            Never indexed
+                        {% endif %}
+                    </dd>
+                </dl>
+                <p class="small text-muted mt-2 mb-0">
+                    Checks do not rebuild unchanged memories. The last successful index time changes when a new source revision is committed.
+                </p>
+                {% if indexStatus.active and indexStatus.active.id != indexStatus.latest.id %}
+                    <p class="small mt-2 mb-0">
+                        Search still uses the previous index of {{ indexStatus.active.parentCount|number_format }} memories.
+                    </p>
+                {% endif %}
+                <details class="small mt-2">
+                    <summary>Technical index details</summary>
+                    <dl class="row mb-0 mt-2">
+                        <dt class="col-sm-4">Active generation</dt>
+                        <dd class="col-sm-8" data-index-active-id>{{ indexStatus.active ? indexStatus.active.id : 'None' }}</dd>
+                        <dt class="col-sm-4">Committed revision</dt>
+                        <dd class="col-sm-8" data-index-committed-revision-value>{{ indexStatus.latest.committedRevision ?? 'Not committed' }}</dd>
+                        <dt class="col-sm-4">Source revision at last discovery</dt>
+                        <dd class="col-sm-8" data-index-source-revision>{{ project.sourceRevision ?? 'Unknown' }}</dd>
+                    </dl>
+                </details>
+            {% else %}
+                <p class="mb-0" data-index-empty>
+                    No index yet. Source discovery and indexing run automatically.
+                </p>
+            {% endif %}
+            {% if indexStatus.error %}
+                <p class="mb-0 mt-2 text-danger" data-index-error>{{ indexStatus.error }}</p>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}

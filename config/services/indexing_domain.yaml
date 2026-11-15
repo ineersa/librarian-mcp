@@ -20,6 +20,9 @@ services:
         arguments:
             $indexExecutionLockFactory: '@index_execution_lock_factory'
 
+    App\Index\Status\ProjectIndexStatusFactory: ~
+    App\Index\Status\ProjectStatusPublisher: ~
+
     App\MessageHandler\IndexProjectMessageHandler: ~
 
     App\Scheduler\IndexProjectsSchedule:
