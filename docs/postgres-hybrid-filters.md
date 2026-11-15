@@ -6,11 +6,28 @@ Temporary dependency note for the MCP memory-search date-parameter prerequisite.
 
 Locked `symfony/ai-postgres-store` **0.15.0** (`9658c2ec`) already accepts parameterized `where` / `params` for `VectorQuery`. `HybridQuery` did not apply those options before `ORDER BY` / `LIMIT`, so date predicates could not honestly restrict hybrid candidates.
 
-## Temporary reviewed fork
+The split package README points contributions to the monorepo:
 
-Until an upstream release includes the same change, this checkout pins a reviewed fork tag through Composer:
+- Report issues / send PRs in https://github.com/symfony/ai
+- Not against the read-only split `symfony/ai-postgres-store`
 
-- Fork: https://github.com/ineersa/ai-postgres-store
+## Upstream submission
+
+Focused monorepo PR opened against `symfony/ai` `main`:
+
+- PR: https://github.com/symfony/ai/pull/2950
+- Head: `ineersa:feat/postgres-hybrid-where-params`
+- Commit: `5242e8ea`
+- Path: `src/store/src/Bridge/Postgres/Store.php`
+- Same minimal HybridQuery `where` / `params` parity as VectorQuery, plus changelog/docs and one positive existing unit-test assertion
+
+No reviewers requested. Waiting on upstream review/merge/release before Librarian can drop the temporary pin.
+
+## Temporary reviewed pin still in use
+
+Until an upstream release includes the change, this checkout pins a reviewed fork tag through Composer:
+
+- Temporary package fork: https://github.com/ineersa/ai-postgres-store
 - Branch: `feat/hybrid-where-params`
 - Commit: `790eaadc969c11db0a8d531d3e02443d249d71ec`
 - Annotated tag / constraint: `0.15.0.1`
@@ -18,9 +35,9 @@ Until an upstream release includes the same change, this checkout pins a reviewe
 - Global `minimum-stability` remains `stable`
 - No `vendor/` edits and no duplicated Store class in application code
 
-The fork change mirrors VectorQuery: when `where` is present it is AND-combined in parentheses with the hybrid lexical clause, and `params` are merged into the bound parameter map before execute.
+The temporary fork change matches the monorepo PR behavior: when `where` is present it is AND-combined in parentheses with the hybrid lexical clause, and `params` are merged into the bound parameter map before execute.
 
-An upstream PR could not be opened automatically from this account (`CreatePullRequest` permission denied against `symfony/ai-postgres-store`). The fork branch/tag remain the provenance source.
+Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 
 ## Application API for main
 
