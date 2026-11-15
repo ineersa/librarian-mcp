@@ -6,7 +6,7 @@ Librarian registers **local directories**. It discovers Hatfield OM/session meta
 
 - **Sources discovered** (`ready`) means discovery succeeded, not that memories are indexed.
 - **Search memory** is a per-project list action over derived data. Discovery and incremental indexing run automatically (default 60s), without manual scan/index buttons. Search never synchronously ingests or rebuilds a project and has no date-window UI.
-- Public MCP tools (**plan 05**): `memory_search` and `recall` with OM schemas; project selected by `X-Librarian-Project`, not a tool argument. See [MCP.md](MCP.md).
+- Public MCP tools (**plan 05**): `ensure_project` (`{}`), `memory_search` (OM schema), and ID-only `recall`; project selected by `X-Librarian-Project`, not a tool argument. Registration uses the same server authentication setting as retrieval, including anonymous mode. See [MCP.md](MCP.md).
 - Design and validation status live in [indexing-design.md](indexing-design.md) and [indexing-validation.md](indexing-validation.md).
 
 ## Identity and removal
@@ -15,6 +15,7 @@ Librarian registers **local directories**. It discovers Hatfield OM/session meta
 - Trimmed, case-insensitive display names must be unique. Canonical directories and normalized Git origins must also be unique. A second checkout with the same origin is rejected, not silently merged. Non-Git/no-origin directories are supported.
 - Git inspection failures are registration errors, not evidence of a non-Git/no-origin directory. For mounted worktrees, make the linked worktree and common Git metadata available read-only at the paths recorded in `.git`.
 - Registration supports create/delete, not editing. To change its name or directory, remove the registration and register it again. Nothing infers identity from a basename, session number, name, or origin.
+- `ensure_project` explicitly registers the canonical header root if needed, using its basename only as the default display name. An existing registration is returned unchanged without enqueueing work. New registrations reuse entity validation, catalog uniqueness constraints, and normal asynchronous source discovery; no `.hatfield` directory or initialized OM is required. Source discovery may initially report missing sources and retry on scheduled checks. Registration never creates or modifies source directories, settings, databases, or journals; success is not indexing readiness.
 - A scan publishes results only if the registration still refers to its scanned directory. Filesystem discovery runs outside the short Doctrine write transaction.
 - Deletion removes the Librarian registration and **owned derived indexes** (generation rows and generation-scoped Postgres store tables). It never removes the project directory, `.hatfield`, OM database, journals, or external/symlink destinations.
 - Generated migrations add Librarian-owned tables only. PostgreSQL migrations live under `migrations/postgres`. The actual development application uses PostgreSQL.
@@ -67,7 +68,7 @@ Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `Callb
 
 ## Docker source mounts
 
-`PROJECTS_HOST_PATH` defaults to this checkout (`.`) and is bound read-only at `/projects` in development. Production uses `PROJECTS_CONTAINER_PATH` for the target (default `/projects`); setting it to the host absolute path lets that same path work in the registration form. Web and Messenger consumer need identical read-only source mounts/env. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack. Production consumer service name is `messenger` (not `worker`).
+`PROJECTS_HOST_PATH` defaults to this checkout (`.`) and is bound read-write at `/projects` in development. Production uses `PROJECTS_CONTAINER_PATH` for the target (default `/projects`); setting it to the host absolute path lets that same path work in the registration form. Web and Messenger consumer need identical source mounts/env. SQLite connections remain `mode=ro`: the writable mount lets SQLite create/manage WAL/SHM sidecars when absent, not write source tables. Source journals must not be modified. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack; OM database directories there also need writable mounts. Production consumer service name is `messenger` (not `worker`).
 
 EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry so the public Tailwind reset stays out of admin. Login uses EasyAdmin's built-in dark template.
 

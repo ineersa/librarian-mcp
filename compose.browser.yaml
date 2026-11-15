@@ -31,7 +31,7 @@ services:
       - ./docker/frankenphp/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
       - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
-      - ./var/browser-live/project-sources:/project-sources:ro
+      - ./var/browser-live/project-sources:/project-sources:rw
   worker:
     environment:
       APP_ENV: test
@@ -55,7 +55,7 @@ services:
       - ./var/browser-live/cache:/app/var/cache
       - ./var/browser-live/log:/app/var/log
       - ./var/browser-live/indexes:/app/var/browser-live/indexes
-      - ./var/browser-live/project-sources:/project-sources:ro
+      - ./var/browser-live/project-sources:/project-sources:rw
   postgres:
     environment:
       POSTGRES_DB: '${POSTGRES_DB}'
