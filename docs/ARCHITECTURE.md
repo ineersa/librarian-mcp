@@ -7,7 +7,7 @@ The app is a Symfony web/admin application that:
 1. Stores a catalog of registered local Hatfield projects
 2. Asynchronously discovers each project's OM database and session roots read-only
 3. Builds Librarian-owned hybrid indexes from retained observations/reflections
-4. Exposes HTTP MCP at `/_mcp` (required-token `memory_search` + `recall`; project via connection headers)
+4. Exposes HTTP MCP at `/_mcp` (`memory_search` + `recall`; project via connection headers; server setting `MCP_AUTH_REQUIRED=1` requires tokens by default, `0` allows trusted-network anonymous access)
 
 Core runtime pieces:
 

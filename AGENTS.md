@@ -5,7 +5,7 @@ Librarian registers local Hatfield projects, discovers their OM/session sources 
 ## MCP memory contract (plan 05)
 
 - Expose exactly `memory_search` and `recall`, with OM's unchanged parameter schemas. Select the registered project using `X-Librarian-Project` transport headers, never a tool argument or shared MCP-session state. `X-Hatfield-Session` supplies the default OM session for recall.
-- MCP now requires the existing `ROLE_MCP` token through `Authorization: Bearer` or `X-MCP-Token`; URL credentials are not accepted. See [docs/MCP.md](docs/MCP.md).
+- MCP authentication is a server setup option: `MCP_AUTH_REQUIRED=1` (default) requires the existing `ROLE_MCP` token through `Authorization: Bearer` or `X-MCP-Token`; `0` permits anonymous retrieval on trusted networks. Missing headers never bypass required mode, supplied tokens are always validated, and URL credentials are not accepted. See [docs/MCP.md](docs/MCP.md).
 - The approved temporary Postgres store fork (`0.15.0.1`, locked commit `790eaadc`) adds only HybridQuery `where`/`params` support. Date predicates run before the candidate limit; do not replace this with bounded post-filtering. Remove the fork when a compatible upstream release provides the fix. See [dependency provenance](docs/postgres-hybrid-filters.md).
 
 ## Framework upgrade note (plan 01)

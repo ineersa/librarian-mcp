@@ -48,7 +48,8 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         $this->waitForProjectHealth(ProjectHealth::Ready);
         $this->waitForCommittedIndex(3);
 
-        $first = $this->client($token, 'mcp-a');
+        // Exercise anonymous retrieval when the deployment explicitly permits it.
+        $first = $this->client(0 === self::getContainer()->getParameter('app.mcp_auth_required') ? null : $token, 'mcp-a');
         $second = null;
         try {
             self::assertSame(ProtocolVersion::V2026_07_28, $first->getProtocolVersion());
@@ -106,7 +107,7 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         }
     }
 
-    private function client(string $token, string $slug): Client
+    private function client(?string $token, string $slug): Client
     {
         $hostname = parse_url($this->url, \PHP_URL_HOST);
         $proxyIp = getenv('LIBRARIAN_PROXY_IP');
@@ -119,11 +120,14 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
             ->setFallbackProtocolVersion(null)
             ->setMaxRetries(0)
             ->build();
-        $client->connect(new HttpTransport($this->url.'/_mcp', [
-            'Authorization' => 'Bearer '.$token,
+        $headers = [
             MemoryContextResolver::PROJECT_HEADER => ProjectSourceFixture::visibleProjectPath($slug),
             MemoryContextResolver::SESSION_HEADER => '108',
-        ], httpClient: new Psr18Client(HttpClient::create(['resolve' => [$hostname => $proxyIp]]))));
+        ];
+        if (null !== $token) {
+            $headers['Authorization'] = 'Bearer '.$token;
+        }
+        $client->connect(new HttpTransport($this->url.'/_mcp', $headers, httpClient: new Psr18Client(HttpClient::create(['resolve' => [$hostname => $proxyIp]]))));
 
         return $client;
     }

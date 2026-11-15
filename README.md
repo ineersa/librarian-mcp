@@ -8,7 +8,7 @@ It provides:
 - async read-only source discovery (Messenger worker)
 - project health, discovered source metadata, and index status in admin
 - per-row Search memory over the committed active generation (admin UI; no date-window UI)
-- HTTP MCP at `/_mcp` (required token; native `memory_search` + `recall`)
+- HTTP MCP at `/_mcp` (setup-selectable token authentication; native `memory_search` + `recall`)
 
 Registered project trees remain on the host/service mounts; Librarian only reads approved Hatfield settings/OM/session locations and stores derived registration/index state in its shared PostgreSQL + pgvector database (Doctrine metadata and official Symfony AI Postgres store tables). It does not clone repositories.
 
@@ -32,7 +32,7 @@ This is a shared local memory service for registered Hatfield projects:
 - **Async read-only discovery** (so scans do not block web requests)
 - **Derived hybrid indexing** (CodeRank 768-dim vectors via the official Symfony AI Postgres store + local BGE; stock weighted hybrid/`ts_rank`, not BM25/RRF)
 - **Stable project identity** (auto-increment ID survives rescans and explicit path rebinds)
-- **Required MCP token auth for tools** (`Authorization: Bearer` or `X-MCP-Token`; admin/login remain protected)
+- **Setup-selectable MCP token auth** (`MCP_AUTH_REQUIRED=1` by default; set `0` for trusted-network anonymous access; admin/login remain protected)
 - **MCP tools** — `memory_search` and `recall` with OM schemas; project via `X-Librarian-Project` (not a tool arg). See [MCP contract](docs/MCP.md)
 
 Architecture docs:
@@ -187,7 +187,8 @@ Summary:
 ### Security / MCP
 
 - MCP endpoint: `/_mcp`
-- Auth headers (**required**; URL query-token fallbacks removed):
+- `MCP_AUTH_REQUIRED` — `1` (default) requires a valid token; `0` allows tokenless requests. This is server configuration, not a client-header bypass. Anonymous mode exposes registered-project memory to anyone who can reach the endpoint; use only on a trusted network. Supplied credentials are still validated.
+- Auth headers (required when `MCP_AUTH_REQUIRED=1`; URL query-token fallbacks removed):
   - `Authorization: Bearer <token>`
   - `X-MCP-Token: <token>`
 - Connection headers (not tool args): `X-Librarian-Project` (absolute registered root), `X-Hatfield-Session` (OM `run_id` for recall default)

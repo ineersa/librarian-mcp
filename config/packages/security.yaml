@@ -1,3 +1,8 @@
+parameters:
+    # Numeric 0/1 keeps the setup flag valid inside the security expression.
+    app.mcp_auth_required: '%env(int:MCP_AUTH_REQUIRED)%'
+    app.mcp_role: !php/const App\Entity\User::ROLE_MCP
+
 security:
     # https://symfony.com/doc/current/security.html#registering-the-user-hashing-passwords
     password_hashers:
@@ -37,8 +42,8 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
-        # Retrieval exposes private memory and journals; credentials stay in headers.
-        - { path: ^/_mcp, roles: !php/const App\Entity\User::ROLE_MCP }
+        # Only server configuration can allow anonymous retrieval, never a missing header.
+        - { path: ^/_mcp, allow_if: 'not %app.mcp_auth_required% or is_granted("%app.mcp_role%")' }
         - { path: ^/admin, roles: ROLE_ADMIN }
         - { path: ^/login, roles: PUBLIC_ACCESS }
 

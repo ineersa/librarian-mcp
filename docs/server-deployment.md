@@ -29,6 +29,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
    - `APP_SECRET`
    - `DEFAULT_URI` (for example `https://librarian.example.com`)
    - `MCP_ALLOWED_HOSTS` (comma-separated hostnames without scheme/port; include `librarian.example.com`)
+   - `MCP_AUTH_REQUIRED` (`1` by default: require an admin-issued token; set `0` only for trusted-network anonymous MCP access). Admin login stays protected in either mode. Restart the stack after changing this setting.
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - `HATFIELD_PATH_MAPPINGS` when host/service path prefixes differ

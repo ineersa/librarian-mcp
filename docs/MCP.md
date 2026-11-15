@@ -30,12 +30,17 @@ Firewall:
 - `security.firewalls.mcp` (stateless, path `^/_mcp`)
 - `App\Security\McpTokenAuthenticator`
 
-Token is **required** for the endpoint:
+Authentication is selected by **server setup**, not by whether a client sends a header:
+
+- `MCP_AUTH_REQUIRED=1` (default): require a valid admin-issued `ROLE_MCP` token. Missing or invalid credentials return HTTP **401**.
+- `MCP_AUTH_REQUIRED=0`: allow requests without a token. Anyone able to reach the endpoint and select a registered project can retrieve its memory, so use this only on a trusted network. A supplied token is still validated; invalid credentials return **401**.
+
+Set the option in `.env.local` / `.env.prod.local` and restart the corresponding stack. Client credentials, when required or supplied, use either header:
 
 1. `Authorization: Bearer <token>`
 2. `X-MCP-Token: <token>`
 
-URL query-token fallbacks (`token` / `access_token`) and raw `Authorization: mcp_...` are removed. Failed auth is HTTP **401**. Successful auth requires `ROLE_MCP`. Access is the single-admin registered catalog, not a per-user ACL. Registration remains an administrator operation.
+URL query-token fallbacks (`token` / `access_token`) and raw `Authorization: mcp_...` are removed. Access is the single-admin registered catalog, not a per-user ACL. Registration and browser admin authentication remain unchanged.
 
 Token lifecycle (`App\Security\McpTokenManager`): plaintext `mcp_<random>`; SHA-256 hash stored; regeneration updates hash + created timestamp; successful auth updates `mcpTokenLastUsedAt`.
 
@@ -126,6 +131,7 @@ $transport = new HttpTransport(
     $endpoint,
     headers: [
         'Authorization' => 'Bearer mcp_REDACTED',
+        // Omit Authorization only when the server has MCP_AUTH_REQUIRED=0.
         'X-Librarian-Project' => '/project-sources/example-a', // registered synthetic root
         'X-Hatfield-Session' => '108', // OM run_id when recall omits session_id
     ],
@@ -162,3 +168,7 @@ try {
 ## 7) Validation recorded for plan 05
 
 On 2026-11-15, `vendor/bin/castor cs:fix`, the complete existing headless browser suite (**5 journeys / 87 assertions**, 13.406s browser time; 27.438s including isolated-stack preparation), and `vendor/bin/castor qa:static` passed. `git diff --check` passed. Coverage remains one journey per feature; no additional test suite or special-case matrix was introduced. The modern SDK path is exercised; the configured handshake fallback and distinct-session recall remain unverified at runtime. No production deployment or owner-data reset was performed.
+
+Optional-auth follow-up: the same MCP journey passed with `MCP_AUTH_REQUIRED=0` (**1 journey / 47 assertions**, 5.036s), including an anonymous first connection and an authenticated second connection. The complete existing suite then passed with the default required-auth setting (**5 journeys / 87 assertions**, 12.031s); `cs:fix` and `qa:static` passed. The temporary test-local override was removed.
+
+At the owner's subsequent request, the PR build was deployed on the existing production port **8093**, with private server configuration `MCP_AUTH_REQUIRED=0`, using Castor `prod:up` and `prod:restart`. A tokenless modern-protocol HTTP `tools/list` returned exactly `memory_search` and `recall`; the homepage returned HTTP 200 and web/Postgres were healthy, with the worker running. This is endpoint/authentication deployment verification, not a claim of production search/recall evidence coverage. No database reset, migration, or source modification was performed.
