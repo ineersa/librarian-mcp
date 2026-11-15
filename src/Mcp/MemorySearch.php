@@ -13,6 +13,10 @@ use App\Index\Source\MemoryKind;
 use App\Memory\MemoryErrorCode;
 use App\Repository\IndexedMemoryRepository;
 use App\Repository\IndexGenerationRepository;
+use Symfony\Component\Serializer\Normalizer\DateTimeNormalizer;
+use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
+use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /** Thin project-scoped retrieval boundary; never treats a stored chunk as canonical evidence. */
 final readonly class MemorySearch
@@ -25,6 +29,8 @@ final readonly class MemorySearch
         private IndexGenerationRepository $generations,
         private IndexedMemoryRepository $manifests,
         private CanonicalSourceReader $sourceReader,
+        private ValidatorInterface $validator,
+        private DenormalizerInterface $denormalizer,
     ) {
     }
 
@@ -39,14 +45,12 @@ final readonly class MemorySearch
             throw new MemoryToolException(MemoryErrorCode::InvalidLimit, 'limit must be between 1 and 50.');
         }
         try {
-            $dates = MemoryDateRange::fromInputs($after, $before);
+            $dates = new MemoryDateRange(
+                $this->dateBound($after, MemoryErrorCode::InvalidAfter),
+                $this->dateBound($before, MemoryErrorCode::InvalidBefore, upperBound: true),
+            );
         } catch (\InvalidArgumentException $error) {
-            $code = match ($error->getCode()) {
-                MemoryDateRange::INVALID_AFTER => MemoryErrorCode::InvalidAfter,
-                MemoryDateRange::INVALID_BEFORE => MemoryErrorCode::InvalidBefore,
-                default => MemoryErrorCode::InvalidDateRange,
-            };
-            throw new MemoryToolException($code, $error->getMessage());
+            throw new MemoryToolException(MemoryErrorCode::InvalidDateRange, $error->getMessage());
         }
 
         $projectId = $project->id;
@@ -145,5 +149,26 @@ final readonly class MemorySearch
                 'source_revision' => $latest->revision,
             ],
         ];
+    }
+
+    private function dateBound(?string $value, MemoryErrorCode $errorCode, bool $upperBound = false): ?\DateTimeImmutable
+    {
+        if (null === $value) {
+            return null;
+        }
+
+        // The native MCP schema already validates shape; Symfony validates real dates.
+        $dayPrecision = !str_contains($value, ' ');
+        $format = $dayPrecision ? '!Y-m-d' : '!Y-m-d H:i';
+        if (\count($this->validator->validate($value, new Assert\DateTime(format: $format))) > 0) {
+            throw new MemoryToolException($errorCode, 'Date bound must be a real calendar date (YYYY-MM-DD or YYYY-MM-DD HH:MM).');
+        }
+
+        $date = $this->denormalizer->denormalize($value, \DateTimeImmutable::class, context: [
+            DateTimeNormalizer::FORMAT_KEY => $format,
+            DateTimeNormalizer::TIMEZONE_KEY => 'UTC',
+        ]);
+
+        return $upperBound ? $date->modify($dayPrecision ? '+1 day' : '+1 minute') : $date;
     }
 }

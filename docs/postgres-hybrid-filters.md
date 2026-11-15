@@ -41,15 +41,13 @@ Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreateP
 
 ## Application integration
 
-`App\Index\Search\MemoryDateRange::fromInputs(?string $after, ?string $before): self`
+`App\Index\Search\MemoryDateRange::__construct(?\DateTimeImmutable $after, ?\DateTimeImmutable $beforeExclusive)`
 
-- Accepts OM formats `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`
-- Blank / whitespace optional values are absent
-- Validates real calendar dates/minutes
-- Requires `after <= before` when both are present
-- Stores UTC unix timestamps: inclusive lower bound, exclusive start of next day/minute upper bound
-- `toQueryOptions()` returns only fixed parameterized predicates against `IndexFields::OCCURRED_AT`
-- Throws `\InvalidArgumentException` with a safe message on invalid input
+- MCP's native `#[Schema]` validates the wire formats `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`; there is no second date-pattern regex in application code.
+- At the MCP boundary, Symfony's `DateTime` constraint checks calendar validity and the Serializer's `DateTimeNormalizer` converts the input using an explicit format and UTC timezone.
+- The boundary retains day/minute precision, expanding the inclusive upper bound to the start of the next day/minute.
+- The value object holds typed immutable dates and rejects empty/reversed ranges; it does not parse strings or duplicate calendar validation.
+- `toQueryOptions()` converts the bounds to Unix timestamps and returns only fixed parameterized predicates against `IndexFields::OCCURRED_AT`.
 
 `App\Index\Search\HybridSearch::search(int $projectId, int $generationId, string $question, int $limit = 10, ?MemoryDateRange $dateRange = null): SearchResult`
 
