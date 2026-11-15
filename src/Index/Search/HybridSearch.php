@@ -15,6 +15,7 @@ use Symfony\AI\Platform\Vector\Vector;
 use Symfony\AI\Store\Document\VectorDocumentInterface;
 use Symfony\AI\Store\Document\VectorizerInterface;
 use Symfony\AI\Store\Query\HybridQuery;
+use Symfony\Contracts\HttpClient\Exception\TimeoutExceptionInterface;
 
 /**
  * Native PostgreSQL hybrid retrieval, followed by BGE and parent collapse.
@@ -38,12 +39,16 @@ final readonly class HybridSearch
         int $generationId,
         string $question,
         int $limit = 10,
+        ?MemoryDateRange $dateRange = null,
     ): SearchResult {
         if ($projectId < 1 || $generationId < 1) {
             throw new \InvalidArgumentException('Project and generation IDs must be positive integers.');
         }
         if ($limit < 1) {
             throw new \InvalidArgumentException('Result limit must be positive.');
+        }
+        if ($limit > 51) {
+            throw new \InvalidArgumentException('Result limit must be at most 51.');
         }
         if ('' === trim($question)) {
             throw new \InvalidArgumentException('Search question must not be empty.');
@@ -63,52 +68,82 @@ final readonly class HybridSearch
         }
 
         try {
-            $store = $this->storeFactory->forGeneration($projectId, $generationId, initialize: false);
             $vector = $this->vectorizer->vectorize(IndexSettings::QUERY_PREFIX.$question);
-            if (!$vector instanceof Vector) {
-                throw IndexException::sanitized('Query embedding did not return a single vector.');
-            }
+        } catch (\Throwable $error) {
+            throw $this->failure(IndexException::QUERY_EMBEDDING_FAILED, 'Query embedding failed.', $error);
+        }
+        if (!$vector instanceof Vector) {
+            throw IndexException::sanitized('Query embedding did not return a single vector.', code: IndexException::QUERY_EMBEDDING_FAILED);
+        }
+
+        try {
+            $store = $this->storeFactory->forGeneration($projectId, $generationId, initialize: false);
             // Postgres ANDs words within each text, but ORs multiple texts.
             // Natural-language questions must not require every word to occur in a chunk.
             $terms = preg_split('/\s+/u', trim($question), flags: \PREG_SPLIT_NO_EMPTY);
+            $options = ['limit' => self::CANDIDATE_LIMIT];
+            if (null !== $dateRange) {
+                $options = [...$options, ...$dateRange->toQueryOptions()];
+            }
             $fused = iterator_to_array(
-                $store->query(new HybridQuery($vector, false === $terms ? $question : $terms), ['limit' => self::CANDIDATE_LIMIT]),
+                $store->query(new HybridQuery($vector, false === $terms ? $question : $terms), $options),
                 false,
             );
+
+            $snippets = [];
+            foreach ($fused as $document) {
+                $text = $document->getMetadata()->getText();
+                if (null === $text || '' === $text) {
+                    throw IndexException::sanitized('Fused candidate is missing document text.', code: IndexException::QUERY_RETRIEVAL_FAILED);
+                }
+                $snippets[] = $text;
+            }
+
+            $ranked = [] === $snippets ? [] : $this->reranker->rankWithScores($question, $snippets);
+            $parents = [];
+            $resultTruncated = false;
+            foreach ($ranked as $entry) {
+                $offset = $entry['offset'];
+                if (!isset($fused[$offset])) {
+                    throw IndexException::sanitized('Reranker returned an unknown candidate offset.', code: IndexException::QUERY_RETRIEVAL_FAILED);
+                }
+                $hit = $this->toHit($fused[$offset], $projectId, $generationId, $entry['score']);
+                $key = $hit['kind']."\0".$hit['source_id'];
+                if (isset($parents[$key])) {
+                    continue;
+                }
+                $parents[$key] = $hit;
+                if (\count($parents) > $limit) {
+                    $resultTruncated = true;
+                    break;
+                }
+            }
         } catch (IndexException $error) {
-            throw $error;
+            if (\in_array($error->getCode(), [
+                IndexException::QUERY_EMBEDDING_FAILED,
+                IndexException::QUERY_RETRIEVAL_FAILED,
+                IndexException::QUERY_TIMEOUT,
+            ], true)) {
+                throw $error;
+            }
+
+            throw $this->failure(IndexException::QUERY_RETRIEVAL_FAILED, $error->getMessage(), $error);
         } catch (\Throwable $error) {
-            throw IndexException::sanitized('Hybrid retrieval failed.', $error);
+            throw $this->failure(IndexException::QUERY_RETRIEVAL_FAILED, 'Hybrid retrieval failed.', $error);
         }
 
-        $snippets = [];
-        foreach ($fused as $document) {
-            $text = $document->getMetadata()->getText();
-            if (null === $text || '' === $text) {
-                throw IndexException::sanitized('Fused candidate is missing document text.');
-            }
-            $snippets[] = $text;
+        $results = array_values($parents);
+        if ($resultTruncated) {
+            $results = \array_slice($results, 0, $limit);
         }
+        $candidateTruncated = \count($fused) >= self::CANDIDATE_LIMIT;
 
-        $ranked = [] === $snippets ? [] : $this->reranker->rankWithScores($question, $snippets);
-        $parents = [];
-        foreach ($ranked as $entry) {
-            $offset = $entry['offset'];
-            if (!isset($fused[$offset])) {
-                throw IndexException::sanitized('Reranker returned an unknown candidate offset.');
-            }
-            $hit = $this->toHit($fused[$offset], $projectId, $generationId, $entry['score']);
-            $key = $hit['kind']."\0".$hit['source_id'];
-            if (isset($parents[$key])) {
-                continue;
-            }
-            $parents[$key] = $hit;
-            if (\count($parents) >= $limit) {
-                break;
-            }
-        }
-
-        return new SearchResult(array_values($parents), \count($fused) >= self::CANDIDATE_LIMIT);
+        return new SearchResult(
+            $results,
+            $candidateTruncated || $resultTruncated,
+            $candidateTruncated,
+            $resultTruncated,
+        );
     }
 
     /**
@@ -144,13 +179,13 @@ final readonly class HybridSearch
             || (!\is_int($chunkPosition) && !\is_float($chunkPosition))
             || null === $snippet || '' === $snippet
         ) {
-            throw IndexException::sanitized('Indexed candidate is missing required provenance metadata.');
+            throw IndexException::sanitized('Indexed candidate is missing required provenance metadata.', code: IndexException::QUERY_RETRIEVAL_FAILED);
         }
 
         $metaProject = $metadata[IndexFields::PROJECT_ID] ?? $projectId;
         $metaGeneration = $metadata[IndexFields::GENERATION_ID] ?? $generationId;
         if ((int) $metaProject !== $projectId || (int) $metaGeneration !== $generationId) {
-            throw IndexException::sanitized('Indexed candidate escaped the requested project/generation filter.');
+            throw IndexException::sanitized('Indexed candidate escaped the requested project/generation filter.', code: IndexException::QUERY_RETRIEVAL_FAILED);
         }
 
         return [
@@ -165,5 +200,31 @@ final readonly class HybridSearch
             'snippet' => $snippet,
             'rerank_score' => $rerankScore,
         ];
+    }
+
+    private function failure(int $defaultCode, string $message, \Throwable $error): IndexException
+    {
+        $code = $this->isTimeout($error) ? IndexException::QUERY_TIMEOUT : $defaultCode;
+
+        return IndexException::sanitized($message, $error, $code);
+    }
+
+    private function isTimeout(\Throwable $error): bool
+    {
+        $current = $error;
+        while (null !== $current) {
+            if ($current instanceof TimeoutExceptionInterface) {
+                return true;
+            }
+            // sanitized() stores only the previous class name as the message.
+            if ($current instanceof \RuntimeException
+                && is_a($current->getMessage(), TimeoutExceptionInterface::class, true)
+            ) {
+                return true;
+            }
+            $current = $current->getPrevious();
+        }
+
+        return false;
     }
 }

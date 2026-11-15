@@ -5,6 +5,12 @@
     "license": "MIT",
     "minimum-stability": "stable",
     "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/ineersa/ai-postgres-store.git"
+        }
+    ],
     "require": {
         "php": "^8.5",
         "ext-ctype": "*",
@@ -88,7 +94,26 @@
         "twig/extra-bundle": "^2.12|^3.24",
         "twig/twig": "^2.12|^3.24",
         "ext-pdo_pgsql": "*",
-        "symfony/ai-postgres-store": "~0.15.0"
+        "symfony/ai-postgres-store": "0.15.0.1"
+    },
+    "require-dev": {
+        "dama/doctrine-test-bundle": "^8.7",
+        "friendsofphp/php-cs-fixer": "^3.95.1",
+        "hautelook/alice-bundle": "^2.17",
+        "jolicode/castor": "^1.9",
+        "phpstan/phpstan": "^2.1.51",
+        "phpstan/phpstan-doctrine": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0.16",
+        "phpstan/phpstan-strict-rules": "^2.0.10",
+        "phpunit/phpunit": "^13.1.7",
+        "playwright-php/playwright": "^1.6",
+        "symfony/ai-mate": "^0.15.0",
+        "symfony/ai-monolog-mate-extension": "^0.15.0",
+        "symfony/ai-symfony-mate-extension": "^0.15.0",
+        "symfony/debug-bundle": "~8.2.0-BETA1",
+        "symfony/maker-bundle": "^1.67",
+        "symfony/tui": "8.1.11",
+        "symfony/web-profiler-bundle": "~8.2.0-BETA1"
     },
     "config": {
         "allow-plugins": {
@@ -151,24 +176,5 @@
                 "mate/config.php"
             ]
         }
-    },
-    "require-dev": {
-        "dama/doctrine-test-bundle": "^8.7",
-        "friendsofphp/php-cs-fixer": "^3.95.1",
-        "hautelook/alice-bundle": "^2.17",
-        "jolicode/castor": "^1.9",
-        "phpstan/phpstan": "^2.1.51",
-        "phpstan/phpstan-doctrine": "^2.0",
-        "phpstan/phpstan-phpunit": "^2.0.16",
-        "phpstan/phpstan-strict-rules": "^2.0.10",
-        "phpunit/phpunit": "^13.1.7",
-        "playwright-php/playwright": "^1.6",
-        "symfony/ai-mate": "^0.15.0",
-        "symfony/ai-monolog-mate-extension": "^0.15.0",
-        "symfony/ai-symfony-mate-extension": "^0.15.0",
-        "symfony/debug-bundle": "~8.2.0-BETA1",
-        "symfony/maker-bundle": "^1.67",
-        "symfony/tui": "8.1.11",
-        "symfony/web-profiler-bundle": "~8.2.0-BETA1"
     }
 }
