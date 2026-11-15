@@ -47,9 +47,6 @@ final readonly class HybridSearch
         if ($limit < 1) {
             throw new \InvalidArgumentException('Result limit must be positive.');
         }
-        if ($limit > 51) {
-            throw new \InvalidArgumentException('Result limit must be at most 51.');
-        }
         if ('' === trim($question)) {
             throw new \InvalidArgumentException('Search question must not be empty.');
         }

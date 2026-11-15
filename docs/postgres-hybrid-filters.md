@@ -21,7 +21,7 @@ Focused monorepo PR opened against `symfony/ai` `main`:
 - Path: `src/store/src/Bridge/Postgres/Store.php`
 - Same minimal HybridQuery `where` / `params` parity as VectorQuery, plus changelog/docs and one positive existing unit-test assertion
 
-No reviewers requested. Waiting on upstream review/merge/release before Librarian can drop the temporary pin.
+No reviewers were requested manually; GitHub applied the upstream repository's CODEOWNERS review requests automatically. Waiting on upstream review/merge/release before Librarian can drop the temporary pin.
 
 ## Temporary reviewed pin still in use
 
@@ -39,7 +39,7 @@ The temporary fork change matches the monorepo PR behavior: when `where` is pres
 
 Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 
-## Application API for main
+## Application integration
 
 `App\Index\Search\MemoryDateRange::fromInputs(?string $after, ?string $before): self`
 
@@ -55,7 +55,7 @@ Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreateP
 
 - First four arguments unchanged for admin callers
 - Optional fifth argument applies date filtering inside PostgreSQL before the candidate cap, BGE rerank, and parent collapse
-- `$limit` allows up to **51** so main can request `limit + 1` for truncation detection; admin default remains 10
+- Public MCP limits remain 1–50 (default 20); the existing admin default remains 10. Truncation is detected by observing one additional distinct parent before slicing
 - No caller-provided SQL
 
 `App\Index\Search\SearchResult`

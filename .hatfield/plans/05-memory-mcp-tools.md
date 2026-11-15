@@ -35,12 +35,12 @@ Resolved per HTTP request; never ambient MCP-session project selection. Auth: Be
 Main implementation worktree:
 
 - `vendor/bin/castor cs:fix` passed
-- One headless MCP journey: **46 assertions** in **5.059s**
+- Complete existing headless suite: **5 journeys / 87 assertions** in **13.406s** browser time (27.438s including isolated-stack preparation)
 - `vendor/bin/castor qa:static` passed
 
 Journey coverage: UI login + token regenerate; register two synthetic projects with identical canonical IDs and OM run `108`; automatic indexing; official SDK discovery/schemas; search with day+minute bounds; observation prefix recall on current session (header `108`); reflection recall with explicit `session_id=108`; project B search + recall isolation; cleanup with source-hash checks. Explicit `session_id` is proven; calling that **cross-session proof** would overclaim because the header value is the same `108`. SDK client keeps the printed browser URL and resolves the hostname through supplied `LIBRARIAN_PROXY_IP` (Symfony HttpClient `resolve`).
 
-Full existing suite: **not claimed** (scheduled next). Plans 06 (production) and 07 (Hatfield) remain TODO / out of scope. No production deploy or owner-data reset.
+The modern SDK protocol is exercised; the configured handshake fallback remains unverified at runtime. Plans 06 (production) and 07 (Hatfield) remain TODO / out of scope. No production deploy or owner-data reset.
 
 ## Framework references
 

@@ -113,12 +113,12 @@ Admin Search memory remains a browser UI over the same derived indexes (no date-
 ## 6) Official SDK client example (sanitized)
 
 ```php
-use Mcp\Client\Client;
+use Mcp\Client;
 use Mcp\Client\Transport\HttpTransport;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
 
-$endpoint = 'http://example.browser.librarian.localhost:8082/_mcp'; // printed browser URL
+$endpoint = rtrim(getenv('LIBRARIAN_BROWSER_URL'), '/').'/_mcp'; // supplied printed URL
 $proxyIp = getenv('LIBRARIAN_PROXY_IP'); // supplied by Castor for hostname resolve
 $hostname = parse_url($endpoint, \PHP_URL_HOST);
 
@@ -134,10 +134,9 @@ $transport = new HttpTransport(
     ])),
 );
 
-$client = null;
+$client = Client::builder()->setClientInfo('librarian-example', '1.0')->build();
 try {
-    $client = Client::make()->withTransport($transport)->getClient();
-    $client->connect();
+    $client->connect($transport);
 
     $tools = $client->listTools();
     // expect memory_search + recall only
@@ -154,7 +153,7 @@ try {
         // optional session_id; header 108 used when omitted
     ]);
 } finally {
-    $client?->disconnect();
+    $client->disconnect();
 }
 ```
 
@@ -162,4 +161,4 @@ try {
 
 ## 7) Validation recorded for plan 05
 
-On the main implementation worktree: `cs:fix` passed; one headless MCP journey, **46 assertions**, **5.059s**; `qa:static` passed. The full existing suite was **not** claimed here (scheduled next). No production deploy and no owner-data reset as part of this contract update.
+On 2026-11-15, `vendor/bin/castor cs:fix`, the complete existing headless browser suite (**5 journeys / 87 assertions**, 13.406s browser time; 27.438s including isolated-stack preparation), and `vendor/bin/castor qa:static` passed. `git diff --check` passed. Coverage remains one journey per feature; no additional test suite or special-case matrix was introduced. The modern SDK path is exercised; the configured handshake fallback and distinct-session recall remain unverified at runtime. No production deployment or owner-data reset was performed.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Support;
 
+use App\Index\Source\MemoryKind;
 use Symfony\Component\Filesystem\Filesystem;
 
 /**
@@ -22,6 +23,12 @@ final class ProjectSourceFixture
     public const string PROJECTS_DIR = 'projects';
     public const string OWNERSHIP_MARKER_BASENAME = 'SYNTHETIC_PROJECT_SOURCES';
     public const string OWNERSHIP_MARKER = "librarian-plan03-synthetic-project-sources\n";
+
+    public static function memoryId(MemoryKind $kind, int $number): string
+    {
+        // Deliberately identical IDs/session IDs across the two MCP projects.
+        return hash('sha256', 'mcp:'.$kind->value.':'.$number);
+    }
 
     public static function builderProjectPath(string $slug): string
     {

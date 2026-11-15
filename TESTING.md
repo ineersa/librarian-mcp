@@ -34,7 +34,7 @@ The Projects journey registers one synthetic source tree. Intentional fixture mu
 
 CRUD creates uniquely named records and deletes only those registrations through normal confirmation. Do not mutate or delete fixtures owned by other journeys. Do not purge the isolated database to make a scenario pass. After the journey restores any intentional harness mutation, source fixture trees/databases must match the pre-journey hash; registration removal must not change sources.
 
-Do not add unit/API-only suites as the primary coverage model. Plan 05 MCP tools are covered by the MCP journey above. Recorded on the main implementation worktree: `cs:fix` passed; one headless MCP journey **46 assertions** / **5.059s**; `qa:static` passed. Full existing suite is scheduled next and is **not** claimed here. See [MCP contract](docs/MCP.md), [indexing design](docs/indexing-design.md), and [indexing validation](docs/indexing-validation.md).
+Do not add unit/API-only suites as the primary coverage model. Plan 05 MCP tools are covered by the MCP journey above. Recorded on 2026-11-15: `cs:fix` passed; the complete existing headless suite passed (**5 journeys / 87 assertions**, 13.406s browser time; 27.438s including isolated-stack preparation); `qa:static` passed. No additional suite or special-case matrix was introduced. See [MCP contract](docs/MCP.md), [indexing design](docs/indexing-design.md), and [indexing validation](docs/indexing-validation.md).
 
 ## Prepare the tooling runtime
 

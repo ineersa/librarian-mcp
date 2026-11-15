@@ -21,6 +21,7 @@ security:
             provider: app_user_provider
             custom_authenticators:
                 - App\Security\McpTokenAuthenticator
+            entry_point: App\Security\McpTokenAuthenticator
         main:
             lazy: true
             provider: app_user_provider
@@ -36,8 +37,8 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
-        # Local single-admin utility: tokens are optional, validated when supplied.
-        - { path: ^/_mcp, roles: PUBLIC_ACCESS }
+        # Retrieval exposes private memory and journals; credentials stay in headers.
+        - { path: ^/_mcp, roles: !php/const App\Entity\User::ROLE_MCP }
         - { path: ^/admin, roles: ROLE_ADMIN }
         - { path: ^/login, roles: PUBLIC_ACCESS }
 

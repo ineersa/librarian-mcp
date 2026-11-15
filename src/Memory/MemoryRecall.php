@@ -81,7 +81,6 @@ final class MemoryRecall
             return $this->error(MemoryErrorCode::SourceUnavailable, $exception->getMessage());
         }
 
-        $pendingEvents = null;
         try {
             $pdo->beginTransaction();
             try {
@@ -204,10 +203,6 @@ final class MemoryRecall
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                 }
-            }
-
-            if (null === $pendingEvents) {
-                return $this->error(MemoryErrorCode::SourceUnavailable, 'Unable to read observational memory database snapshot.');
             }
 
             $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $pendingEvents['refs'], $deadline);
@@ -610,6 +605,8 @@ final class MemoryRecall
     }
 
     /**
+     * @phpstan-impure Reading the clock can change the result between checkpoints.
+     *
      * @return array{ok: false, error: string, message: string, timed_out: true}|null
      */
     private function timeoutMap(\DateTimeImmutable $deadline, string $message): ?array

@@ -89,7 +89,7 @@ final class SessionEventsJournalReader
 
                 // fgets($length) returns at most length-1 bytes; an unterminated
                 // max-size read means the physical line continues past the cap.
-                if (!str_ends_with($line, "\n") && $lineBytes === self::MAX_LINE_BYTES) {
+                if (!str_ends_with($line, "\n") && self::MAX_LINE_BYTES === $lineBytes) {
                     return [
                         'ok' => false,
                         'error' => MemoryErrorCode::ResourceLimitExceeded->value,

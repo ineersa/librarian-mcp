@@ -17,6 +17,10 @@ use App\Index\IndexFields;
  */
 final readonly class MemoryDateRange
 {
+    public const int INVALID_AFTER = 1;
+    public const int INVALID_BEFORE = 2;
+    public const int INVALID_RANGE = 3;
+
     private const string DATE_PATTERN = '/^\d{4}-\d{2}-\d{2}$/';
 
     private const string MINUTE_PATTERN = '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/';
@@ -34,7 +38,7 @@ final readonly class MemoryDateRange
 
         // Exclusive upper bounds make an empty window when after >= beforeExclusive.
         if (null !== $afterBound && null !== $beforeBound && $afterBound >= $beforeBound) {
-            throw new \InvalidArgumentException('after must be less than or equal to before.');
+            throw new \InvalidArgumentException('after must be less than or equal to before.', self::INVALID_RANGE);
         }
 
         return new self($afterBound, $beforeBound);
@@ -85,11 +89,12 @@ final readonly class MemoryDateRange
         if ('' === $value) {
             return null;
         }
+        $errorCode = 'after' === $field ? self::INVALID_AFTER : self::INVALID_BEFORE;
 
         if (1 === preg_match(self::DATE_PATTERN, $value)) {
             $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $value, new \DateTimeZone('UTC'));
             if (false === $day || $day->format('Y-m-d') !== $value) {
-                throw new \InvalidArgumentException($field.' must be a real calendar date (YYYY-MM-DD or YYYY-MM-DD HH:MM).');
+                throw new \InvalidArgumentException($field.' must be a real calendar date (YYYY-MM-DD or YYYY-MM-DD HH:MM).', $errorCode);
             }
 
             return ($lowerBound ? $day : $day->modify('+1 day'))->getTimestamp();
@@ -98,12 +103,12 @@ final readonly class MemoryDateRange
         if (1 === preg_match(self::MINUTE_PATTERN, $value)) {
             $minute = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $value, new \DateTimeZone('UTC'));
             if (false === $minute || $minute->format('Y-m-d H:i') !== $value) {
-                throw new \InvalidArgumentException($field.' must be a real calendar date (YYYY-MM-DD or YYYY-MM-DD HH:MM).');
+                throw new \InvalidArgumentException($field.' must be a real calendar date (YYYY-MM-DD or YYYY-MM-DD HH:MM).', $errorCode);
             }
 
             return ($lowerBound ? $minute : $minute->modify('+1 minute'))->getTimestamp();
         }
 
-        throw new \InvalidArgumentException($field.' must be YYYY-MM-DD or YYYY-MM-DD HH:MM.');
+        throw new \InvalidArgumentException($field.' must be YYYY-MM-DD or YYYY-MM-DD HH:MM.', $errorCode);
     }
 }

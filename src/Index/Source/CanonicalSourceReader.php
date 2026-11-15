@@ -341,6 +341,7 @@ final class CanonicalSourceReader
             occurredAt: $occurredAt,
             relevance: $relevanceValue,
             contentSignature: $signature,
+            timestamp: \is_string($occurredRaw) ? $occurredRaw : null,
         );
     }
 
