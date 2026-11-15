@@ -13,11 +13,14 @@ namespace App\Memory;
 final class SessionEventsJournalReader
 {
     private const string EVENTS_BASENAME = 'events.jsonl';
+    private const int MAX_LINE_BYTES = 1_048_576;
+    private const int MAX_SCANNED_BYTES = 67_108_864;
+    private const int MAX_EVIDENCE_BYTES = 1_048_576;
 
     /**
      * @param list<int> $seqs
      *
-     * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string}|array{cancelled?: true, timed_out?: true, timeout_seconds?: int, message: string}
+     * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string, timed_out?: true}
      */
     public function loadForSession(
         string $sessionsPath,
@@ -52,19 +55,46 @@ final class SessionEventsJournalReader
         if (false === $handle) {
             return [
                 'ok' => false,
-                'error' => 'events_unreadable',
+                'error' => MemoryErrorCode::EventsUnreadable->value,
                 'message' => 'Session event journal is unreadable.',
             ];
         }
 
         $events = [];
+        $scannedBytes = 0;
+        $evidenceBytes = 0;
         try {
-            while (false !== ($line = fgets($handle))) {
+            while (true) {
                 if (null !== $checkpoint) {
                     $interrupt = $checkpoint();
                     if (\is_array($interrupt)) {
                         return $interrupt;
                     }
+                }
+
+                $line = fgets($handle, self::MAX_LINE_BYTES + 1);
+                if (false === $line) {
+                    break;
+                }
+
+                $lineBytes = \strlen($line);
+                $scannedBytes += $lineBytes;
+                if ($scannedBytes > self::MAX_SCANNED_BYTES) {
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::ResourceLimitExceeded->value,
+                        'message' => 'Session event journal scan exceeded the bounded byte limit.',
+                    ];
+                }
+
+                // fgets($length) returns at most length-1 bytes; an unterminated
+                // max-size read means the physical line continues past the cap.
+                if (!str_ends_with($line, "\n") && $lineBytes === self::MAX_LINE_BYTES) {
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::ResourceLimitExceeded->value,
+                        'message' => 'Session event journal line exceeded the bounded byte limit.',
+                    ];
                 }
 
                 $line = trim($line);
@@ -75,10 +105,18 @@ final class SessionEventsJournalReader
                 try {
                     $decoded = json_decode($line, true, 512, \JSON_THROW_ON_ERROR);
                 } catch (\JsonException) {
-                    continue;
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::EventsUnreadable->value,
+                        'message' => 'Session event journal contains corrupt JSON.',
+                    ];
                 }
                 if (!\is_array($decoded)) {
-                    continue;
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::EventsUnreadable->value,
+                        'message' => 'Session event journal contains an unexpected event shape.',
+                    ];
                 }
 
                 $runId = $decoded['run_id'] ?? null;
@@ -90,7 +128,7 @@ final class SessionEventsJournalReader
                 if (!\is_string($runId) || $runId !== $sessionId) {
                     continue;
                 }
-                if (!is_numeric($seq)) {
+                if (!\is_int($seq) && !(is_numeric($seq) && (string) (int) $seq === (string) $seq)) {
                     continue;
                 }
                 $seq = (int) $seq;
@@ -102,22 +140,53 @@ final class SessionEventsJournalReader
                     continue;
                 }
                 if (!\is_string($type) || '' === $type) {
-                    continue;
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::EventsUnreadable->value,
+                        'message' => 'Session event journal contains an unexpected event shape.',
+                    ];
                 }
                 if (!\is_string($createdAt) || '' === $createdAt) {
-                    continue;
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::EventsUnreadable->value,
+                        'message' => 'Session event journal contains an unexpected event shape.',
+                    ];
                 }
                 if (!\is_array($payload)) {
-                    $payload = [];
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::EventsUnreadable->value,
+                        'message' => 'Session event journal contains an unexpected event shape.',
+                    ];
                 }
 
-                $events[$seq] = [
+                $event = [
                     'run_id' => $runId,
                     'seq' => $seq,
                     'type' => $type,
                     'created_at' => $createdAt,
                     'payload' => $payload,
                 ];
+                try {
+                    $encoded = json_encode($event, \JSON_THROW_ON_ERROR);
+                } catch (\JsonException) {
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::EventsUnreadable->value,
+                        'message' => 'Session event journal contains an unexpected event shape.',
+                    ];
+                }
+                $evidenceBytes += \strlen($encoded);
+                if ($evidenceBytes > self::MAX_EVIDENCE_BYTES) {
+                    return [
+                        'ok' => false,
+                        'error' => MemoryErrorCode::ResourceLimitExceeded->value,
+                        'message' => 'Session event evidence exceeded the bounded response byte limit.',
+                    ];
+                }
+
+                $events[$seq] = $event;
 
                 if (\count($events) === \count($wanted)) {
                     break;
@@ -141,7 +210,7 @@ final class SessionEventsJournalReader
         if ('' === $sessionId) {
             return [
                 'ok' => false,
-                'error' => 'invalid_session_id',
+                'error' => MemoryErrorCode::InvalidSessionId->value,
                 'message' => 'session_id must be a non-empty session/run id when provided.',
             ];
         }
@@ -155,7 +224,7 @@ final class SessionEventsJournalReader
         ) {
             return [
                 'ok' => false,
-                'error' => 'invalid_session_id',
+                'error' => MemoryErrorCode::InvalidSessionId->value,
                 'message' => 'session_id must be a non-empty session/run id when provided.',
             ];
         }
@@ -165,7 +234,7 @@ final class SessionEventsJournalReader
         if (false === $sessionsRoot || !is_dir($sessionsRoot)) {
             return [
                 'ok' => false,
-                'error' => 'sessions_unavailable',
+                'error' => MemoryErrorCode::SessionsUnavailable->value,
                 'message' => 'Configured session journal root is missing or unreadable.',
             ];
         }
@@ -180,7 +249,7 @@ final class SessionEventsJournalReader
         ) {
             return [
                 'ok' => false,
-                'error' => 'events_unreadable',
+                'error' => MemoryErrorCode::EventsUnreadable->value,
                 'message' => 'Session event journal is missing or outside the configured sessions root.',
             ];
         }
@@ -191,7 +260,7 @@ final class SessionEventsJournalReader
         if (is_link($journalPath) || !is_file($journalPath) || !is_readable($journalPath)) {
             return [
                 'ok' => false,
-                'error' => 'events_unreadable',
+                'error' => MemoryErrorCode::EventsUnreadable->value,
                 'message' => 'Session event journal is missing or unreadable.',
             ];
         }
@@ -205,7 +274,7 @@ final class SessionEventsJournalReader
         ) {
             return [
                 'ok' => false,
-                'error' => 'events_unreadable',
+                'error' => MemoryErrorCode::EventsUnreadable->value,
                 'message' => 'Session event journal is missing or outside the configured sessions root.',
             ];
         }

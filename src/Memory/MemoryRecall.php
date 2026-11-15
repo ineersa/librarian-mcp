@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Memory;
 
 use App\Entity\Project;
+use App\Index\Source\MemoryKind;
 use App\Project\OmSourceReader;
 use App\Project\ProjectSourceException;
+use Psr\Clock\ClockInterface;
 
 /**
  * Canonical read-only OM recall against a registered project's discovered sources.
@@ -19,10 +21,14 @@ final class MemoryRecall
     private const string ID_PATTERN = '/^[a-f0-9]{12,64}$/';
     private const int PREFIX_LOOKUP_LIMIT = 3;
     private const int SUPPORT_CHUNK_SIZE = 400;
+    private const int MAX_SUPPORT_IDS = 10_000;
+    private const int MAX_SOURCE_REFS = 10_000;
+    private const int DEFAULT_DEADLINE_SECONDS = 30;
 
     public function __construct(
         private readonly OmSourceReader $omSourceReader,
         private readonly SessionEventsJournalReader $journalReader,
+        private readonly ClockInterface $clock,
     ) {
     }
 
@@ -34,211 +40,198 @@ final class MemoryRecall
         string $currentSession,
         string $id,
         ?string $sessionId = null,
-        ?int $deadlineNs = null,
+        ?\DateTimeImmutable $deadline = null,
     ): array {
+        $deadline ??= $this->clock->now()->modify('+'.self::DEFAULT_DEADLINE_SECONDS.' seconds');
+
         $id = strtolower(trim($id));
         if (1 !== preg_match(self::ID_PATTERN, $id)) {
-            return [
-                'ok' => false,
-                'error' => 'invalid_id',
-                'message' => 'id must be a lowercase hex string of 12 to 64 characters.',
-            ];
+            return $this->error(MemoryErrorCode::InvalidId, 'id must be a lowercase hex string of 12 to 64 characters.');
         }
 
         $targetRunId = trim($currentSession);
         if (null !== $sessionId) {
             $sessionId = trim($sessionId);
             if ('' === $sessionId) {
-                return [
-                    'ok' => false,
-                    'error' => 'invalid_session_id',
-                    'message' => 'session_id must be a non-empty session/run id when provided.',
-                ];
+                return $this->error(MemoryErrorCode::InvalidSessionId, 'session_id must be a non-empty session/run id when provided.');
             }
             $targetRunId = $sessionId;
         }
 
         if ('' === $targetRunId) {
-            return [
-                'ok' => false,
-                'error' => 'invalid_session_id',
-                'message' => 'session_id must be a non-empty session/run id when provided.',
-            ];
+            return $this->error(MemoryErrorCode::InvalidSessionId, 'session_id must be a non-empty session/run id when provided.');
         }
 
-        if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled before database open.'))) {
+        if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before database open.'))) {
             return $interrupt;
         }
 
         $databasePath = $project->databasePath;
         $sessionsPath = $project->sessionsPath;
         if (!\is_string($databasePath) || '' === $databasePath) {
-            return [
-                'ok' => false,
-                'error' => 'source_unavailable',
-                'message' => 'Registered project has no discovered observational memory database.',
-            ];
+            return $this->error(MemoryErrorCode::SourceUnavailable, 'Registered project has no discovered observational memory database.');
         }
         if (!\is_string($sessionsPath) || '' === $sessionsPath) {
-            return [
-                'ok' => false,
-                'error' => 'sessions_unavailable',
-                'message' => 'Registered project has no discovered session journal root.',
-            ];
+            return $this->error(MemoryErrorCode::SessionsUnavailable, 'Registered project has no discovered session journal root.');
         }
 
         try {
             $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
         } catch (ProjectSourceException $exception) {
-            return [
-                'ok' => false,
-                'error' => 'source_unavailable',
-                'message' => $exception->getMessage(),
-            ];
+            return $this->error(MemoryErrorCode::SourceUnavailable, $exception->getMessage());
         }
 
+        $pendingEvents = null;
         try {
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled before observation lookup.'))) {
-                return $interrupt;
-            }
-
+            $pdo->beginTransaction();
             try {
-                $this->omSourceReader->validateSchema($pdo);
-            } catch (ProjectSourceException $exception) {
-                return [
-                    'ok' => false,
-                    'error' => 'source_unavailable',
-                    'message' => $exception->getMessage(),
-                ];
-            }
-
-            $obsMatches = $this->findObservationsByIdPrefix($pdo, $targetRunId, $id);
-            if (\count($obsMatches) > 1) {
-                return [
-                    'ok' => false,
-                    'error' => 'ambiguous_id',
-                    'message' => 'Multiple observations match that id prefix in the selected session.',
-                ];
-            }
-
-            if (1 === \count($obsMatches)) {
-                if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled before observation event hydration.'))) {
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before observation lookup.'))) {
                     return $interrupt;
                 }
 
-                $observation = $obsMatches[0];
-                $refs = $this->sourceRefsForRun(
-                    $targetRunId,
-                    $this->decodeSourceRefs($observation['source_refs_json']),
-                );
-                $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $refs, $deadlineNs);
-                if ($this->isInterruptResult($events)) {
-                    return $events;
-                }
-                if (isset($events['ok']) && false === $events['ok']) {
-                    return $events;
+                try {
+                    $this->omSourceReader->validateSchema($pdo);
+                } catch (ProjectSourceException $exception) {
+                    return $this->error(MemoryErrorCode::SourceUnavailable, $exception->getMessage());
                 }
 
-                return [
-                    'ok' => true,
-                    'kind' => 'observation',
-                    'session_id' => $targetRunId,
-                    'id' => $observation['observation_id'],
-                    'content' => $observation['content'],
-                    'timestamp' => $observation['timestamp'],
-                    'importance' => $observation['relevance'],
-                    'source_refs' => $refs,
-                    'events' => $events,
-                ];
-            }
+                $obsMatches = $this->findObservationsByIdPrefix($pdo, $targetRunId, $id);
+                if (\count($obsMatches) > 1) {
+                    return $this->error(MemoryErrorCode::AmbiguousId, 'Multiple observations match that id prefix in the selected session.');
+                }
 
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled before reflection lookup.'))) {
-                return $interrupt;
-            }
+                if (1 === \count($obsMatches)) {
+                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before observation event hydration.'))) {
+                        return $interrupt;
+                    }
 
-            $refMatches = $this->findReflectionsByIdPrefix($pdo, $targetRunId, $id);
-            if (\count($refMatches) > 1) {
-                return [
-                    'ok' => false,
-                    'error' => 'ambiguous_id',
-                    'message' => 'Multiple reflections match that id prefix in the selected session.',
-                ];
-            }
-            if ([] === $refMatches) {
-                return [
-                    'ok' => false,
-                    'error' => 'not_found',
-                    'message' => \sprintf(
-                        'No observation or reflection with that id in session %s. If this id came from memory_search, pass its session_id.',
+                    $observation = $obsMatches[0];
+                    $refs = $this->sourceRefsForRun(
                         $targetRunId,
-                    ),
-                ];
-            }
+                        $this->decodeSourceRefs($observation['source_refs_json']),
+                    );
+                    if (\count($refs) > self::MAX_SOURCE_REFS) {
+                        return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Observation source refs exceeded the bounded recall limit.');
+                    }
 
-            $reflection = $refMatches[0];
-            $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled while hydrating supporting observations.'))) {
-                return $interrupt;
-            }
+                    $pendingEvents = [
+                        'kind' => MemoryKind::Observation,
+                        'id' => $observation['observation_id'],
+                        'content' => $observation['content'],
+                        'timestamp' => $observation['timestamp'],
+                        'importance' => $observation['relevance'],
+                        'refs' => $refs,
+                        'support_ids' => null,
+                    ];
+                } else {
+                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection lookup.'))) {
+                        return $interrupt;
+                    }
 
-            $supportReferences = $this->supportReferences($pdo, $targetRunId, $requestedSupportIds, $deadlineNs);
-            if ($this->isInterruptResult($supportReferences)) {
-                return $supportReferences;
-            }
+                    $refMatches = $this->findReflectionsByIdPrefix($pdo, $targetRunId, $id);
+                    if (\count($refMatches) > 1) {
+                        return $this->error(MemoryErrorCode::AmbiguousId, 'Multiple reflections match that id prefix in the selected session.');
+                    }
+                    if ([] === $refMatches) {
+                        return $this->error(
+                            MemoryErrorCode::NotFound,
+                            \sprintf(
+                                'No observation or reflection with that id in session %s. If this id came from memory_search, pass its session_id.',
+                                $targetRunId,
+                            ),
+                        );
+                    }
 
-            /** @var array<string, string> $supportReferences */
-            $supportIds = $this->supportIdsForRun($supportReferences, $requestedSupportIds);
-            $refs = [];
-            foreach ($supportIds as $supportId) {
-                if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled while hydrating supporting observations.'))) {
-                    return $interrupt;
+                    $reflection = $refMatches[0];
+                    $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
+                    if (\count($requestedSupportIds) > self::MAX_SUPPORT_IDS) {
+                        return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Supporting observation ids exceeded the bounded recall limit.');
+                    }
+                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
+                        return $interrupt;
+                    }
+
+                    $supportReferences = $this->supportReferences($pdo, $targetRunId, $requestedSupportIds, $deadline);
+                    if ($this->isFailureResult($supportReferences)) {
+                        return $supportReferences;
+                    }
+
+                    /** @var array<string, string> $supportReferences */
+                    $supportIds = $this->supportIdsForRun($supportReferences, $requestedSupportIds);
+                    $refs = [];
+                    foreach ($supportIds as $supportId) {
+                        if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
+                            return $interrupt;
+                        }
+                        foreach ($this->sourceRefsForRun(
+                            $targetRunId,
+                            $this->decodeSourceRefs($supportReferences[$supportId]),
+                        ) as $ref) {
+                            $key = $ref['run_id'].':'.$ref['seq'];
+                            $refs[$key] = $ref;
+                            if (\count($refs) > self::MAX_SOURCE_REFS) {
+                                return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Reflection source refs exceeded the bounded recall limit.');
+                            }
+                        }
+                    }
+                    $refs = array_values($refs);
+                    usort($refs, static function (array $a, array $b): int {
+                        $byRun = strcmp($a['run_id'], $b['run_id']);
+                        if (0 !== $byRun) {
+                            return $byRun;
+                        }
+
+                        return $a['seq'] <=> $b['seq'];
+                    });
+
+                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection event hydration.'))) {
+                        return $interrupt;
+                    }
+
+                    $pendingEvents = [
+                        'kind' => MemoryKind::Reflection,
+                        'id' => $reflection['reflection_id'],
+                        'content' => $reflection['content'],
+                        'timestamp' => null,
+                        'importance' => null,
+                        'refs' => $refs,
+                        'support_ids' => $supportIds,
+                    ];
                 }
-                foreach ($this->sourceRefsForRun(
-                    $targetRunId,
-                    $this->decodeSourceRefs($supportReferences[$supportId]),
-                ) as $ref) {
-                    $key = $ref['run_id'].':'.$ref['seq'];
-                    $refs[$key] = $ref;
+            } catch (\PDOException) {
+                return $this->error(MemoryErrorCode::SourceUnavailable, 'Unable to read observational memory database snapshot.');
+            } finally {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
                 }
             }
-            $refs = array_values($refs);
-            usort($refs, static function (array $a, array $b): int {
-                $byRun = strcmp($a['run_id'], $b['run_id']);
-                if (0 !== $byRun) {
-                    return $byRun;
-                }
 
-                return $a['seq'] <=> $b['seq'];
-            });
-
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled before reflection event hydration.'))) {
-                return $interrupt;
+            if (null === $pendingEvents) {
+                return $this->error(MemoryErrorCode::SourceUnavailable, 'Unable to read observational memory database snapshot.');
             }
 
-            $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $refs, $deadlineNs);
-            if ($this->isInterruptResult($events)) {
+            $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $pendingEvents['refs'], $deadline);
+            if ($this->isFailureResult($events)) {
                 return $events;
             }
-            if (isset($events['ok']) && false === $events['ok']) {
-                return $events;
-            }
 
-            return [
+            $result = [
                 'ok' => true,
-                'kind' => 'reflection',
+                'kind' => $pendingEvents['kind']->value,
                 'session_id' => $targetRunId,
-                'id' => $reflection['reflection_id'],
-                'content' => $reflection['content'],
-                'supporting_observation_ids' => $supportIds,
-                'source_refs' => $refs,
+                'id' => $pendingEvents['id'],
+                'content' => $pendingEvents['content'],
+                'source_refs' => $pendingEvents['refs'],
                 'events' => $events,
             ];
-        } catch (\PDOException) {
-            return [
-                'ok' => false,
-                'error' => 'source_unavailable',
-                'message' => 'Unable to read observational memory database snapshot.',
-            ];
+            if (MemoryKind::Observation === $pendingEvents['kind']) {
+                $result['timestamp'] = $pendingEvents['timestamp'];
+                $result['importance'] = $pendingEvents['importance'];
+            } else {
+                $result['supporting_observation_ids'] = $pendingEvents['support_ids'];
+            }
+
+            return $result;
         } finally {
             $pdo = null;
         }
@@ -266,8 +259,11 @@ final class MemoryRecall
             $statement->bindValue(':observation_id', $idPrefix);
             $statement->execute();
             $row = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (!\is_array($row)) {
+            if (false === $row) {
                 return [];
+            }
+            if (!\is_array($row)) {
+                throw new \PDOException('Unexpected observation row shape.');
             }
 
             return [$this->mapObservationRow($row)];
@@ -287,6 +283,9 @@ final class MemoryRecall
 
         $out = [];
         foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            if (!\is_array($row)) {
+                throw new \PDOException('Unexpected observation row shape.');
+            }
             $out[] = $this->mapObservationRow($row);
         }
 
@@ -313,8 +312,11 @@ final class MemoryRecall
             $statement->bindValue(':reflection_id', $idPrefix);
             $statement->execute();
             $row = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (!\is_array($row)) {
+            if (false === $row) {
                 return [];
+            }
+            if (!\is_array($row)) {
+                throw new \PDOException('Unexpected reflection row shape.');
             }
 
             return [$this->mapReflectionRow($row)];
@@ -334,6 +336,9 @@ final class MemoryRecall
 
         $out = [];
         foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            if (!\is_array($row)) {
+                throw new \PDOException('Unexpected reflection row shape.');
+            }
             $out[] = $this->mapReflectionRow($row);
         }
 
@@ -343,13 +348,13 @@ final class MemoryRecall
     /**
      * @param list<string> $ids
      *
-     * @return array<string, string>|array{cancelled?: true, timed_out?: true, timeout_seconds?: int, message: string}
+     * @return array<string, string>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function supportReferences(\PDO $pdo, string $runId, array $ids, ?int $deadlineNs): array
+    private function supportReferences(\PDO $pdo, string $runId, array $ids, \DateTimeImmutable $deadline): array
     {
         $references = [];
         foreach (array_chunk(array_values(array_unique($ids)), self::SUPPORT_CHUNK_SIZE) as $page) {
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled while hydrating supporting observations.'))) {
+            if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
                 return $interrupt;
             }
             if ([] === $page) {
@@ -377,15 +382,18 @@ final class MemoryRecall
             $statement->execute();
 
             foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                if (!\is_array($row)) {
+                    throw new \PDOException('Unexpected supporting observation row shape.');
+                }
                 $observationId = $row['observation_id'] ?? null;
                 $sourceRefsJson = $row['source_refs_json'] ?? null;
                 if (!\is_string($observationId) || '' === $observationId || !\is_string($sourceRefsJson)) {
-                    continue;
+                    throw new \PDOException('Supporting observation row is missing required columns.');
                 }
                 $references[$observationId] = $sourceRefsJson;
             }
 
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled while hydrating supporting observations.'))) {
+            if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
                 return $interrupt;
             }
         }
@@ -396,9 +404,9 @@ final class MemoryRecall
     /**
      * @param list<array{run_id: string, seq: int}> $refs
      *
-     * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string}|array{cancelled?: true, timed_out?: true, timeout_seconds?: int, message: string}
+     * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function loadEventsForRefs(string $sessionsPath, string $currentRunId, array $refs, ?int $deadlineNs): array
+    private function loadEventsForRefs(string $sessionsPath, string $currentRunId, array $refs, \DateTimeImmutable $deadline): array
     {
         if ([] === $refs) {
             return [];
@@ -407,11 +415,11 @@ final class MemoryRecall
         /** @var list<int> $seqs */
         $seqs = [];
         foreach ($refs as $ref) {
-            if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled while collecting event refs.'))) {
+            if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while collecting event refs.'))) {
                 return $interrupt;
             }
-            $run = (string) $ref['run_id'];
-            $seq = (int) $ref['seq'];
+            $run = $ref['run_id'];
+            $seq = $ref['seq'];
             if ($seq < 1 || $run !== $currentRunId) {
                 continue;
             }
@@ -422,7 +430,7 @@ final class MemoryRecall
             return [];
         }
 
-        if (null !== ($interrupt = $this->interruptMap($deadlineNs, 'Cancelled before reading session events.'))) {
+        if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reading session events.'))) {
             return $interrupt;
         }
 
@@ -430,14 +438,14 @@ final class MemoryRecall
             $sessionsPath,
             $currentRunId,
             $seqs,
-            function () use ($deadlineNs): ?array {
-                return $this->interruptMap($deadlineNs, 'Cancelled while reading session events.');
+            function () use ($deadline): ?array {
+                return $this->timeoutMap($deadline, 'Timed out while reading session events.');
             },
         );
     }
 
     /**
-     * @param array{observation_id?: mixed, content?: mixed, relevance?: mixed, timestamp?: mixed, source_refs_json?: mixed} $row
+     * @param array<string, mixed> $row
      *
      * @return array{
      *   observation_id: string,
@@ -449,17 +457,32 @@ final class MemoryRecall
      */
     private function mapObservationRow(array $row): array
     {
+        $observationId = $row['observation_id'] ?? null;
+        $content = $row['content'] ?? null;
+        $relevance = $row['relevance'] ?? null;
+        $timestamp = $row['timestamp'] ?? null;
+        $sourceRefsJson = $row['source_refs_json'] ?? null;
+        if (
+            !\is_string($observationId) || '' === $observationId
+            || !\is_string($content)
+            || !\is_string($relevance) || '' === $relevance
+            || !\is_string($timestamp) || '' === $timestamp
+            || !\is_string($sourceRefsJson)
+        ) {
+            throw new \PDOException('Observation row is missing required columns.');
+        }
+
         return [
-            'observation_id' => (string) ($row['observation_id'] ?? ''),
-            'content' => (string) ($row['content'] ?? ''),
-            'relevance' => (string) ($row['relevance'] ?? ''),
-            'timestamp' => (string) ($row['timestamp'] ?? ''),
-            'source_refs_json' => (string) ($row['source_refs_json'] ?? '[]'),
+            'observation_id' => $observationId,
+            'content' => $content,
+            'relevance' => $relevance,
+            'timestamp' => $timestamp,
+            'source_refs_json' => $sourceRefsJson,
         ];
     }
 
     /**
-     * @param array{reflection_id?: mixed, content?: mixed, supporting_observation_ids_json?: mixed} $row
+     * @param array<string, mixed> $row
      *
      * @return array{
      *   reflection_id: string,
@@ -469,10 +492,21 @@ final class MemoryRecall
      */
     private function mapReflectionRow(array $row): array
     {
+        $reflectionId = $row['reflection_id'] ?? null;
+        $content = $row['content'] ?? null;
+        $supporting = $row['supporting_observation_ids_json'] ?? null;
+        if (
+            !\is_string($reflectionId) || '' === $reflectionId
+            || !\is_string($content)
+            || !\is_string($supporting)
+        ) {
+            throw new \PDOException('Reflection row is missing required columns.');
+        }
+
         return [
-            'reflection_id' => (string) ($row['reflection_id'] ?? ''),
-            'content' => (string) ($row['content'] ?? ''),
-            'supporting_observation_ids_json' => (string) ($row['supporting_observation_ids_json'] ?? '[]'),
+            'reflection_id' => $reflectionId,
+            'content' => $content,
+            'supporting_observation_ids_json' => $supporting,
         ];
     }
 
@@ -483,24 +517,24 @@ final class MemoryRecall
     {
         try {
             $decoded = json_decode($json, true, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return [];
+        } catch (\JsonException $exception) {
+            throw new \PDOException('Source refs JSON is corrupt.', 0, $exception);
         }
         if (!\is_array($decoded)) {
-            return [];
+            throw new \PDOException('Source refs JSON has an unexpected shape.');
         }
 
         $out = [];
         foreach ($decoded as $item) {
             if (!\is_array($item)) {
-                continue;
+                throw new \PDOException('Source refs JSON has an unexpected shape.');
             }
             $runId = isset($item['run_id']) && \is_string($item['run_id'])
                 ? $item['run_id']
                 : (isset($item['runId']) && \is_string($item['runId']) ? $item['runId'] : '');
             $seq = isset($item['seq']) && is_numeric($item['seq']) ? (int) $item['seq'] : 0;
             if ('' === $runId || $seq < 1) {
-                continue;
+                throw new \PDOException('Source refs JSON has an unexpected shape.');
             }
             $out[] = ['run_id' => $runId, 'seq' => $seq];
         }
@@ -515,18 +549,19 @@ final class MemoryRecall
     {
         try {
             $decoded = json_decode($json, true, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return [];
+        } catch (\JsonException $exception) {
+            throw new \PDOException('Supporting observation ids JSON is corrupt.', 0, $exception);
         }
         if (!\is_array($decoded)) {
-            return [];
+            throw new \PDOException('Supporting observation ids JSON has an unexpected shape.');
         }
 
         $out = [];
         foreach ($decoded as $item) {
-            if (\is_string($item) && '' !== $item) {
-                $out[] = $item;
+            if (!\is_string($item) || '' === $item) {
+                throw new \PDOException('Supporting observation ids JSON has an unexpected shape.');
             }
+            $out[] = $item;
         }
 
         return $out;
@@ -575,22 +610,30 @@ final class MemoryRecall
     }
 
     /**
-     * @return array{timed_out: true, timeout_seconds: int, message: string}|null
+     * @return array{ok: false, error: string, message: string, timed_out: true}|null
      */
-    private function interruptMap(?int $deadlineNs, string $message): ?array
+    private function timeoutMap(\DateTimeImmutable $deadline, string $message): ?array
     {
-        if (null === $deadlineNs) {
-            return null;
-        }
-
-        // OM deadlineNs is hrtime(true)-based; keep that comparison semantics.
-        if (hrtime(true) < $deadlineNs) {
+        if ($this->clock->now() < $deadline) {
             return null;
         }
 
         return [
+            'ok' => false,
+            'error' => MemoryErrorCode::Timeout->value,
             'timed_out' => true,
-            'timeout_seconds' => 0,
+            'message' => $message,
+        ];
+    }
+
+    /**
+     * @return array{ok: false, error: string, message: string}
+     */
+    private function error(MemoryErrorCode $code, string $message): array
+    {
+        return [
+            'ok' => false,
+            'error' => $code->value,
             'message' => $message,
         ];
     }
@@ -598,8 +641,8 @@ final class MemoryRecall
     /**
      * @param array<string, mixed> $result
      */
-    private function isInterruptResult(array $result): bool
+    private function isFailureResult(array $result): bool
     {
-        return isset($result['cancelled']) || isset($result['timed_out']);
+        return isset($result['ok']) && false === $result['ok'];
     }
 }
