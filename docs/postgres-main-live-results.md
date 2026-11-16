@@ -1,6 +1,6 @@
 # Main-based PostgreSQL store deployed in Librarian
 
-Current package: **`dev-development` at `d03d231`**, retaining stored vectors and GIN but reverting the [deferred-fetch experiment](#deferred-document-fetching-experiment). The initial stored-vector rollout is recorded first, followed by the rejected experiment's comparison. The stored-vector change is submitted as one signed commit `dba6b38f` in [upstream PR #2967](https://github.com/symfony/ai/pull/2967).
+Current package: **`dev-development` at `d03d231`**, retaining stored vectors and GIN but reverting the [deferred-fetch experiment](#deferred-document-fetching-experiment). The initial stored-vector rollout is recorded first, followed by the rejected experiment's comparison. The stored-vector and GIN changes are consolidated as one signed commit `dba6b38f` in [upstream PR #2964](https://github.com/symfony/ai/pull/2964); PR #2967 was closed as superseded.
 
 ## Scope correction
 

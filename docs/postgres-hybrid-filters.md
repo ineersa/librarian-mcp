@@ -41,7 +41,7 @@ The fork's `setup()` creates/backfills a stored generated `search_tsv` using `to
 
 The owner-requested deferred-fetch experiment was reverted at `d03d231` after [live comparison](postgres-main-live-results.md#deferred-document-fetching-experiment) showed no clear latency improvement; its feature branch was removed. Development retains stored vectors and GIN, with the same package sources as `399c78f`.
 
-The stored-vector change is submitted separately in [Symfony AI PR #2967](https://github.com/symfony/ai/pull/2967), as one signed commit `dba6b38f` on upstream main. That PR does not include Librarian's date-filter patch or the reverted deferred-fetch experiment. The application continues to use the fork's `dev-development` branch.
+The stored-vector and GIN changes are consolidated in [Symfony AI PR #2964](https://github.com/symfony/ai/pull/2964), as one signed commit `dba6b38f` on upstream main; the separate PR #2967 was closed as superseded. The combined PR does not include Librarian's date-filter patch or the reverted deferred-fetch experiment. The application continues to use the fork's `dev-development` branch.
 
 Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 
