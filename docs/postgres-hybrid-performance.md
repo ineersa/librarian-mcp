@@ -2,6 +2,8 @@
 
 Measured **2026-11-16 UTC** on the production deployment at port **8093**, with explicit owner permission to create and remove a temporary index. Application revision: `f80aea0a00994bf09720b15648e5c4f553f88cf7`.
 
+Follow-up: [stored `tsvector` experiment](postgres-stored-tsvector-performance.md) measures a 2.3–2.4× mixed-hybrid improvement on a disposable frozen copy, with unchanged scores. Its same-table baseline is separate from the live-table timings below.
+
 ## Scope and method
 
 - Registered project: **Hatfield / agent-core**, project 1, active generation 1; Librarian-owned store table `librarian_p1_g1`.
