@@ -71,10 +71,38 @@ For active tables, plan a controlled concurrent replacement outside transaction 
 
 ### Review branches and upstream PR
 
-- [Upstream PR #2964](https://github.com/symfony/ai/pull/2964), signed commit `a9ba978b`: focused PHPUnit suite **44 tests / 212 assertions**, PHP CS Fixer clean, package PHPStan passed. Squashing/signing preserved the exact tested source tree. The PR includes these checks and the qualified live performance measurements.
+- [Upstream PR #2964](https://github.com/symfony/ai/pull/2964), signed commit `a9ba978b`: focused PHPUnit suite **44 tests / 212 assertions**, PHP CS Fixer clean, package PHPStan passed. Squashing/signing preserved the exact tested source tree. QA remains recorded here; the PR description focuses on the change and current-main measurements below.
 - [Pinned-version backport](https://github.com/ineersa/ai-postgres-store/compare/790eaadc...fix/postgres-fulltext-index), commit `4b8ca908`: focused PHPUnit suite **41 tests / 205 assertions**, PHP CS Fixer clean, PHPStan passed with a worktree-local bootstrap/config to resolve the split package's monorepo dependencies. Reflection verified the tests loaded this exact pinned `Store.php`.
 
-Short table names retain `<table>_text_gin`. When that exceeds PostgreSQL's default 63-byte identifier limit, both patches use a SHA-256 prefix of the full table name plus the distinguishing `_text_gin` suffix, fitting within 63 bytes without splitting UTF-8. The focused setup test checks the reported 57-byte/`text` and 62-byte/`embedding` cases, bounded deterministic names and distinct names for tables sharing a long prefix. Existing vector-index naming is unchanged. No database integration suite or additional production experiment was run for these code patches; the earlier live experiment remains the performance evidence.
+Short table names retain `<table>_text_gin`. When that exceeds PostgreSQL's default 63-byte identifier limit, both patches use a SHA-256 prefix of the full table name plus the distinguishing `_text_gin` suffix, fitting within 63 bytes without splitting UTF-8. The focused setup test checks the reported 57-byte/`text` and 62-byte/`embedding` cases, bounded deterministic names and distinct names for tables sharing a long prefix. Existing vector-index naming is unchanged. No database integration suite was run for these code patches. The owner subsequently requested the current-main timing rerun below.
+
+## Rerun using current upstream main — 2026-11-16
+
+Fetched upstream `main` again: still **`999d5fbeea73cb9bbb3a22b069ee890847655ac7`**. Executed its mixed-hybrid SQL shape, then compared its `TextQuery` SQL before the PR with the PR's matching `COALESCE` expression and GIN index. This used the existing Castor production console, not a dependency upgrade or replacement of the running application.
+
+The same active store now contained **27,164 chunks**, unchanged before/after each probe. Each query/phase had one warm-up and three timed `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` executions. All queries used `LIMIT 100` and the same OR-combined input words as the original experiment. The mixed query retained equal semantic/keyword weights, cosine distance, and the same fixed document vector loaded through a primary-key subquery. Text queries do not use a query vector. Times below are median database execution milliseconds, not model/network/reranking latency.
+
+### Mixed hybrid search: no demonstrated GIN benefit
+
+| Search text | Without GIN | With matching GIN |
+|---|---:|---:|
+| `CodeRankEmbed` | 428.156 | 419.232 |
+| `project` | 439.528 | 418.353 |
+| Full OpenCode/token-usage question quoted above | 453.674 | 427.470 |
+
+Both phases scanned all **27,164** chunks using a parallel sequential scan, sort and gather merge. Neither used GIN or HNSW. The primary-key index in the plan only loaded the fixed query vector. The query has no lexical `@@` filter. Small timing differences are not evidence of an index speedup. Some mixed-query runs reported shared block reads despite the warm-up, and the database remained live; this is not a controlled cold/warm-cache or load benchmark.
+
+### Text search: substantial improvement
+
+| Search text | Main before PR | PR query with GIN |
+|---|---:|---:|
+| `CodeRankEmbed` | 368.867 | 0.386 |
+| `project` | 387.318 | 29.332 |
+| Full OpenCode/token-usage question quoted above | 437.619 | 160.542 |
+
+The baseline used main's non-`COALESCE` text expression without GIN. The after phase used the PR's `COALESCE` text expression and its matching GIN. Both preserve the lexical filter and `ts_rank` ordering. Plans changed from sequential scans to GIN bitmap index/heap scans and sort. All measured text-query runs reported zero shared blocks read. The index accelerates finding matches; broader matches still require scoring and sorting.
+
+Both temporary `COALESCE` GIN indexes were valid, occupied **7,168,000 bytes** each, and were removed concurrently. Cleanup after each probe verified its index absent, unchanged chunk count, the same active generation, and the fixed vector still present. No application/source rows, settings or journals were changed by these probes. Local metrics remain in ignored `var/qa/gin-probe-main/result.json` and `var/qa/gin-probe-main-text/result.json`; throwaway drivers remain outside the repository.
 
 ## Cleanup and artifacts
 
