@@ -39,6 +39,8 @@ This replaces the mistakenly deployed 0.15 backport. The branch uses **upstream 
 
 The fork's `setup()` creates/backfills a stored generated `search_tsv` using `to_tsvector(lang, COALESCE(metadata->>'_text', ''))` and creates a matching `*_search_tsv_gin` index. Queries read that column. Existing generation tables must receive this schema upgrade before application deployment; normal `IndexStoreFactory` provisioning handles new generations. Adding the column takes an exclusive lock and backfills rows. Changing its language or upgrading a prior non-`COALESCE` representation requires rebuilding the column; `IF NOT EXISTS` does not rewrite it. Prior expression GIN indexes are not automatically dropped by the package. See [main-based performance results](postgres-main-live-results.md).
 
+The development branch also includes the owner-requested `perf/deferred-document-fetch` experiment: hybrid queries first select top-N IDs/scores, then fetch document data by primary key. This remains exhaustive scoring with filters before the inner limit, not approximate candidate retrieval. See [live comparison](postgres-main-live-results.md#deferred-document-fetching-experiment); current measurements show no clear latency improvement.
+
 Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 
 ## Application integration
