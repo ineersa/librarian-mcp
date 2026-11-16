@@ -17,6 +17,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\Lock\Exception\LockAcquiringException;
 use Symfony\Component\Messenger\Exception\ExceptionInterface as MessengerException;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
@@ -75,7 +76,7 @@ final readonly class EnsureProject
             $this->projectManager->queueScan($project);
 
             return $this->result($project, true);
-        } catch (DatabaseException|MessengerException) {
+        } catch (DatabaseException|MessengerException|LockAcquiringException) {
             if (!$this->entityManager->isOpen()) {
                 $this->managerRegistry->resetManager();
             }

@@ -277,11 +277,11 @@ final class MemoryRecall
         $statement = $pdo->prepare(
             'SELECT observation_id, run_id, content, relevance, timestamp, source_refs_json
              FROM om_observation
-             WHERE observation_id LIKE :id_prefix
+             WHERE observation_id GLOB :id_prefix
              ORDER BY observation_id ASC
              LIMIT :limit',
         );
-        $statement->bindValue(':id_prefix', $idPrefix.'%');
+        $statement->bindValue(':id_prefix', $idPrefix.'*');
         $statement->bindValue(':limit', self::PREFIX_LOOKUP_LIMIT, \PDO::PARAM_INT);
         $statement->execute();
 
@@ -329,11 +329,11 @@ final class MemoryRecall
         $statement = $pdo->prepare(
             'SELECT reflection_id, run_id, content, supporting_observation_ids_json
              FROM om_reflection
-             WHERE reflection_id LIKE :id_prefix
+             WHERE reflection_id GLOB :id_prefix
              ORDER BY reflection_id ASC
              LIMIT :limit',
         );
-        $statement->bindValue(':id_prefix', $idPrefix.'%');
+        $statement->bindValue(':id_prefix', $idPrefix.'*');
         $statement->bindValue(':limit', self::PREFIX_LOOKUP_LIMIT, \PDO::PARAM_INT);
         $statement->execute();
 
