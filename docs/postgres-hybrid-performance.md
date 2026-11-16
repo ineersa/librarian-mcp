@@ -63,12 +63,18 @@ Checked Symfony AI upstream `main` at **`999d5fbeea73cb9bbb3a22b069ee890847655ac
 
 Therefore the measured hybrid speedups apply to the pinned package, **not** to current upstream default hybrid search. The upstream patch shares the existing hybrid `COALESCE` expression with `TextQuery` and setup, so its GIN index matches both text and keyword-only hybrid filtering. It does not restore the old lexical gate or change mixed hybrid ranking. The pinned-version patch preserves its existing query SQL and date predicates. No dependency change has been made.
 
+### Upgrade from the backport to upstream
+
+The two patches use the **same deterministic GIN index name for a table but different expressions**. After adopting the backport, a later upstream upgrade must replace the existing non-`COALESCE` GIN index with one matching upstream's `COALESCE` expression. Rerunning `setup()` is insufficient: `IF NOT EXISTS` retains the old index, whose expression does not match the new queries.
+
+For active tables, plan a controlled concurrent replacement outside transaction blocks. This is a future deployment requirement, not automatic setup behavior or an operation performed during this investigation. No source reindexing or embedding rebuild is needed merely to replace the SQL index.
+
 ### Fork review branches (no upstream PR)
 
-- [Upstream-target patch](https://github.com/ineersa/ai/compare/999d5fbeea73cb9bbb3a22b069ee890847655ac7...fix/postgres-fulltext-index), commit `307b1528`: focused PHPUnit suite **43 tests / 200 assertions**, PHP CS Fixer clean, package PHPStan passed.
-- [Pinned-version backport](https://github.com/ineersa/ai-postgres-store/compare/790eaadc...fix/postgres-fulltext-index), commit `720e1b2`: focused PHPUnit suite **40 tests / 193 assertions**, PHP CS Fixer clean, PHPStan passed with a worktree-local bootstrap/config to resolve the split package's monorepo dependencies. Reflection verified the tests loaded this exact pinned `Store.php`.
+- [Upstream-target patch](https://github.com/ineersa/ai/compare/999d5fbeea73cb9bbb3a22b069ee890847655ac7...fix/postgres-fulltext-index), commit `82c16089`: focused PHPUnit suite **44 tests / 212 assertions**, PHP CS Fixer clean, package PHPStan passed.
+- [Pinned-version backport](https://github.com/ineersa/ai-postgres-store/compare/790eaadc...fix/postgres-fulltext-index), commit `4b8ca908`: focused PHPUnit suite **41 tests / 205 assertions**, PHP CS Fixer clean, PHPStan passed with a worktree-local bootstrap/config to resolve the split package's monorepo dependencies. Reflection verified the tests loaded this exact pinned `Store.php`.
 
-The new index name is `<table>_text_gin`, avoiding collision with the vector index when its configured column is named `text`. The existing custom-language setup test covers that naming distinction. Final published commits consolidate local iterations without changing the tested source trees. No database integration suite or additional production experiment was run for these code patches; the earlier live experiment remains the performance evidence.
+Short table names retain `<table>_text_gin`. When that exceeds PostgreSQL's default 63-byte identifier limit, both patches use a SHA-256 prefix of the full table name plus the distinguishing `_text_gin` suffix, fitting within 63 bytes without splitting UTF-8. The focused setup test checks the reported 57-byte/`text` and 62-byte/`embedding` cases, bounded deterministic names and distinct names for tables sharing a long prefix. Existing vector-index naming is unchanged. No database integration suite or additional production experiment was run for these code patches; the earlier live experiment remains the performance evidence.
 
 ## Cleanup and artifacts
 
@@ -80,5 +86,7 @@ Detailed local execution metrics remain in ignored `var/qa/gin-probe/result.json
 
 - [PostgreSQL 17: creating matching full-text expression indexes](https://www.postgresql.org/docs/17/textsearch-tables.html#TEXTSEARCH-TABLES-INDEX)
 - [PostgreSQL 17: GIN is the preferred full-text index type](https://www.postgresql.org/docs/17/textsearch-indexes.html)
+- [PostgreSQL 17: identifier limits are measured in bytes](https://www.postgresql.org/docs/17/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS)
+- [PostgreSQL 17: CREATE INDEX IF NOT EXISTS does not check index equivalence](https://www.postgresql.org/docs/17/sql-createindex.html)
 - [pgvector: ordering directly by distance is required for vector index use](https://github.com/pgvector/pgvector#why-isnt-a-query-using-an-index)
 - Installed `vendor/symfony/ai-postgres-store/Store.php`: `setup()`, `queryText()`, and `queryHybrid()`; `src/Index/Store/IndexStoreFactory.php` and `src/Index/Search/HybridSearch.php`.
