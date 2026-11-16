@@ -52,7 +52,7 @@ The index belongs in **Symfony AI's PostgreSQL `Store::setup()`**, which already
 - Existing live generation tables need a separate, controlled concurrent backfill outside a transaction. Do not run schema setup on every search or rebuild embeddings to add this index. Use an approved store-schema deployment procedure, not a hand-authored Doctrine migration for dynamic vendor-owned tables.
 - Consume an approved package change through Composer rather than editing `vendor/`. No upstream publication is authorized merely by this investigation.
 
-The owner authorized preparing the patch locally. Package publication, upstream PR creation, dependency updates and production rollout remain pending owner review. No new setup option is needed.
+The owner authorized preparing the patch and subsequently pushing fork review branches. A package release, upstream PR creation, dependency updates and production rollout remain pending owner review. No new setup option is needed.
 
 ### Upstream version difference discovered during implementation
 
@@ -61,7 +61,14 @@ Checked Symfony AI upstream `main` at **`999d5fbeea73cb9bbb3a22b069ee890847655ac
 - It uses `to_tsvector(lang, COALESCE(metadata->>'_text', ''))`, whereas `TextQuery` and the expression measured here omit `COALESCE`. PostgreSQL expression indexes must match the query expression.
 - More importantly, it adds the lexical `@@` predicate only when the semantic ratio is zero. Default mixed hybrid queries deliberately retain documents with no keyword match and rank the whole eligible set. Even an expression-matched GIN index cannot accelerate an absent lexical predicate.
 
-Therefore the measured hybrid speedups apply to the pinned package, **not** to current upstream default hybrid search. The small upstream setup patch can index `TextQuery`, but must not be advertised as fixing default hybrid performance. Do not restore the old lexical gate or change ranking semantics as part of an index-only patch. Preparing a matching local patch for the locked version preserves the behavior actually tested; no dependency change has been made.
+Therefore the measured hybrid speedups apply to the pinned package, **not** to current upstream default hybrid search. The upstream patch shares the existing hybrid `COALESCE` expression with `TextQuery` and setup, so its GIN index matches both text and keyword-only hybrid filtering. It does not restore the old lexical gate or change mixed hybrid ranking. The pinned-version patch preserves its existing query SQL and date predicates. No dependency change has been made.
+
+### Fork review branches (no upstream PR)
+
+- [Upstream-target patch](https://github.com/ineersa/ai/compare/999d5fbeea73cb9bbb3a22b069ee890847655ac7...fix/postgres-fulltext-index), commit `307b1528`: focused PHPUnit suite **43 tests / 200 assertions**, PHP CS Fixer clean, package PHPStan passed.
+- [Pinned-version backport](https://github.com/ineersa/ai-postgres-store/compare/790eaadc...fix/postgres-fulltext-index), commit `720e1b2`: focused PHPUnit suite **40 tests / 193 assertions**, PHP CS Fixer clean, PHPStan passed with a worktree-local bootstrap/config to resolve the split package's monorepo dependencies. Reflection verified the tests loaded this exact pinned `Store.php`.
+
+The new index name is `<table>_text_gin`, avoiding collision with the vector index when its configured column is named `text`. The existing custom-language setup test covers that naming distinction. Final published commits consolidate local iterations without changing the tested source trees. No database integration suite or additional production experiment was run for these code patches; the earlier live experiment remains the performance evidence.
 
 ## Cleanup and artifacts
 
