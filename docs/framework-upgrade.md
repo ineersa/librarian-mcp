@@ -13,7 +13,7 @@ On 2026-11-12 the owner explicitly approved **Symfony 8.2.0-BETA1** because stab
 | EasyAdmin | 5.10.0 | Admin UI |
 | Doctrine ORM | 3.7.6 | PostgreSQL application metadata |
 | Stimulus / Turbo | 3.7.0 | UX 2.x conflicts with Symfony 8.2 AssetMapper |
-| Symfony AI Postgres store | `dev-development` at `399c78f` | Owner-requested main + GIN + stored-tsvector branch; native generation-scoped storage |
+| Symfony AI Postgres store | `dev-development` (revision in `composer.lock`) | Owner-requested main + GIN + stored-tsvector branch; native generation-scoped storage |
 | AI platform/store + Generic/Voyage bridges | 1.0.0-BETA1 | Required by the main-based store; package-scoped `~1.0.0-BETA1` allowances |
 | Castor / Symfony TUI | 1.9.1 / 8.1.11 | Castor does not implement the new 8.2 terminal interface |
 
