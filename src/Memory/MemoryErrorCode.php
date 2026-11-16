@@ -8,14 +8,14 @@ enum MemoryErrorCode: string
 {
     case InvalidProjectContext = 'invalid_project_context';
     case ProjectNotFound = 'project_not_found';
+    case ProjectRegistrationConflict = 'project_registration_conflict';
+    case ProjectRegistrationUnavailable = 'project_registration_unavailable';
     case InvalidQuery = 'invalid_query';
     case InvalidLimit = 'invalid_limit';
     case InvalidAfter = 'invalid_after';
     case InvalidBefore = 'invalid_before';
     case InvalidDateRange = 'invalid_date_range';
-    case InvalidSessionContext = 'invalid_session_context';
     case InvalidId = 'invalid_id';
-    case InvalidSessionId = 'invalid_session_id';
     case AmbiguousId = 'ambiguous_id';
     case NotFound = 'not_found';
     case SessionsUnavailable = 'sessions_unavailable';
@@ -34,7 +34,7 @@ enum MemoryErrorCode: string
         return match ($this) {
             self::IndexUnavailable, self::EmbeddingFailed, self::RetrievalFailed,
             self::SourceUnavailable, self::SessionsUnavailable, self::EventsUnreadable,
-            self::Timeout => true,
+            self::Timeout, self::ProjectRegistrationUnavailable => true,
             default => false,
         };
     }

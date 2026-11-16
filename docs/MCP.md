@@ -52,16 +52,43 @@ Configure once on official client `HttpTransport` additional headers; resolve on
 
 | Header | Required when | Meaning |
 |---|---|---|
-| `X-Librarian-Project` | every tool call | Absolute registered **canonical** project root |
-| `X-Hatfield-Session` | `recall` when `session_id` is omitted | Hatfield OM `run_id` (journal session). **Not** the MCP protocol session id |
+| `X-Librarian-Project` | every tool call | Absolute project root; the server canonicalizes it |
 
-No ambient shared MCP-session project selection. Missing/relative/unregistered project → domain error `invalid_project_context` / `project_not_found`. No auto-registration, global search, or arbitrary file tool.
+No session-selection header is needed. Recall derives the source session from the matched record; MCP protocol session IDs are unrelated. No ambient shared MCP-session project selection. Missing/invalid/inaccessible root → `invalid_project_context`. Search/recall require a registered root (`project_not_found` otherwise); only the explicit `ensure_project` operation can register it. No global search or arbitrary file tool.
 
 ---
 
 ## 4) Tools
 
-`tools/list` exposes exactly `memory_search` and `recall`.
+`tools/list` exposes exactly `ensure_project`, `memory_search`, and `recall`. All three use the existing server authentication setting unchanged; anonymous mode permits registration too. Only `ensure_project` writes Librarian-owned registration metadata; search/recall remain read-only retrieval.
+
+### `ensure_project`
+
+Call arguments: `{}`. No project-path or session argument. The native input schema is:
+
+```json
+{"type":"object","properties":{},"additionalProperties":false}
+```
+
+Canonicalize `X-Librarian-Project` using the same path facilities as retrieval. An existing registration is returned with `created: false`, without renaming, resetting, or enqueueing work. Otherwise register the readable directory with its basename as display name, validate the existing catalog name/root/Git-origin uniqueness rules, persist it, and queue normal asynchronous discovery through `ProjectManager`. Concurrent inserts converge through the existing unique indexes; a different root's name/origin conflict is never resolved by selecting that project.
+
+No `.hatfield` directory or initialized OM database is required to register. Scheduled scans discover sources later; this operation never creates or modifies source directories, settings, databases, or journals. Source database connections remain `mode=ro`; existing writable mounts still permit SQLite WAL/SHM sidecars during discovery. No synchronous indexing or readiness polling.
+
+Example success:
+
+```json
+{
+  "ok": true,
+  "created": true,
+  "project": {"id": 3, "name": "new-project", "root": "/home/ineersa/projects/new-project"},
+  "source": {"state": "pending", "error": null},
+  "index": {"state": "none", "searchable": false}
+}
+```
+
+`ok: true` means registration exists, **not** that discovery/indexing completed. States reuse `ProjectHealth` and `IndexState` (`none` before a generation exists); `searchable` requires a usable active generation with a committed revision. Existing registrations return their current status. Source readiness and index readiness are independent: search reports `index_unavailable` until usable, while ID-only recall needs discovered canonical sources, not an index.
+
+Hatfield should call this once during lazy Librarian connection setup, not before every search and not in a readiness loop. Local observation/reflection continue regardless of registration/backend readiness. This is a plan 07 integration requirement; no Hatfield runtime code is changed here.
 
 ### `memory_search`
 
@@ -85,9 +112,10 @@ Each result: `kind`, `id`, `display_id`, `session_id`, `timestamp`, `content`, a
 | Argument | Constraint |
 |---|---|
 | `id` | required, pattern `^[a-f0-9]{12,64}$` |
-| `session_id` | optional nonblank; default from `X-Hatfield-Session` |
 
-Unique short-id / prefix resolution within the selected session. Observation payload includes `source_refs` / `events` (plus `timestamp`, `importance`). Reflection payload includes `supporting_observation_ids` / `source_refs` / `events`. Both include selected-project provenance. Derived chunk/store IDs are not recall identities.
+Resolve the ID across both observations and reflections within the selected project, regardless of session. A unique match supplies its own source session for journal hydration. Observation payload includes `source_refs` / `events` (plus `timestamp`, `importance`). Reflection payload includes `supporting_observation_ids` / `source_refs` / `events`. Both retain `session_id` as output provenance and include selected-project provenance. Derived chunk/store IDs are not recall identities.
+
+Multiple matches return `ambiguous_id` with `isError: true`, `candidates: [{id, content}, ...]` containing full IDs and actual memory content, plus `candidates_truncated`. At most 50 candidates are listed; the normal response-size limit still applies. Select the intended memory and retry with its full ID. Neither table takes precedence. A full-ID collision is also an error, never an arbitrary selection.
 
 Native `CallToolResult`: JSON text content + the same object as `structuredContent`; domain failures set `isError: true`.
 
@@ -99,8 +127,9 @@ Domain failure payload: `{ok: false, error, message, retryable}` with `isError: 
 
 | Area | Codes |
 |---|---|
-| Shared / search | `invalid_project_context`, `project_not_found`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `invalid_session_context`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `timeout`, `response_too_large`, `internal_error` |
-| Recall | `invalid_id`, `invalid_session_id`, `ambiguous_id`, `not_found`, `sessions_unavailable`, `events_unreadable`, `resource_limit_exceeded` |
+| Shared / search | `invalid_project_context`, `project_not_found`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `timeout`, `response_too_large`, `internal_error` |
+| Registration | `project_registration_conflict` (non-retryable name/origin conflict), `project_registration_unavailable` (retryable database/queue/Git-inspection failure); invalid/inaccessible roots reuse `invalid_project_context` |
+| Recall | `invalid_id`, `ambiguous_id`, `not_found`, `sessions_unavailable`, `events_unreadable`, `resource_limit_exceeded` |
 
 Limits (honest):
 
@@ -132,8 +161,7 @@ $transport = new HttpTransport(
     headers: [
         'Authorization' => 'Bearer mcp_REDACTED',
         // Omit Authorization only when the server has MCP_AUTH_REQUIRED=0.
-        'X-Librarian-Project' => '/project-sources/example-a', // registered synthetic root
-        'X-Hatfield-Session' => '108', // OM run_id when recall omits session_id
+        'X-Librarian-Project' => '/project-sources/example-a', // readable synthetic root
     ],
     httpClient: new Psr18Client(HttpClient::create([
         'resolve' => [$hostname => $proxyIp], // keep printed URL; do not rewrite endpoint
@@ -145,7 +173,11 @@ try {
     $client->connect($transport);
 
     $tools = $client->listTools();
-    // expect memory_search + recall only
+    // expect ensure_project + memory_search + recall
+
+    $registration = $client->callTool('ensure_project', []); // once at lazy connection setup
+    // Handle isError normally. Success is registration, not indexing readiness;
+    // continue local observation/reflection, without polling or blocking on indexing.
 
     $search = $client->callTool('memory_search', [
         'query' => 'synthetic fixture observation',
@@ -156,7 +188,7 @@ try {
 
     $recall = $client->callTool('recall', [
         'id' => 'aaaaaaaaaaaa', // 12–64 hex prefix / full id
-        // optional session_id; header 108 used when omitted
+        // The matched memory supplies its session; no session argument/header.
     ]);
 } finally {
     $client->disconnect();
@@ -166,6 +198,10 @@ try {
 ---
 
 ## 7) Validation recorded for plan 05
+
+`ensure_project` follow-up: the same existing headless MCP journey passed with **61 assertions** in each mode: required-auth and anonymous/tokenless registration. It covers exact three-tool discovery and empty input schema, create/repeat/existing-custom-name registration, normal automatic discovery/indexing, search/recall, and source-hash preservation. `cs:fix` and `qa:static` passed. No special concurrency/conflict/fault matrix or separate uninitialized-source scenario was run; database race handling is implementation/source-inspection evidence, not a runtime concurrency proof. This follow-up has not been deployed; production authentication settings are unchanged.
+
+ID-only recall follow-up: `vendor/bin/castor cs:fix`, the existing MCP journey (**1 journey / 47 assertions**), `qa:static` (including PHPStan and Symfony LSP), and `git diff --check` passed. The journey sends no session header/argument and exercises observation prefix and reflection full-ID recall with derived journal evidence plus project isolation. No new collision/negative matrix was added; ambiguity handling is implemented but not separately browser-proven. Earlier results below describe the original session-aware contract.
 
 On 2026-11-15, `vendor/bin/castor cs:fix`, the complete existing headless browser suite (**5 journeys / 87 assertions**, 13.406s browser time; 27.438s including isolated-stack preparation), and `vendor/bin/castor qa:static` passed. `git diff --check` passed. Coverage remains one journey per feature; no additional test suite or special-case matrix was introduced. The modern SDK path is exercised; the configured handshake fallback and distinct-session recall remain unverified at runtime. No production deployment or owner-data reset was performed.
 

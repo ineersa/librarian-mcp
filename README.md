@@ -89,7 +89,7 @@ Then put them in `.env.prod.local` and set:
 - `DEFAULT_URI=https://your.domain`
 - `MERCURE_PUBLIC_URL=https://your.domain/.well-known/mercure`
 
-Configure `PROJECTS_HOST_PATH` in `.env` (or exported process environment), not the container-only `.env.prod.local`; alternatively declare the read-only binds in ignored `compose.sources.yaml`. See [source mounts](docs/project-sources.md#docker-source-mounts).
+Configure `PROJECTS_HOST_PATH` in `.env` (or exported process environment), not the container-only `.env.prod.local`; alternatively declare source binds in ignored `compose.sources.yaml`. OM database directories need writable mounts for SQLite WAL/SHM sidecars; database connections remain `mode=ro`. See [source mounts](docs/project-sources.md#docker-source-mounts).
 
 > For the default HS256 setup in this repo, keep `MERCURE_JWT_SECRET` equal to `MERCURE_PUBLISHER_JWT_KEY`.
 
@@ -151,7 +151,7 @@ Summary:
 - `DOCKER_DNS_PRIMARY`, `DOCKER_DNS_SECONDARY`
   DNS override for container resolution reliability.
 - `PROJECTS_HOST_PATH`
-  Host path mounted read-only into the service as `/projects` (default `.`).
+  Host path mounted read-write into the service as `/projects` (default `.`), allowing SQLite WAL/SHM sidecars while database connections remain `mode=ro`.
 
 ### Symfony / app
 
@@ -187,11 +187,11 @@ Summary:
 ### Security / MCP
 
 - MCP endpoint: `/_mcp`
-- `MCP_AUTH_REQUIRED` — `1` (default) requires a valid token; `0` allows tokenless requests. This is server configuration, not a client-header bypass. Anonymous mode exposes registered-project memory to anyone who can reach the endpoint; use only on a trusted network. Supplied credentials are still validated.
+- `MCP_AUTH_REQUIRED` — `1` (default) requires a valid token; `0` allows tokenless requests, including `ensure_project`. This is server configuration, not a client-header bypass. Anonymous mode permits registration and exposes registered-project memory to anyone who can reach the endpoint; use only on a trusted network. Supplied credentials are still validated.
 - Auth headers (required when `MCP_AUTH_REQUIRED=1`; URL query-token fallbacks removed):
   - `Authorization: Bearer <token>`
   - `X-MCP-Token: <token>`
-- Connection headers (not tool args): `X-Librarian-Project` (absolute registered root), `X-Hatfield-Session` (OM `run_id` for recall default)
+- Connection header (not a tool arg): `X-Librarian-Project` (absolute root, canonicalized by the server). `ensure_project` takes `{}`, returns an existing registration unchanged or creates it using the basename and queues normal asynchronous discovery. No `.hatfield`/initialized OM prerequisite, source writes, synchronous indexing, or readiness polling. Success means registration exists, not indexing is complete. Search/recall still require registration; recall takes only `id`, derives the source session, and returns full IDs/content when a prefix is ambiguous.
 - Admin/login remain protected (`ROLE_ADMIN`)
 - Tokens are stored hashed (SHA-256) when used
 - `MCP_ALLOWED_HOSTS` — CSV allow-list for MCP HTTP hosts (default `localhost,127.0.0.1,php,server,192.168.2.38`); override with production external hostnames

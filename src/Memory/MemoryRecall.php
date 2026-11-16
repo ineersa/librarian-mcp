@@ -15,11 +15,14 @@ use Psr\Clock\ClockInterface;
  *
  * Matches Hatfield OM recall payload/error semantics for observations and
  * reflections, including source_refs and events.jsonl evidence hydration.
+ * Memory IDs are resolved project-wide; the stored run_id becomes the session
+ * used for supporting observations and journal evidence.
  */
 final class MemoryRecall
 {
     private const string ID_PATTERN = '/^[a-f0-9]{12,64}$/';
-    private const int PREFIX_LOOKUP_LIMIT = 3;
+    private const int PREFIX_LOOKUP_LIMIT = 51;
+    private const int AMBIGUITY_LIST_LIMIT = 50;
     private const int SUPPORT_CHUNK_SIZE = 400;
     private const int MAX_SUPPORT_IDS = 10_000;
     private const int MAX_SOURCE_REFS = 10_000;
@@ -37,9 +40,7 @@ final class MemoryRecall
      */
     public function recall(
         Project $project,
-        string $currentSession,
         string $id,
-        ?string $sessionId = null,
         ?\DateTimeImmutable $deadline = null,
     ): array {
         $deadline ??= $this->clock->now()->modify('+'.self::DEFAULT_DEADLINE_SECONDS.' seconds');
@@ -47,19 +48,6 @@ final class MemoryRecall
         $id = strtolower(trim($id));
         if (1 !== preg_match(self::ID_PATTERN, $id)) {
             return $this->error(MemoryErrorCode::InvalidId, 'id must be a lowercase hex string of 12 to 64 characters.');
-        }
-
-        $targetRunId = trim($currentSession);
-        if (null !== $sessionId) {
-            $sessionId = trim($sessionId);
-            if ('' === $sessionId) {
-                return $this->error(MemoryErrorCode::InvalidSessionId, 'session_id must be a non-empty session/run id when provided.');
-            }
-            $targetRunId = $sessionId;
-        }
-
-        if ('' === $targetRunId) {
-            return $this->error(MemoryErrorCode::InvalidSessionId, 'session_id must be a non-empty session/run id when provided.');
         }
 
         if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before database open.'))) {
@@ -84,7 +72,7 @@ final class MemoryRecall
         try {
             $pdo->beginTransaction();
             try {
-                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before observation lookup.'))) {
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before memory lookup.'))) {
                     return $interrupt;
                 }
 
@@ -94,9 +82,43 @@ final class MemoryRecall
                     return $this->error(MemoryErrorCode::SourceUnavailable, $exception->getMessage());
                 }
 
-                $obsMatches = $this->findObservationsByIdPrefix($pdo, $targetRunId, $id);
-                if (\count($obsMatches) > 1) {
-                    return $this->error(MemoryErrorCode::AmbiguousId, 'Multiple observations match that id prefix in the selected session.');
+                $obsMatches = $this->findObservationsByIdPrefix($pdo, $id);
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection lookup.'))) {
+                    return $interrupt;
+                }
+                $refMatches = $this->findReflectionsByIdPrefix($pdo, $id);
+
+                $totalMatches = \count($obsMatches) + \count($refMatches);
+
+                if (0 === $totalMatches) {
+                    return $this->error(MemoryErrorCode::NotFound, 'No observation or reflection with that id in the selected project.');
+                }
+
+                if ($totalMatches > 1) {
+                    $candidates = [];
+                    foreach ($obsMatches as $observation) {
+                        if (\count($candidates) >= self::AMBIGUITY_LIST_LIMIT) {
+                            break;
+                        }
+                        $candidates[] = [
+                            'id' => $observation['observation_id'],
+                            'content' => $observation['content'],
+                        ];
+                    }
+                    foreach ($refMatches as $reflection) {
+                        if (\count($candidates) >= self::AMBIGUITY_LIST_LIMIT) {
+                            break;
+                        }
+                        $candidates[] = [
+                            'id' => $reflection['reflection_id'],
+                            'content' => $reflection['content'],
+                        ];
+                    }
+
+                    return $this->ambiguousId(
+                        $candidates,
+                        $totalMatches > self::AMBIGUITY_LIST_LIMIT,
+                    );
                 }
 
                 if (1 === \count($obsMatches)) {
@@ -105,6 +127,7 @@ final class MemoryRecall
                     }
 
                     $observation = $obsMatches[0];
+                    $targetRunId = $observation['run_id'];
                     $refs = $this->sourceRefsForRun(
                         $targetRunId,
                         $this->decodeSourceRefs($observation['source_refs_json']),
@@ -123,25 +146,12 @@ final class MemoryRecall
                         'support_ids' => null,
                     ];
                 } else {
-                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection lookup.'))) {
+                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
                         return $interrupt;
                     }
 
-                    $refMatches = $this->findReflectionsByIdPrefix($pdo, $targetRunId, $id);
-                    if (\count($refMatches) > 1) {
-                        return $this->error(MemoryErrorCode::AmbiguousId, 'Multiple reflections match that id prefix in the selected session.');
-                    }
-                    if ([] === $refMatches) {
-                        return $this->error(
-                            MemoryErrorCode::NotFound,
-                            \sprintf(
-                                'No observation or reflection with that id in session %s. If this id came from memory_search, pass its session_id.',
-                                $targetRunId,
-                            ),
-                        );
-                    }
-
                     $reflection = $refMatches[0];
+                    $targetRunId = $reflection['run_id'];
                     $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
                     if (\count($requestedSupportIds) > self::MAX_SUPPORT_IDS) {
                         return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Supporting observation ids exceeded the bounded recall limit.');
@@ -235,22 +245,22 @@ final class MemoryRecall
     /**
      * @return list<array{
      *   observation_id: string,
+     *   run_id: string,
      *   content: string,
      *   relevance: string,
      *   timestamp: string,
      *   source_refs_json: string
      * }>
      */
-    private function findObservationsByIdPrefix(\PDO $pdo, string $runId, string $idPrefix): array
+    private function findObservationsByIdPrefix(\PDO $pdo, string $idPrefix): array
     {
         if (64 === \strlen($idPrefix)) {
             $statement = $pdo->prepare(
-                'SELECT observation_id, content, relevance, timestamp, source_refs_json
+                'SELECT observation_id, run_id, content, relevance, timestamp, source_refs_json
                  FROM om_observation
-                 WHERE run_id = :run_id AND observation_id = :observation_id
+                 WHERE observation_id = :observation_id
                  LIMIT 1',
             );
-            $statement->bindValue(':run_id', $runId);
             $statement->bindValue(':observation_id', $idPrefix);
             $statement->execute();
             $row = $statement->fetch(\PDO::FETCH_ASSOC);
@@ -265,14 +275,13 @@ final class MemoryRecall
         }
 
         $statement = $pdo->prepare(
-            'SELECT observation_id, content, relevance, timestamp, source_refs_json
+            'SELECT observation_id, run_id, content, relevance, timestamp, source_refs_json
              FROM om_observation
-             WHERE run_id = :run_id AND observation_id LIKE :id_prefix
+             WHERE observation_id GLOB :id_prefix
              ORDER BY observation_id ASC
              LIMIT :limit',
         );
-        $statement->bindValue(':run_id', $runId);
-        $statement->bindValue(':id_prefix', $idPrefix.'%');
+        $statement->bindValue(':id_prefix', $idPrefix.'*');
         $statement->bindValue(':limit', self::PREFIX_LOOKUP_LIMIT, \PDO::PARAM_INT);
         $statement->execute();
 
@@ -290,20 +299,20 @@ final class MemoryRecall
     /**
      * @return list<array{
      *   reflection_id: string,
+     *   run_id: string,
      *   content: string,
      *   supporting_observation_ids_json: string
      * }>
      */
-    private function findReflectionsByIdPrefix(\PDO $pdo, string $runId, string $idPrefix): array
+    private function findReflectionsByIdPrefix(\PDO $pdo, string $idPrefix): array
     {
         if (64 === \strlen($idPrefix)) {
             $statement = $pdo->prepare(
-                'SELECT reflection_id, content, supporting_observation_ids_json
+                'SELECT reflection_id, run_id, content, supporting_observation_ids_json
                  FROM om_reflection
-                 WHERE run_id = :run_id AND reflection_id = :reflection_id
+                 WHERE reflection_id = :reflection_id
                  LIMIT 1',
             );
-            $statement->bindValue(':run_id', $runId);
             $statement->bindValue(':reflection_id', $idPrefix);
             $statement->execute();
             $row = $statement->fetch(\PDO::FETCH_ASSOC);
@@ -318,14 +327,13 @@ final class MemoryRecall
         }
 
         $statement = $pdo->prepare(
-            'SELECT reflection_id, content, supporting_observation_ids_json
+            'SELECT reflection_id, run_id, content, supporting_observation_ids_json
              FROM om_reflection
-             WHERE run_id = :run_id AND reflection_id LIKE :id_prefix
+             WHERE reflection_id GLOB :id_prefix
              ORDER BY reflection_id ASC
              LIMIT :limit',
         );
-        $statement->bindValue(':run_id', $runId);
-        $statement->bindValue(':id_prefix', $idPrefix.'%');
+        $statement->bindValue(':id_prefix', $idPrefix.'*');
         $statement->bindValue(':limit', self::PREFIX_LOOKUP_LIMIT, \PDO::PARAM_INT);
         $statement->execute();
 
@@ -444,6 +452,7 @@ final class MemoryRecall
      *
      * @return array{
      *   observation_id: string,
+     *   run_id: string,
      *   content: string,
      *   relevance: string,
      *   timestamp: string,
@@ -453,12 +462,14 @@ final class MemoryRecall
     private function mapObservationRow(array $row): array
     {
         $observationId = $row['observation_id'] ?? null;
+        $runId = $row['run_id'] ?? null;
         $content = $row['content'] ?? null;
         $relevance = $row['relevance'] ?? null;
         $timestamp = $row['timestamp'] ?? null;
         $sourceRefsJson = $row['source_refs_json'] ?? null;
         if (
             !\is_string($observationId) || '' === $observationId
+            || !\is_string($runId) || '' === $runId
             || !\is_string($content)
             || !\is_string($relevance) || '' === $relevance
             || !\is_string($timestamp) || '' === $timestamp
@@ -469,6 +480,7 @@ final class MemoryRecall
 
         return [
             'observation_id' => $observationId,
+            'run_id' => $runId,
             'content' => $content,
             'relevance' => $relevance,
             'timestamp' => $timestamp,
@@ -481,6 +493,7 @@ final class MemoryRecall
      *
      * @return array{
      *   reflection_id: string,
+     *   run_id: string,
      *   content: string,
      *   supporting_observation_ids_json: string
      * }
@@ -488,10 +501,12 @@ final class MemoryRecall
     private function mapReflectionRow(array $row): array
     {
         $reflectionId = $row['reflection_id'] ?? null;
+        $runId = $row['run_id'] ?? null;
         $content = $row['content'] ?? null;
         $supporting = $row['supporting_observation_ids_json'] ?? null;
         if (
             !\is_string($reflectionId) || '' === $reflectionId
+            || !\is_string($runId) || '' === $runId
             || !\is_string($content)
             || !\is_string($supporting)
         ) {
@@ -500,6 +515,7 @@ final class MemoryRecall
 
         return [
             'reflection_id' => $reflectionId,
+            'run_id' => $runId,
             'content' => $content,
             'supporting_observation_ids_json' => $supporting,
         ];
@@ -620,6 +636,22 @@ final class MemoryRecall
             'error' => MemoryErrorCode::Timeout->value,
             'timed_out' => true,
             'message' => $message,
+        ];
+    }
+
+    /**
+     * @param list<array{id: string, content: string}> $candidates
+     *
+     * @return array{ok: false, error: string, message: string, candidates: list<array{id: string, content: string}>, candidates_truncated: bool}
+     */
+    private function ambiguousId(array $candidates, bool $truncated): array
+    {
+        return [
+            'ok' => false,
+            'error' => MemoryErrorCode::AmbiguousId->value,
+            'message' => 'Multiple memories match that id in the selected project. Retry with a full id from candidates.',
+            'candidates' => $candidates,
+            'candidates_truncated' => $truncated,
         ];
     }
 

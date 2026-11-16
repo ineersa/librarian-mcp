@@ -62,6 +62,7 @@ final class ProjectRegistrationValidator extends ConstraintValidator
             $origin = $this->gitOriginNormalizer->detectNormalizedOrigin($canonical);
         } catch (ProjectSourceException $exception) {
             $this->context->buildViolation($exception->getMessage())
+                ->setCode($exception->issueCode->value)
                 ->atPath('rootPath')
                 ->addViolation();
 

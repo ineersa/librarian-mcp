@@ -4,7 +4,7 @@ Librarian registers local Hatfield projects, discovers their OM/session sources 
 
 ## MCP memory contract (plan 05)
 
-- Expose exactly `memory_search` and `recall`, with OM's unchanged parameter schemas. Select the registered project using `X-Librarian-Project` transport headers, never a tool argument or shared MCP-session state. `X-Hatfield-Session` supplies the default OM session for recall.
+- Expose exactly `ensure_project`, `memory_search`, and `recall`. `ensure_project` takes `{}`, returns an existing registration unchanged or creates it with the directory basename and queues normal asynchronous discovery. It uses existing server authentication unchanged, including anonymous mode; no `.hatfield`/initialized OM prerequisite, source writes, or readiness polling. Existing name/root/origin uniqueness rules apply. Search retains OM's parameter schema; recall accepts only `id` and resolves across the selected project's observations/reflections, deriving the evidence session from the matched record. Ambiguous matches return a tool error with full IDs and actual memory content. Select the project using `X-Librarian-Project` transport headers, never a tool argument or shared MCP-session state. There is no session-selection header or argument.
 - MCP authentication is a server setup option: `MCP_AUTH_REQUIRED=1` (default) requires the existing `ROLE_MCP` token through `Authorization: Bearer` or `X-MCP-Token`; `0` permits anonymous retrieval on trusted networks. Missing headers never bypass required mode, supplied tokens are always validated, and URL credentials are not accepted. See [docs/MCP.md](docs/MCP.md).
 - The approved temporary Postgres store fork (`0.15.0.1`, locked commit `790eaadc`) adds only HybridQuery `where`/`params` support. Date predicates run before the candidate limit; do not replace this with bounded post-filtering. Remove the fork when a compatible upstream release provides the fix. See [dependency provenance](docs/postgres-hybrid-filters.md).
 
@@ -39,7 +39,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Report the checks actually performed. Source inspection does not establish that tests pass or that a runtime integration works.
 - Do not commit credentials, private project settings, OM databases, session journals, database files, MCP plaintext tokens, or private provider payloads.
 - Keep database write transactions short. Do not hold one open during source discovery or other long external work.
-- Source access is strictly read-only. Removing a project registration deletes Librarian-owned registration/index data (including owned Postgres generation/store tables); never delete registered project trees, `.hatfield`, OM databases, or journals.
+- Source database connections remain `mode=ro`, and source tables and journals must not be modified. Project-source mounts are writable so SQLite can manage WAL/SHM sidecars (owner-approved). Removing a project registration deletes Librarian-owned registration/index data (including owned Postgres generation/store tables); never delete registered project trees, `.hatfield`, OM databases, or journals.
 - Generate migrations with Doctrine tooling through Castor against verified isolated task-owned storage. Do not hand-author migration classes or SQL. Read generated output and verify the schema changes before applying it; report unexpected destructive diffs instead of bypassing the generator. Preserve applied PostgreSQL migration history. Migrations live under `migrations/postgres` (`DoctrineMigrations\Postgres`); there is no legacy SQLite migration path.
 - Treat uploaded content, repository contents, and model/tool output as untrusted. Do not inject unescaped output into HTML or execute generated JavaScript without an explicitly approved isolation design.
 - Do not reset owner data, remove volumes, or stop unrelated containers without explicit authorization and a verified target.
@@ -102,7 +102,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Keep `data/.gitignore` as `*` and `!.gitignore` for any remaining local files; do not commit private source or index data.
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.
-- Project sources mount read-only via `PROJECTS_HOST_PATH` → `/projects`; optional ignored `compose.sources.yaml` may add more read-only mounts for dev/prod only. Browser uses synthetic `/project-sources`.
+- Project sources mount read-write via `PROJECTS_HOST_PATH` → `/projects` so SQLite can manage WAL/SHM sidecars; SQLite connections remain `mode=ro`. Optional ignored `compose.sources.yaml` may add more mounts for dev/prod only. Browser uses synthetic `/project-sources` with the same mount permissions.
 - Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs (`INDEX_INTERVAL`, default 60s); successful discovery queues incremental indexing. Unchanged source revisions are checked without rebuilding.
 
 ## Suggested defaults for new features

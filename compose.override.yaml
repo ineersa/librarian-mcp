@@ -46,7 +46,7 @@ services:
       - type: bind
         source: '${PROJECTS_HOST_PATH:-.}'
         target: /projects
-        read_only: true
+        read_only: false
         bind:
           create_host_path: false
     ports: !override []
@@ -91,7 +91,7 @@ services:
       - type: bind
         source: '${PROJECTS_HOST_PATH:-.}'
         target: /projects
-        read_only: true
+        read_only: false
         bind:
           create_host_path: false
     # --all includes async + scheduler_default; failed stays excluded.

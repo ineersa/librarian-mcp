@@ -207,16 +207,9 @@ final class SessionEventsJournalReader
     private function resolveJournalPath(string $sessionsPath, string $sessionId): array
     {
         $sessionId = trim($sessionId);
-        if ('' === $sessionId) {
-            return [
-                'ok' => false,
-                'error' => MemoryErrorCode::InvalidSessionId->value,
-                'message' => 'session_id must be a non-empty session/run id when provided.',
-            ];
-        }
-
         if (
-            str_contains($sessionId, '/')
+            '' === $sessionId
+            || str_contains($sessionId, '/')
             || str_contains($sessionId, '\\')
             || str_contains($sessionId, "\0")
             || '.' === $sessionId
@@ -224,8 +217,8 @@ final class SessionEventsJournalReader
         ) {
             return [
                 'ok' => false,
-                'error' => MemoryErrorCode::InvalidSessionId->value,
-                'message' => 'session_id must be a non-empty session/run id when provided.',
+                'error' => MemoryErrorCode::EventsUnreadable->value,
+                'message' => 'The matched memory has an invalid source session identifier.',
             ];
         }
 

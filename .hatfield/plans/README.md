@@ -1,6 +1,6 @@
 # Librarian: shared Hatfield memory service
 
-Status: plans track. Created 2026-11-12; plan 05 implemented 2026-11-15 (two native tools, connection headers, required token, HybridQuery date filters). These plans do not by themselves authorize production resets, secret commits, or Hatfield edits.
+Status: plans track. Created 2026-11-12; plan 05 implemented 2026-11-15 (two native tools, project header, configurable authentication, HybridQuery date filters), with owner-approved ID-only recall replacing session selection. These plans do not by themselves authorize production resets, secret commits, or Hatfield edits.
 
 ## Goal and agreed boundary
 
@@ -10,8 +10,8 @@ Repurpose Librarian into one shared HTTP MCP memory service for registered local
 - **Librarian owns derived search and remote recall:** project registration, periodic incremental indexing, project-scoped hybrid search, index status, and MCP `memory_search` / `recall`.
 - **Shared means shared:** one deployed HTTP service, not a new stdio MCP process per Hatfield session.
 - **Librarian never observes or reflects on Hatfield’s behalf.** It reads canonical data without migrating or mutating Hatfield databases.
-- **Project-scoped only.** Project root is selected via connection header `X-Librarian-Project` (absolute registered canonical root), not a tool argument and not ambient MCP-session state. No cross-project/global search.
-- **Tools:** exactly `memory_search` and `recall` with OM’s current parameter schemas (see [docs/MCP.md](../../docs/MCP.md)). Plan 07 uses the official PHP MCP SDK client against that contract and removes Hatfield’s local semantic implementation once validated.
+- **Project-scoped only.** Project root is selected via connection header `X-Librarian-Project` (absolute root, canonicalized by Librarian; ensured during lazy connection setup), not a tool argument and not ambient MCP-session state. No cross-project/global search.
+- **Tools:** exactly `ensure_project` (`{}`), `memory_search` (OM query/date/limit schema), and `recall` (only `id`; no session header/argument), all using existing server authentication unchanged. `ensure_project` is called once at lazy connection setup, preserves existing registrations or creates one and queues asynchronous discovery; success is registration, not readiness. Recall derives the stored session and returns full IDs/content for ambiguous matches (see [docs/MCP.md](../../docs/MCP.md)). Plan 07 aligns Hatfield's local/external recall contracts, uses the official PHP MCP SDK client, and removes Hatfield's local semantic implementation once validated.
 - With no Librarian configured, Hatfield retains regular local literal search and local recall.
 
 ## Historical approved retrieval baseline — 2026-11-12
@@ -28,7 +28,7 @@ Stock Postgres hybrid uses weighted similarity + `ts_rank` (not BM25/RRF). Date 
 | 02 | [Completed model/retrieval evaluation](02-embedding-model-evaluation.md) | Evaluation complete | Preserve evidence; historical storage proposal superseded |
 | 03 | [Registered projects and read-only Hatfield sources](03-projects-and-hatfield-sources.md) | 01 | Replace Git-library workflow with read-only project registration |
 | 04 | [Incremental Symfony AI hybrid indexing](04-symfony-ai-indexing.md) | Implemented | Existing PostgreSQL/pgvector hybrid service |
-| 05 | [Native memory_search + recall over HTTP MCP](05-memory-mcp-tools.md) | **Implemented** | Two OM-schema tools; connection headers; required token; MCP journey proven |
+| 05 | [Native memory_search + recall over HTTP MCP](05-memory-mcp-tools.md) | **Implemented** | OM-schema search + ID-only recall; project header; configurable auth; MCP journey |
 | 06 | [Remaining production MCP/integration proof](06-production-and-validation.md) | 05 | **TODO** — preserve existing deployment; prove both tools live |
 | 07 | [Hatfield OM Librarian bridge and semantic removal](07-hatfield-integration.md) | 05, 06 | **TODO** — final Hatfield change/review |
 
@@ -40,7 +40,7 @@ Stock Postgres hybrid uses weighted similarity + `ts_rank` (not BM25/RRF). Date 
 2. Never delete, clone into, migrate, repair, rewrite, or normalize registered source directories as an indexing operation.
 3. Resolve actual Hatfield settings for custom OM/session locations. Do not recursively index secrets, credentials, or unrelated `.hatfield` artifacts.
 4. Every MCP call resolves project from `X-Librarian-Project` and stays within that registration throughout retrieval/recall.
-5. Search indexes retained observations/reflections and returns original canonical IDs/session IDs. Recall hydrates full OM evidence from read-only sources. Raw session semantic indexing is not initial scope.
+5. Search indexes retained observations/reflections and returns original canonical IDs/session IDs. Recall accepts only the ID, derives its session, and hydrates full OM evidence. Source connections remain `mode=ro`; writable mounts allow SQLite WAL/SHM sidecars, not source-table/journal writes. Raw session semantic indexing is not initial scope.
 6. Indexing is incremental, bounded, restartable, and project-serialized. Search does not synchronously rebuild an entire project index.
 7. Search output distinguishes stale/partial indexing and bounded-candidate truncation. Similarity scores are not probabilities.
 8. Canonical session journal is `events.jsonl`; keep `session_id === run_id`.

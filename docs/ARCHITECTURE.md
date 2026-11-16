@@ -7,7 +7,7 @@ The app is a Symfony web/admin application that:
 1. Stores a catalog of registered local Hatfield projects
 2. Asynchronously discovers each project's OM database and session roots read-only
 3. Builds Librarian-owned hybrid indexes from retained observations/reflections
-4. Exposes HTTP MCP at `/_mcp` (`memory_search` + `recall`; project via connection headers; server setting `MCP_AUTH_REQUIRED=1` requires tokens by default, `0` allows trusted-network anonymous access)
+4. Exposes HTTP MCP at `/_mcp` (`ensure_project` + `memory_search` + `recall`; project via connection headers; unchanged server setting `MCP_AUTH_REQUIRED=1` requires tokens by default, `0` allows trusted-network anonymous access to all three). `ensure_project` ensures registration and queues normal asynchronous discovery only for new registrations; success is not indexing readiness.
 
 Core runtime pieces:
 
@@ -107,7 +107,7 @@ Librarian-owned:
 - Generated PostgreSQL migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
 - Development and browser stacks use separate checkout-owned PostgreSQL storage
 
-Source-owned (read-only mounts):
+Source-owned (writable mounts for SQLite WAL/SHM sidecars; database connections remain `mode=ro`):
 
 - `PROJECTS_HOST_PATH` → `/projects` in dev/prod
 - optional ignored `compose.sources.yaml` overlays for user/global/custom settings or data (dev/prod via Castor only)
@@ -120,9 +120,9 @@ Do not commit private project settings, OM databases, session journals, or deriv
 ## 7) Operational model
 
 - Long-running discovery/indexing is async (Messenger worker required; consumes `async` + `scheduler_default`)
-- Source access is strictly read-only
+- Source tables/journals remain read-only; writable mounts allow SQLite WAL/SHM sidecars
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
-- MCP transport at `/_mcp`; `memory_search` + `recall` use OM schemas with `X-Librarian-Project` / `X-Hatfield-Session` (see [MCP.md](MCP.md))
+- MCP transport at `/_mcp`; project selection uses `X-Librarian-Project`, search retains OM's schema, and recall takes only `id` with the session derived from the matched record (see [MCP.md](MCP.md))
 - Browser database is `librarian_browser` in the checkout-scoped Postgres volume. Native browser tooling joins the private network; PostgreSQL publishes no host ports in any stack
 
 ## 8) Framework / MCP compatibility

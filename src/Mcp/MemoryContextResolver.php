@@ -14,7 +14,6 @@ use Symfony\Component\HttpFoundation\RequestStack;
 final readonly class MemoryContextResolver
 {
     public const string PROJECT_HEADER = 'X-Librarian-Project';
-    public const string SESSION_HEADER = 'X-Hatfield-Session';
     private const int MAX_PROJECT_PATH_BYTES = 2048;
 
     public function __construct(
@@ -26,15 +25,7 @@ final readonly class MemoryContextResolver
 
     public function project(): Project
     {
-        $path = $this->requestStack->getCurrentRequest()?->headers->get(self::PROJECT_HEADER);
-        if (null === $path || '' === trim($path) || str_contains($path, "\0") || \strlen($path) > self::MAX_PROJECT_PATH_BYTES) {
-            throw new MemoryToolException(MemoryErrorCode::InvalidProjectContext, 'Configure X-Librarian-Project with an absolute registered project root.');
-        }
-        $canonical = $this->pathNormalizer->canonicalizeRoot($path);
-        if (null === $canonical) {
-            throw new MemoryToolException(MemoryErrorCode::InvalidProjectContext, 'The configured project root must be an accessible absolute directory.');
-        }
-        $project = $this->projects->findOneBy(['rootCanonical' => $canonical]);
+        $project = $this->projects->findOneBy(['rootCanonical' => $this->canonicalRoot()]);
         if (null === $project) {
             throw new MemoryToolException(MemoryErrorCode::ProjectNotFound, 'The configured project root is not registered with Librarian.');
         }
@@ -42,14 +33,18 @@ final readonly class MemoryContextResolver
         return $project;
     }
 
-    public function currentSession(): string
+    public function canonicalRoot(): string
     {
-        $session = $this->requestStack->getCurrentRequest()?->headers->get(self::SESSION_HEADER);
-        if (null === $session || '' === trim($session)) {
-            throw new MemoryToolException(MemoryErrorCode::InvalidSessionContext, 'Configure X-Hatfield-Session with the current Hatfield OM session ID, or pass session_id to recall.');
+        $path = $this->requestStack->getCurrentRequest()?->headers->get(self::PROJECT_HEADER);
+        if (null === $path || '' === trim($path) || str_contains($path, "\0") || \strlen($path) > self::MAX_PROJECT_PATH_BYTES) {
+            throw new MemoryToolException(MemoryErrorCode::InvalidProjectContext, 'Configure X-Librarian-Project with an absolute project root.');
+        }
+        $canonical = $this->pathNormalizer->canonicalizeRoot($path);
+        if (null === $canonical || !is_readable($canonical)) {
+            throw new MemoryToolException(MemoryErrorCode::InvalidProjectContext, 'The configured project root must be an accessible absolute directory.');
         }
 
-        return trim($session);
+        return $canonical;
     }
 
     /** @return array{id: int|null, name: string, root: string} */

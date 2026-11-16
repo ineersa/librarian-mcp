@@ -39,18 +39,11 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
 
         $beforeA = ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-a'));
         $beforeB = ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-b'));
-        $projectA = $this->registerProject('MCP alpha', ProjectSourceFixture::visibleProjectPath('mcp-a'));
-        $this->openProjectDetail($projectA);
-        $this->waitForProjectHealth(ProjectHealth::Ready);
-        $this->waitForCommittedIndex(3);
-        $projectB = $this->registerProject('MCP beta', ProjectSourceFixture::visibleProjectPath('mcp-b'));
-        $this->openProjectDetail($projectB);
-        $this->waitForProjectHealth(ProjectHealth::Ready);
-        $this->waitForCommittedIndex(3);
-
-        // Exercise anonymous retrieval when the deployment explicitly permits it.
+        // Registration uses the same authentication setting as retrieval.
         $first = $this->client(0 === self::getContainer()->getParameter('app.mcp_auth_required') ? null : $token, 'mcp-a');
         $second = null;
+        $projectA = null;
+        $projectB = null;
         try {
             self::assertSame(ProtocolVersion::V2026_07_28, $first->getProtocolVersion());
             $tools = [];
@@ -58,9 +51,30 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
                 $tools[$tool->name] = $tool->inputSchema;
             }
             ksort($tools);
-            self::assertSame([MemoryTools::SEARCH, MemoryTools::RECALL], array_keys($tools));
+            self::assertSame([MemoryTools::ENSURE_PROJECT, MemoryTools::SEARCH, MemoryTools::RECALL], array_keys($tools));
+            self::assertEquals([
+                'type' => 'object', 'properties' => new \stdClass(), 'additionalProperties' => false,
+            ], $tools[MemoryTools::ENSURE_PROJECT]);
             self::assertSame(MemoryTools::SEARCH_SCHEMA, $tools[MemoryTools::SEARCH]);
             self::assertSame(MemoryTools::RECALL_SCHEMA, $tools[MemoryTools::RECALL]);
+
+            $created = $this->payload($first->callTool(MemoryTools::ENSURE_PROJECT, []));
+            $projectA = (string) $created['project']['id'];
+            self::assertTrue($created['created']);
+            self::assertSame('mcp-a', $created['project']['name']);
+            self::assertSame(ProjectHealth::Pending->value, $created['source']['state']);
+            self::assertIsBool($created['index']['searchable']);
+            $existing = $this->payload($first->callTool(MemoryTools::ENSURE_PROJECT, []));
+            self::assertFalse($existing['created']);
+            self::assertSame($created['project'], $existing['project']);
+
+            $this->openProjectDetail($projectA);
+            $this->waitForProjectHealth(ProjectHealth::Ready);
+            $this->waitForCommittedIndex(3);
+            $projectB = $this->registerProject('MCP beta', ProjectSourceFixture::visibleProjectPath('mcp-b'));
+            $this->openProjectDetail($projectB);
+            $this->waitForProjectHealth(ProjectHealth::Ready);
+            $this->waitForCommittedIndex(3);
 
             $search = $this->payload($first->callTool(MemoryTools::SEARCH, ['query' => 'synthetic']));
             self::assertSame(MemoryTools::DEFAULT_LIMIT, $search['limit']);
@@ -84,7 +98,7 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
             $byId = array_column($search['results'], null, 'id');
             $reflectionHit = $byId[ProjectSourceFixture::memoryId(MemoryKind::Reflection, 1)];
             $reflection = $this->payload($first->callTool(MemoryTools::RECALL, [
-                'id' => $reflectionHit['id'], 'session_id' => $reflectionHit['session_id'],
+                'id' => $reflectionHit['id'],
             ]));
             self::assertSame('108', $reflection['session_id']);
             self::assertSame([ProjectSourceFixture::memoryId(MemoryKind::Observation, 1)], $reflection['supporting_observation_ids']);
@@ -92,6 +106,9 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
 
             // Same canonical IDs and OM session, but a separately configured project connection.
             $second = $this->client($token, 'mcp-b');
+            $otherRegistration = $this->payload($second->callTool(MemoryTools::ENSURE_PROJECT, []));
+            self::assertFalse($otherRegistration['created']);
+            self::assertSame('MCP beta', $otherRegistration['project']['name']);
             $other = $this->payload($second->callTool(MemoryTools::SEARCH, ['query' => 'synthetic', 'after' => '2026-01-02']));
             self::assertSame((int) $projectB, $other['project']['id']);
             self::assertSame('synthetic observation mcp-b-2', $other['results'][0]['content']);
@@ -100,8 +117,12 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         } finally {
             $second?->disconnect();
             $first->disconnect();
-            $this->deleteRecord('/admin/projects/'.$projectB);
-            $this->deleteRecord('/admin/projects/'.$projectA);
+            if (null !== $projectB) {
+                $this->deleteRecord('/admin/projects/'.$projectB);
+            }
+            if (null !== $projectA) {
+                $this->deleteRecord('/admin/projects/'.$projectA);
+            }
             ProjectSourceFixture::assertUnchanged($beforeA, ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-a')), 'MCP alpha');
             ProjectSourceFixture::assertUnchanged($beforeB, ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-b')), 'MCP beta');
         }
@@ -122,7 +143,6 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
             ->build();
         $headers = [
             MemoryContextResolver::PROJECT_HEADER => ProjectSourceFixture::visibleProjectPath($slug),
-            MemoryContextResolver::SESSION_HEADER => '108',
         ];
         if (null !== $token) {
             $headers['Authorization'] = 'Bearer '.$token;

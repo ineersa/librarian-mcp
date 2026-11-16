@@ -4,7 +4,7 @@ mcp:
             name: 'librarian-mcp'
             version: '1.0.0'
             description: 'Shared Hatfield project memory service'
-            instructions: 'Search retained memory with memory_search and recover canonical evidence with recall. Configure the registered absolute project root in X-Librarian-Project and the current OM session in X-Hatfield-Session transport headers. Ranked search hits are not proof of relevance or exhaustive absence; inspect content and recall useful evidence. Importance is source-assigned, not a relevance score. Verify current repository/PR state before acting on historical evidence.'
+            instructions: 'Configure the absolute project root in the X-Librarian-Project transport header. During lazy connection setup, call ensure_project once with empty arguments to register it if necessary; success does not mean indexing is ready. Do not poll or call it before every search. Search retained memory with memory_search and recover canonical evidence with recall. Recall takes only an ID and derives its session from the matched memory; ambiguous matches return full IDs and content for selection. Ranked search hits are not proof of relevance or exhaustive absence; inspect content and recall useful evidence. Importance is source-assigned, not a relevance score. Verify current repository/PR state before acting on historical evidence.'
             protocol_versions:
                 - !php/enum Mcp\Schema\Enum\ProtocolVersion::V2026_07_28->value
                 - !php/enum Mcp\Schema\Enum\ProtocolVersion::V2025_11_25->value
