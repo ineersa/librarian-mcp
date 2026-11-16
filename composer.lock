@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4645e863cc3736267688d8b9af19ad01",
+    "content-hash": "dce7d5fc12f31abf2ac96ffce92a1dc2",
     "packages": [
         {
             "name": "composer/semver",
@@ -3045,21 +3045,21 @@
         },
         {
             "name": "symfony/ai-generic-platform",
-            "version": "v0.15.0",
+            "version": "v1.0.0-BETA1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/ai-generic-platform.git",
-                "reference": "30bb656d5122c09c03ad1685e33a87e8a0802f37"
+                "reference": "28f4bcdafe815e5bb108c1d62d345dbc7b6780c4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/ai-generic-platform/zipball/30bb656d5122c09c03ad1685e33a87e8a0802f37",
-                "reference": "30bb656d5122c09c03ad1685e33a87e8a0802f37",
+                "url": "https://api.github.com/repos/symfony/ai-generic-platform/zipball/28f4bcdafe815e5bb108c1d62d345dbc7b6780c4",
+                "reference": "28f4bcdafe815e5bb108c1d62d345dbc7b6780c4",
                 "shasum": ""
             },
             "require": {
                 "php": ">=8.2",
-                "symfony/ai-platform": "^0.15",
+                "symfony/ai-platform": "^1.0",
                 "symfony/http-client": "^7.3|^8.0"
             },
             "require-dev": {
@@ -3106,7 +3106,7 @@
                 "platform"
             ],
             "support": {
-                "source": "https://github.com/symfony/ai-generic-platform/tree/v0.15.0"
+                "source": "https://github.com/symfony/ai-generic-platform/tree/v1.0.0-BETA1"
             },
             "funding": [
                 {
@@ -3126,21 +3126,21 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-22T23:44:24+00:00",
-            "published-time": "2026-10-23T07:53:28+00:00"
+            "time": "2026-10-26T14:03:07+00:00",
+            "published-time": "2026-10-26T14:08:52+00:00"
         },
         {
             "name": "symfony/ai-platform",
-            "version": "v0.15.0",
+            "version": "v1.0.0-BETA1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/ai-platform.git",
-                "reference": "fa3bcc147286c0eb87ff0b192cfd4fa5230033a3"
+                "reference": "4ac262078d1f00c03805be2ab4042ae39fe3bc85"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/ai-platform/zipball/fa3bcc147286c0eb87ff0b192cfd4fa5230033a3",
-                "reference": "fa3bcc147286c0eb87ff0b192cfd4fa5230033a3",
+                "url": "https://api.github.com/repos/symfony/ai-platform/zipball/4ac262078d1f00c03805be2ab4042ae39fe3bc85",
+                "reference": "4ac262078d1f00c03805be2ab4042ae39fe3bc85",
                 "shasum": ""
             },
             "require": {
@@ -3152,6 +3152,7 @@
                 "psr/log": "^3.0",
                 "symfony/clock": "^7.3|^8.0",
                 "symfony/event-dispatcher": "^7.3|^8.0",
+                "symfony/polyfill-php85": "^1.33",
                 "symfony/property-access": "^7.3|^8.0",
                 "symfony/property-info": "^7.3|^8.0",
                 "symfony/serializer": "^7.3|^8.0",
@@ -3246,7 +3247,7 @@
                 "voyage"
             ],
             "support": {
-                "source": "https://github.com/symfony/ai-platform/tree/v0.15.0"
+                "source": "https://github.com/symfony/ai-platform/tree/v1.0.0-BETA1"
             },
             "funding": [
                 {
@@ -3266,29 +3267,29 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-22T23:08:39+00:00",
-            "published-time": "2026-10-23T07:54:03+00:00"
+            "time": "2026-10-26T14:03:07+00:00",
+            "published-time": "2026-10-26T14:11:20+00:00"
         },
         {
             "name": "symfony/ai-postgres-store",
-            "version": "v0.15.0.2",
+            "version": "dev-development",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ineersa/ai-postgres-store.git",
-                "reference": "dabcaadbc326b460db948ba545e53f10aeb5d79d"
+                "reference": "399c78f843731d2f1b1d3264deb33733c711fa71"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ineersa/ai-postgres-store/zipball/dabcaadbc326b460db948ba545e53f10aeb5d79d",
-                "reference": "dabcaadbc326b460db948ba545e53f10aeb5d79d",
+                "url": "https://api.github.com/repos/ineersa/ai-postgres-store/zipball/399c78f843731d2f1b1d3264deb33733c711fa71",
+                "reference": "399c78f843731d2f1b1d3264deb33733c711fa71",
                 "shasum": ""
             },
             "require": {
                 "ext-pdo": "*",
                 "oskarstark/enum-helper": "^1.5",
                 "php": ">=8.2",
-                "symfony/ai-platform": "^0.15",
-                "symfony/ai-store": "^0.15",
+                "symfony/ai-platform": "^1.0",
+                "symfony/ai-store": "^1.0",
                 "symfony/uid": "^7.3|^8.0"
             },
             "require-dev": {
@@ -3344,29 +3345,29 @@
                 "vector"
             ],
             "support": {
-                "source": "https://github.com/ineersa/ai-postgres-store/tree/v0.15.0.2"
+                "source": "https://github.com/ineersa/ai-postgres-store/tree/development"
             },
-            "time": "2026-11-16T13:43:25+00:00"
+            "time": "2026-11-16T14:11:34+00:00"
         },
         {
             "name": "symfony/ai-store",
-            "version": "v0.15.0",
+            "version": "v1.0.0-BETA1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/ai-store.git",
-                "reference": "e615ae2fbf4bc85e295587fbd00634a9b7fd0e12"
+                "reference": "71ecd035324e61312204508209ca764511a974f2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/ai-store/zipball/e615ae2fbf4bc85e295587fbd00634a9b7fd0e12",
-                "reference": "e615ae2fbf4bc85e295587fbd00634a9b7fd0e12",
+                "url": "https://api.github.com/repos/symfony/ai-store/zipball/71ecd035324e61312204508209ca764511a974f2",
+                "reference": "71ecd035324e61312204508209ca764511a974f2",
                 "shasum": ""
             },
             "require": {
                 "ext-fileinfo": "*",
                 "php": ">=8.2",
                 "psr/log": "^3.0",
-                "symfony/ai-platform": "^0.15",
+                "symfony/ai-platform": "^1.0",
                 "symfony/clock": "^7.3|^8.0",
                 "symfony/event-dispatcher-contracts": "^3.0",
                 "symfony/http-client": "^7.3|^8.0",
@@ -3440,7 +3441,7 @@
                 "weaviate"
             ],
             "support": {
-                "source": "https://github.com/symfony/ai-store/tree/v0.15.0"
+                "source": "https://github.com/symfony/ai-store/tree/v1.0.0-BETA1"
             },
             "funding": [
                 {
@@ -3460,26 +3461,26 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-22T23:44:24+00:00",
-            "published-time": "2026-10-23T07:54:50+00:00"
+            "time": "2026-10-26T14:03:07+00:00",
+            "published-time": "2026-10-26T14:09:26+00:00"
         },
         {
             "name": "symfony/ai-voyage-platform",
-            "version": "v0.15.0",
+            "version": "v1.0.0-BETA1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/ai-voyage-platform.git",
-                "reference": "359500965b0b317542b372e9eeab69bcba0ba53c"
+                "reference": "39e84157a560f5611548e490d40d712bc9da87f6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/ai-voyage-platform/zipball/359500965b0b317542b372e9eeab69bcba0ba53c",
-                "reference": "359500965b0b317542b372e9eeab69bcba0ba53c",
+                "url": "https://api.github.com/repos/symfony/ai-voyage-platform/zipball/39e84157a560f5611548e490d40d712bc9da87f6",
+                "reference": "39e84157a560f5611548e490d40d712bc9da87f6",
                 "shasum": ""
             },
             "require": {
                 "php": ">=8.2",
-                "symfony/ai-platform": "^0.15",
+                "symfony/ai-platform": "^1.0",
                 "symfony/http-client": "^7.3|^8.0"
             },
             "require-dev": {
@@ -3527,7 +3528,7 @@
                 "voyage"
             ],
             "support": {
-                "source": "https://github.com/symfony/ai-voyage-platform/tree/v0.15.0"
+                "source": "https://github.com/symfony/ai-voyage-platform/tree/v1.0.0-BETA1"
             },
             "funding": [
                 {
@@ -3547,8 +3548,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-22T23:44:24+00:00",
-            "published-time": "2026-10-23T07:54:34+00:00"
+            "time": "2026-10-26T14:03:07+00:00",
+            "published-time": "2026-10-26T14:11:17+00:00"
         },
         {
             "name": "symfony/asset",
@@ -7353,16 +7354,16 @@
         },
         {
             "name": "symfony/polyfill-php85",
-            "version": "v1.43.0",
+            "version": "v1.44.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/polyfill-php85.git",
-                "reference": "86a42cbcc07adc331481a5ab310a4024bfc227f6"
+                "reference": "94c794cb5ba51784bc259f11e9f128593297d8dc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/polyfill-php85/zipball/86a42cbcc07adc331481a5ab310a4024bfc227f6",
-                "reference": "86a42cbcc07adc331481a5ab310a4024bfc227f6",
+                "url": "https://api.github.com/repos/symfony/polyfill-php85/zipball/94c794cb5ba51784bc259f11e9f128593297d8dc",
+                "reference": "94c794cb5ba51784bc259f11e9f128593297d8dc",
                 "shasum": ""
             },
             "require": {
@@ -7409,7 +7410,7 @@
                 "shim"
             ],
             "support": {
-                "source": "https://github.com/symfony/polyfill-php85/tree/v1.43.0"
+                "source": "https://github.com/symfony/polyfill-php85/tree/v1.44.0"
             },
             "funding": [
                 {
@@ -7429,8 +7430,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-09-25T15:46:47+00:00",
-            "published-time": "2026-09-30T10:23:32+00:00"
+            "time": "2026-10-30T15:20:09+00:00",
+            "published-time": "2026-11-15T14:20:22+00:00"
         },
         {
             "name": "symfony/polyfill-php86",
@@ -16202,6 +16203,11 @@
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
+        "symfony/ai-generic-platform": 10,
+        "symfony/ai-platform": 10,
+        "symfony/ai-postgres-store": 20,
+        "symfony/ai-store": 10,
+        "symfony/ai-voyage-platform": 10,
         "symfony/asset": 10,
         "symfony/asset-mapper": 10,
         "symfony/cache": 10,

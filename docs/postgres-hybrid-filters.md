@@ -23,21 +23,21 @@ Focused monorepo PR opened against `symfony/ai` `main`:
 
 No reviewers were requested manually; GitHub applied the upstream repository's CODEOWNERS review requests automatically. Waiting on upstream review/merge/release before Librarian can drop the temporary pin.
 
-## Temporary reviewed pin still in use
+## Main-based development dependency
 
-Until a compatible upstream release includes the required changes, this checkout pins a reviewed fork commit through Composer:
+At the owner's request, the actual application consumes a development branch combining upstream main, GIN and stored text vectors, retaining parameterized hybrid filtering:
 
 - Temporary package fork: https://github.com/ineersa/ai-postgres-store
-- Branch: `perf/stored-tsvector`
-- Commit: `dabcaadbc326b460db948ba545e53f10aeb5d79d`
-- Annotated tag / exact constraint: `0.15.0.2`, locked to the commit above
+- Branch: `development`; Composer constraint: **`dev-development`**, exact revision in `composer.lock`
+- Upstream split-package main merged into the branch: `da91fb8` (the package code corresponding to monorepo `999d5fbe`)
 - VCS repository: `https://github.com/ineersa/ai-postgres-store.git`
-- Global `minimum-stability` remains `stable`; no development stability allowance is needed
+- Global `minimum-stability` remains `stable`; only this package uses a development constraint
+- Required runtime AI platform/store and Generic/Voyage bridges use package-scoped `~1.0.0-BETA1` allowances; Mate remains 0.15
 - No `vendor/` edits and no duplicated Store class in application code
 
-This extends the original `0.15.0.1` / `790eaadc` filter fork with the owner-approved GIN and stored-text-vector optimization. The original filter behavior remains: when `where` is present it is AND-combined in parentheses with the hybrid lexical clause, and `params` are merged into the bound parameter map before execute. The 0.15 mandatory lexical filter, null semantics, configured language, ranking formula and setup API remain unchanged; this is not an upgrade to current upstream mixed-hybrid semantics.
+This replaces the mistakenly deployed 0.15 backport. The branch uses **upstream main's mixed-hybrid semantics**, including documents with no keyword match, and its `Metric`/constructor dimensions/setup API. Filtering remains parameterized: optional `where` is AND-combined with other applicable conditions and bound `params` are included before execute. The old mandatory lexical gate is not restored; it applies only to keyword-only queries. Date predicates still run before candidate limiting.
 
-The fork's `setup()` creates/backfills a stored generated `search_tsv` using `to_tsvector(lang, metadata->>'_text')` and creates a matching `*_search_tsv_gin` index. Queries read that column. Existing generation tables must receive this schema upgrade before application deployment; normal `IndexStoreFactory` provisioning handles new generations. Adding the column takes an exclusive lock and backfills rows. Changing its language requires rebuilding the representation. Prior expression GIN indexes are not automatically dropped by the package. See [performance report](postgres-stored-tsvector-performance.md).
+The fork's `setup()` creates/backfills a stored generated `search_tsv` using `to_tsvector(lang, COALESCE(metadata->>'_text', ''))` and creates a matching `*_search_tsv_gin` index. Queries read that column. Existing generation tables must receive this schema upgrade before application deployment; normal `IndexStoreFactory` provisioning handles new generations. Adding the column takes an exclusive lock and backfills rows. Changing its language or upgrading a prior non-`COALESCE` representation requires rebuilding the column; `IF NOT EXISTS` does not rewrite it. Prior expression GIN indexes are not automatically dropped by the package. See [main-based performance results](postgres-main-live-results.md).
 
 Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 

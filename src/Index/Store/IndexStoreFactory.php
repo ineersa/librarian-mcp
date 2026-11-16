@@ -6,7 +6,7 @@ namespace App\Index\Store;
 
 use App\Index\IndexSettings;
 use Doctrine\DBAL\Connection;
-use Symfony\AI\Store\Bridge\Postgres\Distance;
+use Symfony\AI\Store\Bridge\Postgres\Metric;
 use Symfony\AI\Store\Bridge\Postgres\Store;
 
 /**
@@ -32,9 +32,14 @@ final readonly class IndexStoreFactory
             throw new \LogicException('Indexing requires Doctrine to use the PDO PostgreSQL driver.');
         }
 
-        $store = new Store($pdo, \sprintf('librarian_p%d_g%d', $projectId, $generationId), distance: Distance::Cosine);
+        $store = new Store(
+            $pdo,
+            \sprintf('librarian_p%d_g%d', $projectId, $generationId),
+            metric: Metric::Cosine,
+            dimensions: $this->settings->dimensions,
+        );
         if ($initialize) {
-            $store->setup(['vector_size' => $this->settings->dimensions]);
+            $store->setup();
         }
 
         return $store;

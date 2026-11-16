@@ -12,7 +12,7 @@ The app is a Symfony web/admin application that:
 Core runtime pieces:
 
 - **Web/admin:** Symfony + EasyAdmin
-- **Persistence + store:** Doctrine ORM + official Symfony AI Postgres store **0.15.0** on shared PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`)
+- **Persistence + store:** Doctrine ORM + main-based Symfony AI Postgres fork **`dev-development`** with AI platform/store **1.0.0-BETA1**, on shared PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`)
 - **Async pipeline:** Symfony Messenger (`async`) + Scheduler (`scheduler_default`)
 - **Models:** local CodeRankEmbed (explicit 768-dim vectors) + local BGE reranker
 - **Source discovery:** read-only Hatfield settings / OM / session inspection
@@ -81,7 +81,7 @@ Details: [project-sources.md](project-sources.md), [indexing-design.md](indexing
 6. Scheduler `CallbackMessageProvider` yields source-discovery jobs for registered projects every `INDEX_INTERVAL` seconds (default 60), reusing the scan → incremental-index path without a custom tick protocol or OS cron. Unchanged revisions record check activity without re-embedding.
 7. On failure: sanitized `lastError` / generation error state; Messenger retries remain replay-safe for deterministic IDs
 
-Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Stock hybrid requires lexical match. MCP `memory_search` date bounds use HybridQuery `where`/`params` against existing chunk timestamp metadata (upstream https://github.com/symfony/ai/pull/2950; [postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Admin Search memory still has no date-window UI.
+Search remains available against the last committed usable index while newer work is pending. Stale/partial status is reported explicitly. Main-based mixed hybrid ranks documents even without a lexical match; keyword-only queries retain the lexical predicate. MCP `memory_search` date bounds use HybridQuery `where`/`params` against existing chunk timestamp metadata before candidate limiting (upstream https://github.com/symfony/ai/pull/2950; [postgres-hybrid-filters.md](postgres-hybrid-filters.md)). Admin Search memory still has no date-window UI.
 
 ---
 
