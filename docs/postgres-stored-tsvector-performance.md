@@ -88,3 +88,25 @@ Existing-table rollout must be explicit: adding a stored generated column rewrit
 - The package's PostgreSQL integration suite was **not run** because that QA PHP runtime lacked PDO PostgreSQL. The actual PostgreSQL experiment above separately verified generated-column backfill, equality of computed scores/results and GIN creation; it does not claim to exercise the entire PHP package integration lifecycle.
 
 No Symfony AI PR was created or updated. The existing GIN PR branch remains unchanged. Librarian's dependency pin and running deployment are unchanged.
+
+## Contemporaneous live-table control and retained snapshot
+
+At the owner's request, repeated the **current-main mixed-hybrid baseline on the original live table**, interleaved with the two frozen-copy variants. This tests the baseline discrepancy; it does not add a generated column to the live table.
+
+The original disposable copy above had already been dropped. Created a new **ordinary logged table** (not temporary or unlogged), `public.librarian_tsvector_probe_20261116`, at **2026-11-16 13:36:46 UTC**, holding **27,288 chunks**. Added a primary key and the same stored generated `search_tsv`, then analyzed the copy. This snapshot is intentionally retained for more experiments and survives normal PostgreSQL recovery. It is not registered as an application generation. Do not refresh or drop it without owner approval.
+
+The live table was not altered, analyzed, vacuumed or reindexed. Its schema and indexes remained unchanged, and both tables held 27,288 rows before/after the comparison. The fixed embedding was verified identical between them; every stored text vector matched its on-demand expression.
+
+Each input had a warm-up of all three variants followed by **five interleaved runs**, rotating which variant ran first. All used the same upstream `999d5fbe` SQL shape, vector, query words, weights, projection and limit. Repeated measurements used `TIMING OFF`; additional `TIMING ON` executions confirmed the same pattern.
+
+| Search | Live, on demand | Frozen, on demand | Frozen, stored |
+|---|---:|---:|---:|
+| `CodeRankEmbed` | 405.668 ms | 280.789 ms | 127.577 ms |
+| `project` | 404.571 ms | 284.602 ms | 129.912 ms |
+| Full OpenCode question | 418.054 ms | 294.803 ms | 138.928 ms |
+
+**The live baseline still takes 400+ ms.** The lower frozen baseline is reproducible during the same experiment; it is not evidence of an upstream query change or that production became faster overnight. The frozen stored-column improvement repeats at about **2.1–2.2×** in this run. Do not treat live-to-frozen differences as a stored-column speedup.
+
+Both on-demand variants used parallel sequential scans and gather merge; stored queries used a nonparallel sequential scan. All variants had shared-buffer reads. The live and frozen columns used the same PostgreSQL storage settings and embedding type (`vector(768)`); their physical tables and statistics differ. The live table's statistics estimated 27,164 rows, versus 27,288 actual; the freshly analyzed copy estimated 27,288. These observations do not isolate the root cause of the roughly 120 ms live/copy gap. In particular, total relation size is not a measure of scanned data because it includes unused indexes.
+
+The retained copy occupies **145,391,616 bytes** (about **138.66 MiB**) including its primary key and TOAST storage. It has no GIN or HNSW index. Its name, creation time, column/index layout and exact SQL used are recorded in the ignored local report `var/qa/live-frozen-tsvector-probe/result.json`; the driver is `/tmp/librarian-live-frozen-tsvector-probe.py`. Only the frozen copy was written. The live generation's schema and the application deployment remain unchanged.
