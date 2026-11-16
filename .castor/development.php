@@ -491,6 +491,7 @@ function developmentStack(string $mode, string $action): int
                 }
                 if ('browser' === $mode) {
                     foreach ([
+                        '/var/mcp-sessions',
                         '/var/browser-live',
                         '/var/browser-live/cache',
                         '/var/browser-live/log',
@@ -499,6 +500,9 @@ function developmentStack(string $mode, string $action): int
                         '/var/browser-live/indexes/locks',
                     ] as $relative) {
                         $path = \dirname(__DIR__).$relative;
+                        if (is_link($path)) {
+                            throw new \RuntimeException('Refusing symlinked application storage.');
+                        }
                         if (!is_dir($path)) {
                             mkdir($path, 0700, true);
                         }

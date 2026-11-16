@@ -8,7 +8,9 @@ use App\Entity\Project;
 use App\Index\Status\ProjectIndexStatus;
 use App\Index\Status\ProjectIndexStatusFactory;
 use App\Memory\MemoryErrorCode;
+use App\Project\GitOriginNormalizer;
 use App\Project\ProjectManager;
+use App\Project\ProjectSourceException;
 use App\Project\ProjectSourceIssueCode;
 use App\Repository\ProjectRepository;
 use Doctrine\DBAL\Exception as DatabaseException;
@@ -33,12 +35,20 @@ final readonly class EnsureProject
         private ClockInterface $clock,
         private ProjectManager $projectManager,
         private ProjectIndexStatusFactory $statusFactory,
+        private GitOriginNormalizer $gitOriginNormalizer,
     ) {
     }
 
     /** @return array<string, mixed> */
     public function ensure(string $canonicalRoot): array
     {
+        // Recheck policy before even returning an old registration.
+        try {
+            $this->gitOriginNormalizer->assertSupportedRoot($canonicalRoot);
+        } catch (ProjectSourceException $exception) {
+            throw new MemoryToolException(ProjectSourceIssueCode::LinkedWorktreeUnsupported === $exception->issueCode ? MemoryErrorCode::LinkedWorktreeUnsupported : MemoryErrorCode::ProjectRegistrationUnavailable, $exception->getMessage());
+        }
+
         try {
             $existing = $this->projects->findOneBy(['rootCanonical' => $canonicalRoot]);
             if (null !== $existing) {
@@ -90,6 +100,7 @@ final readonly class EnsureProject
             $code = match ($violation->getCode()) {
                 UniqueEntity::NOT_UNIQUE_ERROR => MemoryErrorCode::ProjectRegistrationConflict,
                 ProjectSourceIssueCode::GitMetadataUnavailable->value => MemoryErrorCode::ProjectRegistrationUnavailable,
+                ProjectSourceIssueCode::LinkedWorktreeUnsupported->value => MemoryErrorCode::LinkedWorktreeUnsupported,
                 default => MemoryErrorCode::InvalidProjectContext,
             };
             throw new MemoryToolException($code, (string) $violation->getMessage());

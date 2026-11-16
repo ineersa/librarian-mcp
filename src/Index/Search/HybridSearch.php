@@ -10,6 +10,8 @@ use App\Index\IndexSettings;
 use App\Index\Model\LocalBgeReranker;
 use App\Index\Source\CanonicalSourceReader;
 use App\Index\Store\IndexStoreFactory;
+use App\Project\GitOriginNormalizer;
+use App\Project\ProjectSourceException;
 use App\Repository\IndexGenerationRepository;
 use Symfony\AI\Platform\Vector\Vector;
 use Symfony\AI\Store\Document\VectorDocumentInterface;
@@ -31,6 +33,7 @@ final readonly class HybridSearch
         private IndexGenerationRepository $generationRepository,
         private CanonicalSourceReader $sourceReader,
         private IndexSettings $settings,
+        private GitOriginNormalizer $gitOriginNormalizer,
     ) {
     }
 
@@ -59,6 +62,11 @@ final readonly class HybridSearch
         }
         $project = $generation->project;
         $root = '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
+        try {
+            $this->gitOriginNormalizer->assertSupportedRoot($root);
+        } catch (ProjectSourceException $exception) {
+            throw IndexException::sanitized($exception->getMessage(), $exception);
+        }
         if ($generation->rootBinding !== $root || $generation->sourcePath !== $project->databasePath
             || $this->sourceReader->identityFor($generation->sourcePath) !== $generation->sourceIdentity) {
             throw IndexException::sanitized('The active index belongs to an earlier source binding. Wait for indexing to complete.');

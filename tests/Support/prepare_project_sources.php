@@ -135,9 +135,11 @@ function buildCustomRelativeProject(string $path): void
     writeFile($path.'/.hatfield/settings.yaml', <<<'YAML'
 sessions:
     path: '.hatfield/custom-sessions'
-observational_memory:
-    storage:
-        database: '.hatfield/custom-om/memory.sqlite'
+extensions:
+    settings:
+        observational_memory:
+            storage:
+                database: '.hatfield/custom-om/memory.sqlite'
 YAML);
     createSupportedOmDatabase($path.'/.hatfield/custom-om/memory.sqlite', observationCount: 1, reflectionCount: 1, sourceRevision: 2, sourceChangeCount: 2);
     writeSessionJournal($path.'/.hatfield/custom-sessions/7/events.jsonl', '7', 1);

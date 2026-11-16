@@ -13,7 +13,8 @@ Librarian registers **local directories**. It discovers Hatfield OM/session meta
 
 - `Project.id` is an auto-increment integer, stable across automatic source scans.
 - Trimmed, case-insensitive display names must be unique. Canonical directories and normalized Git origins must also be unique. A second checkout with the same origin is rejected, not silently merged. Non-Git/no-origin directories are supported.
-- Git inspection failures are registration errors, not evidence of a non-Git/no-origin directory. For mounted worktrees, make the linked worktree and common Git metadata available read-only at the paths recorded in `.git`.
+- Linked Git worktrees are not supported: registration, existing-project MCP retrieval, source discovery, indexing units, and derived search reject them. `ensure_project` checks this before returning an existing registration. Nothing redirects a linked worktree to its primary checkout or selects another project by origin.
+- Git inspection failures are errors, not evidence of a non-Git/no-origin directory. Git's absolute per-checkout and common metadata paths are resolved canonically and must coincide; a `.git` file alone is not a rejection. Primary checkouts, separate-git-dir/submodule layouts with coincident metadata, and non-Git projects remain supported. Existing Git metadata must be accessible at the paths recorded in `.git`, including inside service mounts.
 - Registration supports create/delete, not editing. To change its name or directory, remove the registration and register it again. Nothing infers identity from a basename, session number, name, or origin.
 - `ensure_project` explicitly registers the canonical header root if needed, using its basename only as the default display name. An existing registration is returned unchanged without enqueueing work. New registrations reuse entity validation, catalog uniqueness constraints, and normal asynchronous source discovery; no `.hatfield` directory or initialized OM is required. Source discovery may initially report missing sources and retry on scheduled checks. Registration never creates or modifies source directories, settings, databases, or journals; success is not indexing readiness.
 - A scan publishes results only if the registration still refers to its scanned directory. Filesystem discovery runs outside the short Doctrine write transaction.
@@ -30,7 +31,7 @@ Discovery resolves settings with Hatfield YAML overlay semantics:
 
 Associative maps merge recursively; lists/scalars/null replace. Missing optional settings files are valid; malformed YAML is not. OM must be enabled as `Ineersa\HatfieldExt\ObservationalMemory\ObservationalMemoryExtension`.
 
-- OM override: `observational_memory.storage.database`.
+- OM override: `extensions.settings.observational_memory.storage.database`. The obsolete top-level `observational_memory` block is not read. Absolute database paths remain absolute; relative paths are joined to the selected project root, then canonicalized/path-mapped under the existing source rules. There is no fallback to the default database when a configured custom path is unavailable.
 - Session override: `sessions.path` with `~` / `%kernel.project_dir%` expansion only.
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
 - Enter an absolute directory path visible to the Librarian service, e.g. `/projects/my-project`. There is no directory picker or security root allowlist for this local single-admin utility.

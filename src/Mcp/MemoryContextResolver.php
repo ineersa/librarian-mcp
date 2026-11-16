@@ -6,7 +6,10 @@ namespace App\Mcp;
 
 use App\Entity\Project;
 use App\Memory\MemoryErrorCode;
+use App\Project\GitOriginNormalizer;
 use App\Project\ProjectPathNormalizer;
+use App\Project\ProjectSourceException;
+use App\Project\ProjectSourceIssueCode;
 use App\Repository\ProjectRepository;
 use Symfony\Component\HttpFoundation\RequestStack;
 
@@ -20,12 +23,19 @@ final readonly class MemoryContextResolver
         private RequestStack $requestStack,
         private ProjectPathNormalizer $pathNormalizer,
         private ProjectRepository $projects,
+        private GitOriginNormalizer $gitOriginNormalizer,
     ) {
     }
 
     public function project(): Project
     {
-        $project = $this->projects->findOneBy(['rootCanonical' => $this->canonicalRoot()]);
+        $root = $this->canonicalRoot();
+        try {
+            $this->gitOriginNormalizer->assertSupportedRoot($root);
+        } catch (ProjectSourceException $exception) {
+            throw new MemoryToolException(ProjectSourceIssueCode::LinkedWorktreeUnsupported === $exception->issueCode ? MemoryErrorCode::LinkedWorktreeUnsupported : MemoryErrorCode::InvalidProjectContext, $exception->getMessage());
+        }
+        $project = $this->projects->findOneBy(['rootCanonical' => $root]);
         if (null === $project) {
             throw new MemoryToolException(MemoryErrorCode::ProjectNotFound, 'The configured project root is not registered with Librarian.');
         }

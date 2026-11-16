@@ -19,7 +19,7 @@ final class GitOriginNormalizer
     private const int NOT_A_REPOSITORY_EXIT_CODE = 128;
     private const int CONFIG_NOT_FOUND_EXIT_CODE = 1;
     private const string METADATA_ENTRY = '.git';
-    private const string INSPECTION_ERROR = 'Unable to inspect Git metadata. For mounted worktrees, mount the worktree and common Git metadata read-only at the paths recorded in .git.';
+    private const string INSPECTION_ERROR = 'Unable to inspect Git metadata. Make the checkout Git metadata readable at the paths recorded in .git.';
 
     public function detectNormalizedOrigin(string $canonicalRoot): ?string
     {
@@ -39,10 +39,28 @@ final class GitOriginNormalizer
         return $this->normalize($origin);
     }
 
+    /** Non-Git projects are supported; linked checkouts and unreadable metadata are not. */
+    public function assertSupportedRoot(string $canonicalRoot): void
+    {
+        $this->isGitCheckout($canonicalRoot);
+    }
+
     public function isGitCheckout(string $canonicalRoot): bool
     {
-        $process = $this->runGit($canonicalRoot, ['rev-parse', '--git-dir']);
+        $process = $this->runGit($canonicalRoot, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']);
         if ($process->isSuccessful()) {
+            $paths = explode("\n", rtrim($process->getOutput(), "\r\n"));
+            $gitDirectory = 2 === \count($paths) ? realpath($paths[0]) : false;
+            $commonDirectory = 2 === \count($paths) ? realpath($paths[1]) : false;
+            if (false === $gitDirectory || false === $commonDirectory || !is_readable($gitDirectory) || !is_readable($commonDirectory)) {
+                throw new ProjectSourceException(ProjectSourceIssueCode::GitMetadataUnavailable, self::INSPECTION_ERROR);
+            }
+            // A .git file also represents valid separate-git-dir/submodule checkouts.
+            // Only distinct canonical per-checkout and shared metadata means linked worktree.
+            if ($gitDirectory !== $commonDirectory) {
+                throw new ProjectSourceException(ProjectSourceIssueCode::LinkedWorktreeUnsupported, 'Linked Git worktrees are not supported by Librarian. Select a primary checkout instead.');
+            }
+
             return true;
         }
         if (self::NOT_A_REPOSITORY_EXIT_CODE === $process->getExitCode() && !$this->hasGitMetadata($canonicalRoot)) {
