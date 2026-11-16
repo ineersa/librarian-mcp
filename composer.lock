@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ae7f8ca3a89e2c580c3ba8326e14f093",
+    "content-hash": "4645e863cc3736267688d8b9af19ad01",
     "packages": [
         {
             "name": "composer/semver",
@@ -3271,16 +3271,16 @@
         },
         {
             "name": "symfony/ai-postgres-store",
-            "version": "v0.15.0.1",
+            "version": "v0.15.0.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ineersa/ai-postgres-store.git",
-                "reference": "790eaadc969c11db0a8d531d3e02443d249d71ec"
+                "reference": "dabcaadbc326b460db948ba545e53f10aeb5d79d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ineersa/ai-postgres-store/zipball/790eaadc969c11db0a8d531d3e02443d249d71ec",
-                "reference": "790eaadc969c11db0a8d531d3e02443d249d71ec",
+                "url": "https://api.github.com/repos/ineersa/ai-postgres-store/zipball/dabcaadbc326b460db948ba545e53f10aeb5d79d",
+                "reference": "dabcaadbc326b460db948ba545e53f10aeb5d79d",
                 "shasum": ""
             },
             "require": {
@@ -3344,9 +3344,9 @@
                 "vector"
             ],
             "support": {
-                "source": "https://github.com/ineersa/ai-postgres-store/tree/v0.15.0.1"
+                "source": "https://github.com/ineersa/ai-postgres-store/tree/v0.15.0.2"
             },
-            "time": "2026-11-15T02:47:45+00:00"
+            "time": "2026-11-16T13:43:25+00:00"
         },
         {
             "name": "symfony/ai-store",
@@ -16267,9 +16267,9 @@
         "ext-iconv": "*",
         "ext-intl": "*",
         "ext-pcntl": "*",
+        "ext-pdo_pgsql": "*",
         "ext-pdo_sqlite": "*",
-        "ext-posix": "*",
-        "ext-pdo_pgsql": "*"
+        "ext-posix": "*"
     },
     "platform-dev": {},
     "plugin-api-version": "2.11.0"

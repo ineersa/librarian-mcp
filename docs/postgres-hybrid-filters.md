@@ -25,17 +25,19 @@ No reviewers were requested manually; GitHub applied the upstream repository's C
 
 ## Temporary reviewed pin still in use
 
-Until an upstream release includes the change, this checkout pins a reviewed fork tag through Composer:
+Until a compatible upstream release includes the required changes, this checkout pins a reviewed fork commit through Composer:
 
 - Temporary package fork: https://github.com/ineersa/ai-postgres-store
-- Branch: `feat/hybrid-where-params`
-- Commit: `790eaadc969c11db0a8d531d3e02443d249d71ec`
-- Annotated tag / constraint: `0.15.0.1`
+- Branch: `perf/stored-tsvector`
+- Commit: `dabcaadbc326b460db948ba545e53f10aeb5d79d`
+- Annotated tag / exact constraint: `0.15.0.2`, locked to the commit above
 - VCS repository: `https://github.com/ineersa/ai-postgres-store.git`
-- Global `minimum-stability` remains `stable`
+- Global `minimum-stability` remains `stable`; no development stability allowance is needed
 - No `vendor/` edits and no duplicated Store class in application code
 
-The temporary fork change matches the monorepo PR behavior: when `where` is present it is AND-combined in parentheses with the hybrid lexical clause, and `params` are merged into the bound parameter map before execute.
+This extends the original `0.15.0.1` / `790eaadc` filter fork with the owner-approved GIN and stored-text-vector optimization. The original filter behavior remains: when `where` is present it is AND-combined in parentheses with the hybrid lexical clause, and `params` are merged into the bound parameter map before execute. The 0.15 mandatory lexical filter, null semantics, configured language, ranking formula and setup API remain unchanged; this is not an upgrade to current upstream mixed-hybrid semantics.
+
+The fork's `setup()` creates/backfills a stored generated `search_tsv` using `to_tsvector(lang, metadata->>'_text')` and creates a matching `*_search_tsv_gin` index. Queries read that column. Existing generation tables must receive this schema upgrade before application deployment; normal `IndexStoreFactory` provisioning handles new generations. Adding the column takes an exclusive lock and backfills rows. Changing its language requires rebuilding the representation. Prior expression GIN indexes are not automatically dropped by the package. See [performance report](postgres-stored-tsvector-performance.md).
 
 Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 
@@ -72,4 +74,4 @@ Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreateP
 - HybridSearch maps embedding failures to `QUERY_EMBEDDING_FAILED`, retrieval/rerank failures to `QUERY_RETRIEVAL_FAILED`, and native `TimeoutExceptionInterface` (including wrapped previous chains) to `QUERY_TIMEOUT`
 - Provider bodies are not chained
 
-Existing indexed `occurred_at` numeric metadata is reused; no schema migration or reindex.
+Date filtering reuses existing indexed `occurred_at` numeric metadata. The stored-vector follow-up changes only Librarian-owned store schema through the package's setup, not Doctrine metadata or source databases; no embedding rebuild is needed.
