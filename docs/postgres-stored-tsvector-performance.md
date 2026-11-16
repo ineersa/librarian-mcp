@@ -1,6 +1,6 @@
 # Stored PostgreSQL text vector experiment
 
-Measured on 2026-11-16, following the owner's request to implement and test stored `tsvector` before opening another Symfony AI PR. This is a review-branch experiment, not a Librarian dependency update or production rollout.
+Measured on 2026-11-16. The initial sections record a review-branch experiment; the later [owner-authorized live installation](#owner-authorized-live-fork-installation-and-measurement) records the actual fork dependency upgrade, retained GIN indexes, live measurements and deployment on port 8093. No new Symfony AI PR was opened.
 
 ## Change under test
 
@@ -110,3 +110,54 @@ Each input had a warm-up of all three variants followed by **five interleaved ru
 Both on-demand variants used parallel sequential scans and gather merge; stored queries used a nonparallel sequential scan. All variants had shared-buffer reads. The live and frozen columns used the same PostgreSQL storage settings and embedding type (`vector(768)`); their physical tables and statistics differ. The live table's statistics estimated 27,164 rows, versus 27,288 actual; the freshly analyzed copy estimated 27,288. These observations do not isolate the root cause of the roughly 120 ms live/copy gap. In particular, total relation size is not a measure of scanned data because it includes unused indexes.
 
 The retained copy occupies **145,391,616 bytes** (about **138.66 MiB**) including its primary key and TOAST storage. It has no GIN or HNSW index. Its name, creation time, column/index layout and exact SQL used are recorded in the ignored local report `var/qa/live-frozen-tsvector-probe/result.json`; the driver is `/tmp/librarian-live-frozen-tsvector-probe.py`. Only the frozen copy was written. The live generation's schema and the application deployment remain unchanged.
+
+## Owner-authorized live fork installation and measurement
+
+The owner subsequently requested installing the actual Librarian fork with GIN and stored text vectors on the live tables, rather than stopping at SQL/copy experiments. This section supersedes the earlier not-deployed status.
+
+### Installed package and schema
+
+- Split fork: [ineersa/ai-postgres-store, `perf/stored-tsvector`](https://github.com/ineersa/ai-postgres-store/tree/perf/stored-tsvector), commit **`dabcaadbc326b460db948ba545e53f10aeb5d79d`**, tag **`v0.15.0.2`**.
+- Librarian's Composer constraint is exactly `0.15.0.2`, with that commit locked. The initial development-branch commit-ref constraint triggered Composer's strict-validation warning; the reviewed tag resolved it without weakening QA or global stability.
+- Preserves the existing 0.15 `Distance`/setup API, mandatory lexical gate, non-`COALESCE` null semantics, configured language, weighted scores and pre-limit `where`/`params`. **This is not a switch to current-main all-row mixed ranking.**
+- Ran the package's actual `Store::setup()` in the verified production PHP runtime, first from the GIN backport, then from the exact stored-vector class installed by Composer. A bounded one-off PHP driver was used because Castor has no task to invoke this dynamically constructed store's setup directly. No vendor file was edited, and no deployment command/framework was added to the application.
+- Upgraded both registered generation tables, `librarian_p1_g1` and `librarian_p2_g2`, before application deployment. Each setup ran in its own transaction with a 5-second lock timeout and 60-second statement timeout. Stored-column setup took about **14.06 seconds** and **1.69 seconds** respectively. Unlike the copied table, these live tables also had HNSW indexes during the rewrite. Do not infer the earlier 1.34-second copied-table DDL time applies to production.
+- Deployed Librarian integration commit **`2dc9382`** through Castor `prod:config`, `prod:up`, `prod:restart`, `prod:ps` on **8093**. Verified the installed Composer reference in web and Messenger; the benchmark loaded `/app/vendor/symfony/ai-postgres-store/Store.php`, whose SHA-256 matched the reviewed fork.
+- The live agent-core table now retains **primary key, HNSW and `librarian_p1_g1_search_tsv_gin`**. The corresponding project-2 stored-column GIN is valid too. Removed only the superseded expression GIN indexes created during this measurement, after verifying their replacements. **The stored-column GIN indexes remain installed.**
+
+### Actual live `Store::query()` timings
+
+These measurements invoke the PHP package, not a copied query alone. Each value is the median of five runs after a warm-up, with the same fixed existing vector, OR terms, equal weights and limit of 100. They include PDO fetch and document hydration, but exclude query embedding generation, application reranking and HTTP transport. All three stages used the same live agent-core table with **27,288 rows**. The database stayed live; stage changes were sequential, not an isolated load benchmark.
+
+| Input | Original installed fork, no GIN | Expression GIN added | Deployed stored column + GIN |
+|---|---:|---:|---:|
+| `CodeRankEmbed` | 352.045 ms | 1.356 ms | **1.028 ms** |
+| `project` | 369.835 ms | 37.800 ms | **11.069 ms** |
+| Full OpenCode question | 451.433 ms | 169.809 ms | **25.441 ms** |
+
+The first input returned 10 documents; the others returned 100. The original 0.15 keyword gate is unchanged. These improvements cannot be attributed to changing retrieval semantics. The generated-column installation rewrites storage, so the entire before/after reduction is not a pure CPU attribution to cached tokenization.
+
+Actual fork-shaped EXPLAIN plans used the retained `search_tsv_gin` index for all three inputs. Every stored vector matched the original non-`COALESCE` expression across the live table. All-row text-rank comparisons and deterministic top-100 ID/score comparisons reported zero differences for every input.
+
+### Current-main all-row SQL, on the same live table after upgrade
+
+As a separate diagnostic, repeated current-main **ungated** mixed SQL on the upgraded live table, alternating the on-demand and stored expressions five times after warm-ups:
+
+| Input | Live on-demand expression | Live stored expression |
+|---|---:|---:|
+| `CodeRankEmbed` | 296.028 ms | 134.080 ms |
+| `project` | 291.183 ms | 131.724 ms |
+| Full OpenCode question | 301.853 ms | 146.380 ms |
+
+These are PostgreSQL EXPLAIN execution times, not PHP-store timings. Text was non-null for every current live row, so the fork's non-`COALESCE` stored vectors also match upstream's `COALESCE` expression for this dataset. This diagnostic does not alter deployed query semantics.
+
+After adding/backfilling the column, even the unchanged on-demand expression became faster than the earlier 405–418 ms live baseline. This narrows the discrepancy to changes associated with the live schema/storage rewrite and execution conditions, not a different SQL version; it does not isolate one physical cause. The same-table stored-versus-on-demand comparison remains the defensible estimate for exhaustive mixed ranking.
+
+### Validation and retention
+
+- Fork package: **43 tests / 220 assertions**, CS Fixer clean, PHPStan passed.
+- Librarian: `cs:fix` passed; saved Projects and MCP browser journeys passed (**2 journeys / 82 assertions**); `qa:static` passed, including Composer validation, style, PHPStan and LSP. Browser journeys exercised real package-backed indexing/search on isolated storage. The final tag points to the exact fork source tested by these journeys.
+- Production `memory_search` through the existing anonymous MCP endpoint returned **HTTP 200, `ok: true`, five results** for the owner question. Web/PostgreSQL were healthy and Messenger running. Two initial verification requests omitted required modern-protocol headers and were rejected; the correctly formed request succeeded without changing application code or authentication.
+- Frozen table **`public.librarian_tsvector_probe_20261116` remains retained**, unchanged at **27,288 rows**. No source OM database, journal or settings were modified, and no embeddings were rebuilt.
+- Sanitized reports: ignored `var/qa/live-store-fork/{before,gin-only,stored-setup,after-deployed,sql-verification,mcp-verification}.json`. No source content or query vectors are committed.
+- No Symfony AI PR was opened or updated. Both review branches and the Librarian dependency/documentation changes are pushed.
