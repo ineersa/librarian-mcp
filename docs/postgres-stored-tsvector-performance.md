@@ -1,6 +1,6 @@
 # Stored PostgreSQL text vector experiment
 
-Measured on 2026-11-16. The initial sections record a review-branch experiment; the later [owner-authorized live installation](#owner-authorized-live-fork-installation-and-measurement) records the actual fork dependency upgrade, retained GIN indexes, live measurements and deployment on port 8093. No new Symfony AI PR was opened.
+Measured on 2026-11-16. **For upstream review, use [the corrected actual main-package live benchmark](postgres-main-live-results.md).** This document preserves the earlier SQL/copy experiments and the mistakenly deployed 0.15 backport. Its 0.15 keyword-gated timings are not current-main performance evidence. No new Symfony AI PR was opened.
 
 ## Change under test
 
@@ -111,14 +111,14 @@ Both on-demand variants used parallel sequential scans and gather merge; stored 
 
 The retained copy occupies **145,391,616 bytes** (about **138.66 MiB**) including its primary key and TOAST storage. It has no GIN or HNSW index. Its name, creation time, column/index layout and exact SQL used are recorded in the ignored local report `var/qa/live-frozen-tsvector-probe/result.json`; the driver is `/tmp/librarian-live-frozen-tsvector-probe.py`. Only the frozen copy was written. The live generation's schema and the application deployment remain unchanged.
 
-## Owner-authorized live fork installation and measurement
+## Live 0.15 backport installation — wrong base for the upstream experiment
 
-The owner subsequently requested installing the actual Librarian fork with GIN and stored text vectors on the live tables, rather than stopping at SQL/copy experiments. This section supersedes the earlier not-deployed status.
+The owner requested the main-based fork on the live table. The implementation incorrectly switched to a backport on Librarian's older 0.15 dependency. These are genuine live measurements of that backport, but **not the requested upstream experiment**. The [corrected main-package benchmark](postgres-main-live-results.md) executes the exact main-based code with its declared 1.0 dependencies on the live table. This section records the application deployment that occurred; it does not claim owner approval of the change of base.
 
 ### Installed package and schema
 
 - Split fork: [ineersa/ai-postgres-store, `perf/stored-tsvector`](https://github.com/ineersa/ai-postgres-store/tree/perf/stored-tsvector), commit **`dabcaadbc326b460db948ba545e53f10aeb5d79d`**, tag **`v0.15.0.2`**.
-- Librarian's Composer constraint is exactly `0.15.0.2`, with that commit locked. The initial development-branch commit-ref constraint triggered Composer's strict-validation warning; the reviewed tag resolved it without weakening QA or global stability.
+- Librarian's deployed Composer constraint is `0.15.0.2`, with that backport commit locked. This package is not the main-based upstream review candidate.
 - Preserves the existing 0.15 `Distance`/setup API, mandatory lexical gate, non-`COALESCE` null semantics, configured language, weighted scores and pre-limit `where`/`params`. **This is not a switch to current-main all-row mixed ranking.**
 - Ran the package's actual `Store::setup()` in the verified production PHP runtime, first from the GIN backport, then from the exact stored-vector class installed by Composer. A bounded one-off PHP driver was used because Castor has no task to invoke this dynamically constructed store's setup directly. No vendor file was edited, and no deployment command/framework was added to the application.
 - Upgraded both registered generation tables, `librarian_p1_g1` and `librarian_p2_g2`, before application deployment. Each setup ran in its own transaction with a 5-second lock timeout and 60-second statement timeout. Stored-column setup took about **14.06 seconds** and **1.69 seconds** respectively. Unlike the copied table, these live tables also had HNSW indexes during the rewrite. Do not infer the earlier 1.34-second copied-table DDL time applies to production.
