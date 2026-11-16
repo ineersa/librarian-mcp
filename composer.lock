@@ -3276,12 +3276,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/ineersa/ai-postgres-store.git",
-                "reference": "4f902d18b2cf517bc9c499fd9b63c734139e5086"
+                "reference": "d03d231ab037b20c2c6461170a3f34ed46e90589"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ineersa/ai-postgres-store/zipball/4f902d18b2cf517bc9c499fd9b63c734139e5086",
-                "reference": "4f902d18b2cf517bc9c499fd9b63c734139e5086",
+                "url": "https://api.github.com/repos/ineersa/ai-postgres-store/zipball/d03d231ab037b20c2c6461170a3f34ed46e90589",
+                "reference": "d03d231ab037b20c2c6461170a3f34ed46e90589",
                 "shasum": ""
             },
             "require": {
@@ -3347,7 +3347,7 @@
             "support": {
                 "source": "https://github.com/ineersa/ai-postgres-store/tree/development"
             },
-            "time": "2026-11-16T15:11:34+00:00"
+            "time": "2026-11-16T15:20:16+00:00"
         },
         {
             "name": "symfony/ai-store",

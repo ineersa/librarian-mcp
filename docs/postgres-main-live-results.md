@@ -1,6 +1,6 @@
 # Main-based PostgreSQL store deployed in Librarian
 
-Latest live package: **`dev-development` at `4f902d1`**, including the [deferred-fetch experiment](#deferred-document-fetching-experiment). The initial stored-vector rollout is recorded first, followed by the new comparison.
+Current package: **`dev-development` at `d03d231`**, retaining stored vectors and GIN but reverting the [deferred-fetch experiment](#deferred-document-fetching-experiment). The initial stored-vector rollout is recorded first, followed by the rejected experiment's comparison. The stored-vector change is submitted as one signed commit `dba6b38f` in [upstream PR #2967](https://github.com/symfony/ai/pull/2967).
 
 ## Scope correction
 
@@ -60,7 +60,7 @@ Sanitized measurement, setup and MCP evidence is retained in ignored `var/qa/dep
 
 At the owner's request, created a separate feature branch, merged it into `development`, updated the actual application's Composer lock and deployed it to **8093**:
 
-- Feature: [`perf/deferred-document-fetch`](https://github.com/ineersa/ai-postgres-store/tree/perf/deferred-document-fetch), **`2956cd5ea4b2d61c277cbdf1309e2dbd23e4de3b`**.
+- Feature commit: [`2956cd5ea4b2d61c277cbdf1309e2dbd23e4de3b`](https://github.com/ineersa/ai-postgres-store/commit/2956cd5ea4b2d61c277cbdf1309e2dbd23e4de3b); the `perf/deferred-document-fetch` branch was subsequently removed.
 - Development merge: **`4f902d18b2cf517bc9c499fd9b63c734139e5086`**; application deployment commit **`30c1c5e`**.
 - Inner query still scores every eligible row and selects top-N `id, score`. The outer primary-key join fetches embedding and metadata for those IDs, retaining final score ordering. No ANN/candidate pruning, changed weights, new keyword gate or schema change. Date predicates and `maxScore` remain before the inner limit.
 
@@ -84,4 +84,4 @@ These are median native store-call times, excluding model/reranking/HTTP costs. 
 
 Checks: package **47 tests / 239 assertions**, PHPStan and CS Fixer passed; application **5 headless browser journeys / 101 assertions**, `cs:fix` and `qa:static` passed. Production Castor build/up/restart passed. Web and Messenger both have the development merge. Production MCP searches for all three inputs returned HTTP 200, `ok: true`, five results each (single end-to-end samples **643 / 403 / 395 ms**, not benchmark medians).
 
-The experiment remains deployed as requested. No upstream PR was opened or updated. The frozen table remains untouched at **27,288 rows**. Local evidence is under ignored `var/qa/deferred-fetch/`: `result.json`, `mcp.json`, and sanitized `*-plan-summary.json`; raw plans remain private because they may contain query-vector literals.
+The owner rejected the experiment after these results. Merge `4f902d1` was reverted at **`d03d231`**, restoring the package sources from `399c78f`, and its feature branch was removed. The application remains on the fork's `dev-development` branch; no database/schema rollback is required. The frozen table remains untouched at **27,288 rows**. Local evidence is under ignored `var/qa/deferred-fetch/`: `result.json`, `mcp.json`, and sanitized `*-plan-summary.json`; raw plans remain private because they may contain query-vector literals.
