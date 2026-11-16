@@ -12,6 +12,7 @@ enum ProjectSourceIssueCode: string
     case UserHomeUnavailable = 'user_home_unavailable';
     case RootUnavailable = 'root_unavailable';
     case GitMetadataUnavailable = 'git_metadata_unavailable';
+    case LinkedWorktreeUnsupported = 'linked_worktree_unsupported';
     case PathMappingUnavailable = 'path_mapping_unavailable';
     case HatfieldMissing = 'hatfield_missing';
     case SettingsMalformed = 'settings_malformed';

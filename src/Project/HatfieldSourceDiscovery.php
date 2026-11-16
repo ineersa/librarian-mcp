@@ -23,6 +23,7 @@ final class HatfieldSourceDiscovery
         private readonly OmSourceReader $omSourceReader,
         private readonly ServicePathMapper $pathMapper,
         private readonly HatfieldPathResolver $pathResolver,
+        private readonly GitOriginNormalizer $gitOriginNormalizer,
     ) {
     }
 
@@ -65,6 +66,16 @@ final class HatfieldSourceDiscovery
         }
 
         $hatfieldDir = rtrim($projectRoot, '/').'/.hatfield';
+        try {
+            $this->gitOriginNormalizer->assertSupportedRoot($projectRoot);
+        } catch (ProjectSourceException $exception) {
+            return ProjectDiscoveryResult::error(
+                $exception->getMessage(),
+                issues: [$this->issue($exception->issueCode, $exception->getMessage())],
+                details: $details,
+            );
+        }
+
         if (!is_dir($hatfieldDir)) {
             return ProjectDiscoveryResult::error(
                 'Project has no .hatfield directory.',
@@ -264,7 +275,9 @@ final class HatfieldSourceDiscovery
     private function resolveOmDatabasePath(array $settings, string $projectRoot): string
     {
         $path = self::DEFAULT_OM_DATABASE_PATH;
-        $om = $settings['observational_memory'] ?? null;
+        $extensions = $settings['extensions'] ?? null;
+        $extensionSettings = \is_array($extensions) ? ($extensions['settings'] ?? null) : null;
+        $om = \is_array($extensionSettings) ? ($extensionSettings['observational_memory'] ?? null) : null;
         if (\is_array($om)) {
             $storage = $om['storage'] ?? null;
             if (\is_array($storage) && isset($storage['database']) && \is_string($storage['database']) && '' !== $storage['database']) {
