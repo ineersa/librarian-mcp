@@ -52,7 +52,7 @@ The index belongs in **Symfony AI's PostgreSQL `Store::setup()`**, which already
 - Existing live generation tables need a separate, controlled concurrent backfill outside a transaction. Do not run schema setup on every search or rebuild embeddings to add this index. Use an approved store-schema deployment procedure, not a hand-authored Doctrine migration for dynamic vendor-owned tables.
 - Consume an approved package change through Composer rather than editing `vendor/`. No upstream publication is authorized merely by this investigation.
 
-The owner authorized preparing the patch and subsequently pushing fork review branches. A package release, upstream PR creation, dependency updates and production rollout remain pending owner review. No new setup option is needed.
+After owner review, the upstream commits were squashed, GPG-signed and submitted as [symfony/ai#2964](https://github.com/symfony/ai/pull/2964). GitHub verified the signature. A package release, dependency updates and production rollout remain pending approval. No new setup option is needed.
 
 ### Upstream version difference discovered during implementation
 
@@ -69,9 +69,9 @@ The two patches use the **same deterministic GIN index name for a table but diff
 
 For active tables, plan a controlled concurrent replacement outside transaction blocks. This is a future deployment requirement, not automatic setup behavior or an operation performed during this investigation. No source reindexing or embedding rebuild is needed merely to replace the SQL index.
 
-### Fork review branches (no upstream PR)
+### Review branches and upstream PR
 
-- [Upstream-target patch](https://github.com/ineersa/ai/compare/999d5fbeea73cb9bbb3a22b069ee890847655ac7...fix/postgres-fulltext-index), commit `82c16089`: focused PHPUnit suite **44 tests / 212 assertions**, PHP CS Fixer clean, package PHPStan passed.
+- [Upstream PR #2964](https://github.com/symfony/ai/pull/2964), signed commit `a9ba978b`: focused PHPUnit suite **44 tests / 212 assertions**, PHP CS Fixer clean, package PHPStan passed. Squashing/signing preserved the exact tested source tree. The PR includes these checks and the qualified live performance measurements.
 - [Pinned-version backport](https://github.com/ineersa/ai-postgres-store/compare/790eaadc...fix/postgres-fulltext-index), commit `4b8ca908`: focused PHPUnit suite **41 tests / 205 assertions**, PHP CS Fixer clean, PHPStan passed with a worktree-local bootstrap/config to resolve the split package's monorepo dependencies. Reflection verified the tests loaded this exact pinned `Store.php`.
 
 Short table names retain `<table>_text_gin`. When that exceeds PostgreSQL's default 63-byte identifier limit, both patches use a SHA-256 prefix of the full table name plus the distinguishing `_text_gin` suffix, fitting within 63 bytes without splitting UTF-8. The focused setup test checks the reported 57-byte/`text` and 62-byte/`embedding` cases, bounded deterministic names and distinct names for tables sharing a long prefix. Existing vector-index naming is unchanged. No database integration suite or additional production experiment was run for these code patches; the earlier live experiment remains the performance evidence.
