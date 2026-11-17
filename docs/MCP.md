@@ -56,6 +56,8 @@ Configure once on official client `HttpTransport` additional headers; resolve on
 
 No session-selection header is needed. Recall derives the source session from the matched record; MCP protocol session IDs are unrelated. No ambient shared MCP-session project selection. Missing/invalid/inaccessible root → `invalid_project_context`. Search/recall require a registered root (`project_not_found` otherwise); only the explicit `ensure_project` operation can register it. No global search or arbitrary file tool.
 
+Linked Git worktrees are refused with non-retryable `linked_worktree_unsupported`, including already registered roots. `ensure_project` checks before its existing-registration shortcut; search/recall check on project resolution. Git's canonical resolved per-checkout and common metadata directories must coincide. A `.git` file alone does not disqualify a separate-git-dir/submodule checkout. Uninspectable existing Git metadata fails closed. No primary-checkout redirection, registration, source scan, or index rebuild is performed for a refused linked worktree.
+
 ---
 
 ## 4) Tools
@@ -127,7 +129,7 @@ Domain failure payload: `{ok: false, error, message, retryable}` with `isError: 
 
 | Area | Codes |
 |---|---|
-| Shared / search | `invalid_project_context`, `project_not_found`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `timeout`, `response_too_large`, `internal_error` |
+| Shared / search | `invalid_project_context`, `linked_worktree_unsupported`, `project_not_found`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `timeout`, `response_too_large`, `internal_error` |
 | Registration | `project_registration_conflict` (non-retryable name/origin conflict), `project_registration_unavailable` (retryable database/queue/Git-inspection failure); invalid/inaccessible roots reuse `invalid_project_context` |
 | Recall | `invalid_id`, `ambiguous_id`, `not_found`, `sessions_unavailable`, `events_unreadable`, `resource_limit_exceeded` |
 

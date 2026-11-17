@@ -7,6 +7,7 @@ namespace App\Memory;
 enum MemoryErrorCode: string
 {
     case InvalidProjectContext = 'invalid_project_context';
+    case LinkedWorktreeUnsupported = 'linked_worktree_unsupported';
     case ProjectNotFound = 'project_not_found';
     case ProjectRegistrationConflict = 'project_registration_conflict';
     case ProjectRegistrationUnavailable = 'project_registration_unavailable';

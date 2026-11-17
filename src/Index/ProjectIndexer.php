@@ -14,6 +14,8 @@ use App\Index\Source\CanonicalSourceReader;
 use App\Index\Source\SourceSnapshot;
 use App\Index\Status\ProjectStatusPublisher;
 use App\Index\Store\IndexStoreFactory;
+use App\Project\GitOriginNormalizer;
+use App\Project\ProjectSourceException;
 use App\Repository\IndexedMemoryRepository;
 use App\Repository\IndexGenerationRepository;
 use App\Repository\ProjectRepository;
@@ -55,6 +57,7 @@ final class ProjectIndexer
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
         private readonly ProjectStatusPublisher $projectStatusPublisher,
+        private readonly GitOriginNormalizer $gitOriginNormalizer,
     ) {
     }
 
@@ -83,6 +86,13 @@ final class ProjectIndexer
         if (null === $project || ProjectHealth::Ready !== $project->health) {
             return false;
         }
+        // Queued units must enforce source policy even before the next discovery scan.
+        try {
+            $this->gitOriginNormalizer->assertSupportedRoot($this->rootBinding($project));
+        } catch (ProjectSourceException $exception) {
+            throw IndexException::sanitized($exception->getMessage(), $exception);
+        }
+
         $snapshot = $this->sourceReader->snapshot($projectId);
         $generation = $this->selectOrCreateGeneration($project, $snapshot);
         if (null === $generation->scanRevision) {
