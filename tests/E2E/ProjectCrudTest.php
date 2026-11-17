@@ -56,6 +56,8 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Automatic indexing', new AssertionOptions(timeoutMs: 10_000));
 
+            $committedBefore = trim((string) $this->page->locator('[data-index-committed-revision-value]')->textContent());
+
             $this->openSearchMemory($projectId);
             $this->searchMemory('where was I working on synthetic observation fx-1');
             $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');
@@ -78,11 +80,14 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             Expect::locator($indexCell->locator('[data-source-last-check]'))->not()->toContainText('Not checked yet');
             self::assertSame($listTimeOrigin, $this->page->evaluate('performance.timeOrigin'), 'Live list updates must not reload the page.');
             $this->openProjectDetail($projectId);
+            Expect::locator($this->page->locator('[data-index-source-revision]'))->toHaveText('5', new AssertionOptions(timeoutMs: 60_000));
+            // The index tracks Librarian's memory revision, which the synced OM update advanced.
             Expect::locator($this->page->locator('[data-index-committed-revision-value]'))
-                ->toHaveText('5', new AssertionOptions(timeoutMs: 60_000));
-            Expect::locator($this->page->locator('[data-index-source-revision]'))->toHaveText('5');
+                ->not()->toHaveText($committedBefore, new AssertionOptions(timeoutMs: 60_000));
             $this->waitForProjectHealth(ProjectHealth::Ready);
             $this->waitForCommittedIndex(3);
+            Expect::locator($this->page->locator('[data-index-committed-revision-value]'))
+                ->toHaveText(trim((string) $this->page->locator('[data-index-memory-revision]')->textContent()));
 
             $this->openSearchMemory($projectId);
             $this->searchMemory($updatedContent);

@@ -21,7 +21,8 @@ security:
             pattern: ^/(_profiler|_wdt|assets|build)/
             security: false
         mcp:
-            pattern: ^/_mcp
+            # MCP retrieval and the OM ingest API share the ROLE_MCP token mechanism.
+            pattern: ^/(_mcp|api/om/)
             stateless: true
             provider: app_user_provider
             custom_authenticators:
@@ -44,6 +45,7 @@ security:
     access_control:
         # Only server configuration can allow anonymous retrieval, never a missing header.
         - { path: ^/_mcp, allow_if: 'not %app.mcp_auth_required% or is_granted("%app.mcp_role%")' }
+        - { path: ^/api/om/, allow_if: 'not %app.mcp_auth_required% or is_granted("%app.mcp_role%")' }
         - { path: ^/admin, roles: ROLE_ADMIN }
         - { path: ^/login, roles: PUBLIC_ACCESS }
 

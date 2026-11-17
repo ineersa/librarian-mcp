@@ -86,6 +86,13 @@ class Project
     public private(set) int $sourceChangeCount = 0;
 
     /**
+     * Librarian-owned memory change counter (port of OM om_source_revision).
+     * Bumped by SQL inside every memory write transaction; never set through the ORM.
+     */
+    #[ORM\Column(options: ['default' => 0])]
+    public private(set) int $memoryRevision = 0;
+
+    /**
      * Diagnostic discovery details without source payloads.
      *
      * @var array<string, mixed>

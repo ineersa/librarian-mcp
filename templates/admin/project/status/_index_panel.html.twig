@@ -61,6 +61,8 @@
                         <dd class="col-sm-8" data-index-committed-revision-value>{{ indexStatus.latest.committedRevision ?? 'Not committed' }}</dd>
                         <dt class="col-sm-4">Source revision at last discovery</dt>
                         <dd class="col-sm-8" data-index-source-revision>{{ project.sourceRevision ?? 'Unknown' }}</dd>
+                        <dt class="col-sm-4">Memory revision</dt>
+                        <dd class="col-sm-8" data-index-memory-revision>{{ project.memoryRevision }}</dd>
                     </dl>
                 </details>
             {% else %}

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Index\Source;
 
 /**
- * Canonical OM memory kinds retained for indexing.
+ * Canonical OM memory kinds retained for indexing (Librarian-owned memory tables).
  */
 enum MemoryKind: string
 {
@@ -31,8 +31,8 @@ enum MemoryKind: string
     public function table(): string
     {
         return match ($this) {
-            self::Observation => 'om_observation',
-            self::Reflection => 'om_reflection',
+            self::Observation => 'om_observations',
+            self::Reflection => 'om_reflections',
         };
     }
 

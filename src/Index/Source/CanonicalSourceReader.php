@@ -5,93 +5,62 @@ declare(strict_types=1);
 namespace App\Index\Source;
 
 use App\Index\IndexException;
-use App\Project\OmSourceReader;
-use App\Project\ProjectSourceException;
+use App\ObservationalMemory\Storage\MemoryRevision;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
 
 /**
- * Reads retained OM observations/reflections in bounded keyset batches.
+ * Reads a project's OM observations/reflections from Librarian-owned memory tables
+ * in bounded keyset batches.
  *
- * Opens source SQLite through OmSourceReader's shared readonly opener. Never
- * consumes/deletes om_source_change rows: that journal is not an independent
- * durable consumer feed under the current Hatfield semantic indexer.
+ * The source revision is the project's memory_revision counter, bumped in the same
+ * transaction as every memory write (port of OM om_source_revision).
  */
 final class CanonicalSourceReader
 {
+    /** Source binding stored on index generations; replaces the former om.sqlite path. */
+    public const string SOURCE_PATH = 'librarian:om-postgres-v1';
+
     private const array OBSERVATION_RELEVANCE = ['low', 'medium', 'high', 'critical'];
 
     public function __construct(
-        private readonly OmSourceReader $omSourceReader,
+        private readonly Connection $connection,
     ) {
     }
 
-    public function snapshot(string $databasePath): SourceSnapshot
+    public function snapshot(int $projectId): SourceSnapshot
     {
         try {
-            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
-        } catch (ProjectSourceException $exception) {
-            throw IndexException::sanitized($exception->getMessage(), $exception);
+            $revision = MemoryRevision::current($this->connection, $projectId);
+        } catch (\Throwable $exception) {
+            throw $this->wrapReadFailure($exception);
         }
 
-        try {
-            $pdo->beginTransaction();
-            try {
-                $this->omSourceReader->validateSchema($pdo);
-                $revision = $this->fetchRevision($pdo);
-                $pdo->commit();
-            } catch (\Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-
-                throw $this->wrapReadFailure($exception);
-            }
-
-            return new SourceSnapshot(
-                path: $databasePath,
-                identity: $this->identityFor($databasePath),
-                revision: $revision,
-            );
-        } finally {
-            $pdo = null;
-        }
+        return new SourceSnapshot(
+            path: self::SOURCE_PATH,
+            identity: $this->identityFor($projectId),
+            revision: $revision,
+        );
     }
 
     /**
      * @return list<CanonicalMemory>
      */
-    public function fetchBatch(string $databasePath, ?string $cursor, int $limit): array
+    public function fetchBatch(int $projectId, ?string $cursor, int $limit): array
     {
         if ($limit < 1) {
             throw new \InvalidArgumentException('Source batch limit must be positive.');
         }
 
         try {
-            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
-        } catch (ProjectSourceException $exception) {
-            throw IndexException::sanitized($exception->getMessage(), $exception);
-        }
-
-        try {
-            $pdo->beginTransaction();
-            try {
-                $rows = $this->queryBatch($pdo, $cursor, $limit);
-                $pdo->commit();
-            } catch (\Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-
-                throw $this->wrapReadFailure($exception);
-            }
-
-            return $rows;
-        } finally {
-            $pdo = null;
+            return $this->queryBatch($projectId, $cursor, $limit);
+        } catch (\Throwable $exception) {
+            throw $this->wrapReadFailure($exception);
         }
     }
 
     /**
-     * Load retained memories by exact source ids for one kind.
+     * Load memories by exact source ids for one kind.
      *
      * Bound at 50 ids so callers can hydrate ranked parents without scanning the
      * full source table. Missing ids are omitted. Results reuse hydrate() so the
@@ -101,7 +70,7 @@ final class CanonicalSourceReader
      *
      * @return list<CanonicalMemory>
      */
-    public function fetchByIds(string $databasePath, MemoryKind $kind, array $ids): array
+    public function fetchByIds(int $projectId, MemoryKind $kind, array $ids): array
     {
         $normalized = [];
         foreach ($ids as $id) {
@@ -123,60 +92,26 @@ final class CanonicalSourceReader
         }
 
         try {
-            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
-        } catch (ProjectSourceException $exception) {
-            throw IndexException::sanitized($exception->getMessage(), $exception);
-        }
-
-        try {
-            $pdo->beginTransaction();
-            try {
-                $this->omSourceReader->validateSchema($pdo);
-                $rows = $this->queryByIds($pdo, $kind, $normalized);
-                $pdo->commit();
-            } catch (\Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-
-                throw $this->wrapReadFailure($exception);
-            }
-
-            return $rows;
-        } finally {
-            $pdo = null;
+            return $this->hydrateRows($kind, $this->connection->fetchAllAssociative(
+                $this->selectSql($kind).' AND m.'.$kind->idColumn().' IN (:ids) ORDER BY m.'.$kind->idColumn().' ASC',
+                ['project' => $projectId, 'ids' => $normalized],
+                ['ids' => ArrayParameterType::STRING],
+            ));
+        } catch (\Throwable $exception) {
+            throw $this->wrapReadFailure($exception);
         }
     }
 
-    /**
-     * Cheap stable filesystem identity (path + device + inode).
-     *
-     * Does not open SQLite or count source rows. Use snapshot() to read the revision.
-     */
-    public function identityFor(string $databasePath): string
+    /** Stable binding of a project's memory source; no I/O. */
+    public function identityFor(int $projectId): string
     {
-        clearstatcache(true, $databasePath);
-        $resolved = realpath($databasePath);
-        if (false === $resolved) {
-            throw IndexException::sanitized('Unable to resolve observational memory database path.');
-        }
-
-        $stat = @stat($resolved);
-        if (!\is_array($stat) || !isset($stat['dev'], $stat['ino'])) {
-            throw IndexException::sanitized('Unable to read observational memory filesystem identity.');
-        }
-
-        return hash('sha256', json_encode([
-            $resolved,
-            $stat['dev'],
-            $stat['ino'],
-        ], \JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode([self::SOURCE_PATH, $projectId], \JSON_THROW_ON_ERROR));
     }
 
     /**
      * @return list<CanonicalMemory>
      */
-    private function queryBatch(\PDO $pdo, ?string $cursor, int $limit): array
+    private function queryBatch(int $projectId, ?string $cursor, int $limit): array
     {
         [$cursorKind, $cursorId] = $this->parseCursor($cursor);
         $memories = [];
@@ -198,7 +133,7 @@ final class CanonicalSourceReader
             }
 
             $afterId = (null !== $cursorKind && $kind === $cursorKind) ? $cursorId : null;
-            foreach ($this->queryKind($pdo, $kind, $afterId, $remaining) as $memory) {
+            foreach ($this->queryKind($projectId, $kind, $afterId, $remaining) as $memory) {
                 $memories[] = $memory;
             }
         }
@@ -209,83 +144,46 @@ final class CanonicalSourceReader
     /**
      * @return list<CanonicalMemory>
      */
-    private function queryKind(\PDO $pdo, MemoryKind $kind, ?string $afterId, int $limit): array
+    private function queryKind(int $projectId, MemoryKind $kind, ?string $afterId, int $limit): array
     {
-        $idColumn = $kind->idColumn();
-        $dateColumn = $kind->dateColumn();
-        $relevanceSelect = MemoryKind::Observation === $kind ? 'relevance' : 'NULL AS relevance';
-        $where = null === $afterId ? '' : \sprintf('WHERE %s > :after_id', $idColumn);
-
-        // Per-table PK keyset. Avoid sorting a full UNION for every page.
-        $sql = \sprintf(
-            'SELECT %s AS source_id, run_id AS session_id, content, %s AS occurred_raw, %s
-             FROM %s
-             %s
-             ORDER BY %s ASC
-             LIMIT :limit',
-            $idColumn,
-            $dateColumn,
-            $relevanceSelect,
-            $kind->table(),
-            $where,
-            $idColumn,
-        );
-
-        $statement = $pdo->prepare($sql);
+        $idColumn = 'm.'.$kind->idColumn();
+        $parameters = ['project' => $projectId, 'limit' => $limit];
+        $where = '';
         if (null !== $afterId) {
-            $statement->bindValue(':after_id', $afterId);
-        }
-        $statement->bindValue(':limit', $limit, \PDO::PARAM_INT);
-        $statement->execute();
-
-        $memories = [];
-        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
-            $memories[] = $this->hydrate($kind, $row);
+            $where = ' AND '.$idColumn.' > :after_id';
+            $parameters['after_id'] = $afterId;
         }
 
-        return $memories;
+        // Per-table keyset. Avoid sorting a full UNION for every page.
+        return $this->hydrateRows($kind, $this->connection->fetchAllAssociative(
+            $this->selectSql($kind).$where.' ORDER BY '.$idColumn.' ASC LIMIT :limit',
+            $parameters,
+        ));
+    }
+
+    private function selectSql(MemoryKind $kind): string
+    {
+        return \sprintf(
+            'SELECT m.%s AS source_id, s.session_id AS session_id, m.content, m.%s AS occurred_raw, %s
+             FROM %s m
+             INNER JOIN om_sessions s ON s.id = m.memory_session_id
+             WHERE s.project_id = :project',
+            $kind->idColumn(),
+            $kind->dateColumn(),
+            MemoryKind::Observation === $kind ? 'm.relevance' : 'NULL AS relevance',
+            $kind->table(),
+        );
     }
 
     /**
-     * @param list<string> $ids
+     * @param list<array<string, mixed>> $rows
      *
      * @return list<CanonicalMemory>
      */
-    private function queryByIds(\PDO $pdo, MemoryKind $kind, array $ids): array
+    private function hydrateRows(MemoryKind $kind, array $rows): array
     {
-        $idColumn = $kind->idColumn();
-        $dateColumn = $kind->dateColumn();
-        $relevanceSelect = MemoryKind::Observation === $kind ? 'relevance' : 'NULL AS relevance';
-        $placeholders = [];
-        $params = [];
-        foreach ($ids as $index => $id) {
-            $name = 'id_'.$index;
-            $placeholders[] = ':'.$name;
-            $params[$name] = $id;
-        }
-
-        $sql = \sprintf(
-            'SELECT %s AS source_id, run_id AS session_id, content, %s AS occurred_raw, %s
-             FROM %s
-             WHERE %s IN (%s)
-             ORDER BY %s ASC',
-            $idColumn,
-            $dateColumn,
-            $relevanceSelect,
-            $kind->table(),
-            $idColumn,
-            implode(', ', $placeholders),
-            $idColumn,
-        );
-
-        $statement = $pdo->prepare($sql);
-        foreach ($params as $name => $value) {
-            $statement->bindValue(':'.$name, $value);
-        }
-        $statement->execute();
-
         $memories = [];
-        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+        foreach ($rows as $row) {
             $memories[] = $this->hydrate($kind, $row);
         }
 
@@ -388,24 +286,10 @@ final class CanonicalSourceReader
         return [$kind, $parts[1]];
     }
 
-    private function fetchRevision(\PDO $pdo): int
-    {
-        $value = $pdo->query('SELECT revision FROM om_source_revision WHERE id = 1')->fetchColumn();
-        if (false === $value || null === $value) {
-            throw IndexException::sanitized('Observational memory source revision is missing.');
-        }
-
-        return (int) $value;
-    }
-
     private function wrapReadFailure(\Throwable $exception): IndexException
     {
         if ($exception instanceof IndexException) {
             return $exception;
-        }
-
-        if ($exception instanceof ProjectSourceException) {
-            return IndexException::sanitized($exception->getMessage(), $exception);
         }
 
         return IndexException::sanitized('Unable to read observational memory source batch.', $exception);

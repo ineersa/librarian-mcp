@@ -19,6 +19,7 @@ use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface
 final class McpTokenAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
     private const string MCP_PATH = '/_mcp';
+    private const string OM_API_PATH = '/api/om/';
     private const string AUTHORIZATION_HEADER = 'Authorization';
     private const string TOKEN_HEADER = 'X-MCP-Token';
 
@@ -33,7 +34,9 @@ final class McpTokenAuthenticator extends AbstractAuthenticator implements Authe
             return false;
         }
 
-        return str_starts_with($request->getPathInfo(), self::MCP_PATH)
+        $path = $request->getPathInfo();
+
+        return (str_starts_with($path, self::MCP_PATH) || str_starts_with($path, self::OM_API_PATH))
             && ($request->headers->has(self::AUTHORIZATION_HEADER)
                 || $request->headers->has(self::TOKEN_HEADER));
     }

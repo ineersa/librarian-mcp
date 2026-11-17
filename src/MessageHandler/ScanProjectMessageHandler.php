@@ -8,6 +8,7 @@ use App\Entity\Project;
 use App\Index\ProjectIndexManager;
 use App\Index\Status\ProjectStatusPublisher;
 use App\Message\ScanProjectMessage;
+use App\ObservationalMemory\Import\OmSqliteImporter;
 use App\Project\HatfieldSourceDiscovery;
 use App\Project\ProjectDiscoveryResult;
 use App\Project\ProjectSourceIssueCode;
@@ -29,6 +30,7 @@ final class ScanProjectMessageHandler
         private readonly LoggerInterface $logger,
         private readonly ProjectIndexManager $projectIndexManager,
         private readonly ProjectStatusPublisher $projectStatusPublisher,
+        private readonly OmSqliteImporter $omImporter,
     ) {
     }
 
@@ -94,6 +96,7 @@ final class ScanProjectMessageHandler
         $this->projectStatusPublisher->publish($projectId);
 
         if ($queuedIndexing) {
+            $this->syncObservationalMemory($projectId);
             $this->projectIndexManager->queueId($projectId);
         }
     }
@@ -133,6 +136,26 @@ final class ScanProjectMessageHandler
                 sourceRevision: $result->sourceRevision,
                 sourceChangeCount: $result->sourceChangeCount,
             );
+        }
+    }
+
+    /** Copy new om.sqlite rows into Librarian memory tables after the scan write committed. */
+    private function syncObservationalMemory(int $projectId): void
+    {
+        $this->entityManager->clear();
+        $project = $this->projectRepository->find($projectId);
+        if (null === $project) {
+            return;
+        }
+
+        try {
+            $this->omImporter->syncIfChanged($project);
+        } catch (\Throwable $exception) {
+            // Indexing still runs on already-imported rows; the next scan retries the sync.
+            $this->logger->error('Observational memory sync from om.sqlite failed.', [
+                'projectId' => $projectId,
+                'error' => $exception->getMessage(),
+            ]);
         }
     }
 }

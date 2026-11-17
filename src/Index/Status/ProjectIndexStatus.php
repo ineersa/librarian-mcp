@@ -8,6 +8,7 @@ use App\Entity\IndexGeneration;
 use App\Entity\IndexState;
 use App\Entity\Project;
 use App\Entity\ProjectHealth;
+use App\Index\Source\CanonicalSourceReader;
 
 /**
  * Read-model for project source/index status presentation.
@@ -44,13 +45,13 @@ final readonly class ProjectIndexStatus
 
         $pending = null !== $latest && $latest->state->isInProgress();
         $stale = false;
-        if (
-            null !== $active
-            && null !== $project->sourceRevision
-            && null !== $active->committedRevision
-            && $active->committedRevision < $project->sourceRevision
-        ) {
-            $stale = true;
+        if (null !== $active && null !== $active->committedRevision) {
+            // Postgres-bound generations track Librarian's memory counter; a transitional
+            // om.sqlite-bound generation still tracks OM's discovered revision.
+            $sourceRevision = CanonicalSourceReader::SOURCE_PATH === $active->sourcePath
+                ? $project->memoryRevision
+                : $project->sourceRevision;
+            $stale = null !== $sourceRevision && $active->committedRevision < $sourceRevision;
         }
 
         $statusValue = self::STATUS_NONE;
