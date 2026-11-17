@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\E2E;
 
 use App\Entity\ProjectHealth;
+use App\Mcp\MemoryContextResolver;
 use App\Tests\Support\LibrarianNetworkBrowserTest;
 use App\Tests\Support\ProjectSourceBrowserHelpers;
 use App\Tests\Support\ProjectSourceFixture;
@@ -15,13 +16,12 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 {
     use ProjectSourceBrowserHelpers;
 
-    public function testRegisterDefaultProjectDiscoverSourcesAndRemoveRegistration(): void
+    public function testRegisterDefaultProjectDiscoverSourcesDeleteSessionAndRemoveRegistration(): void
     {
         $slug = 'default-om';
         $visiblePath = ProjectSourceFixture::visibleProjectPath($slug);
         $builderPath = ProjectSourceFixture::builderProjectPath($slug);
         $before = ProjectSourceFixture::hashTree($builderPath);
-        $restoreFixture = null;
 
         try {
             $this->login();
@@ -62,59 +62,54 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $this->searchMemory('where was I working on synthetic observation fx-1');
             $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');
 
+            // Post-cutover change path: the client deletes a session and Librarian forgets
+            // its memory. The scheduler indexes the removal without manual actions.
+            $token = $this->regenerateMcpToken();
             $this->openProjectsIndex();
             $listTimeOrigin = $this->page->evaluate('performance.timeOrigin');
-            $updatedContent = 'synthetic observation fx-1 updated for indexing';
-            $restoreFixture = ProjectSourceFixture::updateObservationContent(
-                $builderPath,
-                '.hatfield/extensions-data/observational-memory/om.sqlite',
-                'fx-obs-1',
-                $updatedContent,
-                5,
-            );
-            $afterMutation = ProjectSourceFixture::hashTree($builderPath);
-            self::assertNotSame($before, $afterMutation, 'Harness-owned fixture mutation must change the source hash.');
+            // A supplied token is always validated, so it works in required and anonymous mode.
+            $headers = [MemoryContextResolver::PROJECT_HEADER => $visiblePath, 'Authorization' => 'Bearer '.$token];
+            $response = $this->stackHttpClient()->request('DELETE', $this->url.'/api/om/v1/sessions/hatfield/108', ['headers' => $headers]);
+            self::assertSame(200, $response->getStatusCode());
+            self::assertSame(['ok' => true, 'contract_version' => 1, 'deleted' => true], $response->toArray());
 
-            // The scheduler must discover and index the update without either manual action.
-            Expect::locator($indexCell)->toHaveAttribute('data-source-revision', '5', new AssertionOptions(timeoutMs: 60_000));
-            Expect::locator($indexCell->locator('[data-source-last-check]'))->not()->toContainText('Not checked yet');
+            Expect::locator($indexCell)->toHaveAttribute('data-index-parent-count', '0', new AssertionOptions(timeoutMs: 60_000));
+            Expect::locator($indexCell->locator('[data-index-summary-label]'))->toHaveText('0 indexed memories');
+            // The legacy om.sqlite import is one-time: two later scans (serial on one worker)
+            // must not resurrect the deleted session from the unchanged source file.
+            for ($scan = 0; $scan < 2; ++$scan) {
+                $lastCheck = trim((string) $indexCell->locator('[data-source-last-check]')->textContent());
+                Expect::locator($indexCell->locator('[data-source-last-check]'))
+                    ->not()->toHaveText($lastCheck, new AssertionOptions(timeoutMs: 60_000));
+            }
+            Expect::locator($indexCell)->toHaveAttribute('data-index-pending', '0', new AssertionOptions(timeoutMs: 60_000));
+            Expect::locator($indexCell)->toHaveAttribute('data-index-parent-count', '0');
             self::assertSame($listTimeOrigin, $this->page->evaluate('performance.timeOrigin'), 'Live list updates must not reload the page.');
+
             $this->openProjectDetail($projectId);
-            Expect::locator($this->page->locator('[data-index-source-revision]'))->toHaveText('5', new AssertionOptions(timeoutMs: 60_000));
-            // The index tracks Librarian's memory revision, which the synced OM update advanced.
+            $this->waitForProjectHealth(ProjectHealth::Ready);
+            // The index tracks Librarian's memory revision, which the deletion advanced.
             Expect::locator($this->page->locator('[data-index-committed-revision-value]'))
                 ->not()->toHaveText($committedBefore, new AssertionOptions(timeoutMs: 60_000));
-            $this->waitForProjectHealth(ProjectHealth::Ready);
-            $this->waitForCommittedIndex(3);
             Expect::locator($this->page->locator('[data-index-committed-revision-value]'))
                 ->toHaveText(trim((string) $this->page->locator('[data-index-memory-revision]')->textContent()));
 
             $this->openSearchMemory($projectId);
-            $this->searchMemory($updatedContent);
-            $this->assertSearchHitContains('fx-obs-1', $updatedContent);
+            $this->searchMemory('where was I working on synthetic observation fx-1');
+            Expect::locator($this->page->locator('[data-search-empty], [data-search-no-active]'))->toBeVisible(new AssertionOptions(timeoutMs: 30_000));
+            self::assertSame(0, $this->page->locator('[data-search-hit][data-source-id="fx-obs-1"]')->count());
 
-            ProjectSourceFixture::assertUnchanged(
-                $afterMutation,
-                ProjectSourceFixture::hashTree($builderPath),
-                'default-om after updated search',
-            );
+            ProjectSourceFixture::assertUnchanged($before, ProjectSourceFixture::hashTree($builderPath), 'default-om after session deletion');
 
             $this->deleteRecord('/admin/projects/'.$projectId);
             $this->openProjectsIndex();
             self::assertSame(0, $this->page->locator('tr[data-project-id="'.$projectId.'"]')->count());
 
-            ProjectSourceFixture::assertUnchanged(
-                $afterMutation,
-                ProjectSourceFixture::hashTree($builderPath),
-                'default-om removal',
-            );
+            ProjectSourceFixture::assertUnchanged($before, ProjectSourceFixture::hashTree($builderPath), 'default-om removal');
             self::assertDirectoryExists($builderPath);
             self::assertFileExists($builderPath.'/.hatfield/extensions-data/observational-memory/om.sqlite');
             self::assertFileExists($builderPath.'/.hatfield/sessions/108/events.jsonl');
         } finally {
-            if (\is_callable($restoreFixture)) {
-                $restoreFixture();
-            }
             ProjectSourceFixture::assertUnchanged(
                 $before,
                 ProjectSourceFixture::hashTree($builderPath),

@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Plan 09 contract v1: content-free observe signal + session projection.
+ * Plan 09 contract v1: content-free observe signal, session projection and session deletion.
  * Not an MCP tool: models can never write memory.
  *
  * Project selection uses `X-Librarian-Project` with MCP canonicalization; observe
@@ -66,6 +66,24 @@ final class MemoryIngestController
                 'ok' => true,
                 'contract_version' => MemoryObserveRequest::CONTRACT_VERSION,
                 'text' => null === $project ? '' : $this->ingest->projection($project, $sourceKind, $sessionId),
+            ]);
+        });
+    }
+
+    /**
+     * The client permanently deleted this session: forget its memory. Never registers a
+     * project; an unknown project or session is already deleted (idempotent 200).
+     */
+    #[Route('/sessions/{sourceKind}/{sessionId}', name: 'api_om_session_delete', requirements: ['sessionId' => self::SESSION_ID_REQUIREMENT], methods: ['DELETE'])]
+    public function deleteSession(MemorySourceKind $sourceKind, string $sessionId): JsonResponse
+    {
+        return $this->guard(function () use ($sourceKind, $sessionId): JsonResponse {
+            $project = $this->existingProject();
+
+            return new JsonResponse([
+                'ok' => true,
+                'contract_version' => MemoryObserveRequest::CONTRACT_VERSION,
+                'deleted' => null !== $project && $this->ingest->deleteSession($project, $sourceKind, $sessionId),
             ]);
         });
     }

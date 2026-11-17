@@ -316,6 +316,16 @@ final class SessionEventsJournalReader
 
         $sessionDirectory = $sessionsRoot.\DIRECTORY_SEPARATOR.$sessionId;
         clearstatcache(true, $sessionDirectory);
+        // Root is readable but the session directory is gone (not a broken link): the
+        // client deleted the session, and retrying cannot bring its events back. Its memory
+        // remains until the client's delete call or a cleanup removes it.
+        if (!file_exists($sessionDirectory) && !is_link($sessionDirectory)) {
+            return [
+                'ok' => false,
+                'error' => MemoryErrorCode::SessionDeleted->value,
+                'message' => 'The matched memory belongs to a session that has been deleted; its source events are no longer available.',
+            ];
+        }
         $resolvedSessionDirectory = realpath($sessionDirectory);
         if (
             false === $resolvedSessionDirectory

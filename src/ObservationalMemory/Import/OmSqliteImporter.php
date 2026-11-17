@@ -11,7 +11,6 @@ use App\ObservationalMemory\Storage\MemoryRevision;
 use App\Project\OmSourceReader;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
-use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Clock\ClockInterface;
 
 /**
@@ -27,38 +26,32 @@ final readonly class OmSqliteImporter
     /** Same minimum as discovery; coverage/generation tables are copied when present. */
     public const array REQUIRED_TABLES = ['om_observation', 'om_reflection'];
 
-    private const string SYNC_MARKER_PREFIX = 'om_import_sync_';
-
     public function __construct(
         private OmSourceReader $sourceReader,
         private Connection $connection,
         private ClockInterface $clock,
-        private CacheItemPoolInterface $cache,
     ) {
     }
 
     /**
-     * Transition sync while Hatfield still writes om.sqlite: import only when the
-     * discovered OM source revision or file changed since the last successful import.
-     * A lost marker only costs one idempotent re-import.
+     * One-time legacy import: copy a project's om.sqlite memory the first time discovery
+     * finds it, then never again. Hatfield no longer writes om.sqlite after the thin-client
+     * cutover, and re-importing would resurrect sessions Librarian has since deleted.
+     * A failed import is not recorded, so the next scan retries it.
      *
      * @return bool whether an import ran
      */
-    public function syncIfChanged(Project $project): bool
+    public function importOnce(Project $project): bool
     {
-        if (null === $project->id || null === $project->databasePath || null === $project->sourceRevision) {
-            return false;
-        }
-
-        $marker = $this->cache->getItem(self::SYNC_MARKER_PREFIX.$project->id);
-        // createdAt distinguishes a re-registered project that reuses an id.
-        $fingerprint = hash('sha256', implode("\0", [$project->createdAt->format(\DATE_ATOM), $project->databasePath, $project->sourceRevision]));
-        if ($marker->isHit() && $marker->get() === $fingerprint) {
+        if (null === $project->id || null === $project->databasePath || null !== $project->legacyImportedAt) {
             return false;
         }
 
         $this->import($project);
-        $this->cache->save($marker->set($fingerprint));
+        $this->connection->executeStatement(
+            'UPDATE projects SET legacy_imported_at = ? WHERE id = ? AND legacy_imported_at IS NULL',
+            [$this->clock->now()->format('Y-m-d H:i:s'), $project->id],
+        );
 
         return true;
     }
@@ -231,10 +224,11 @@ final readonly class OmSqliteImporter
         );
 
         $counts = [
-            // OM stays authoritative during the transition: mirror in-place content changes.
-            'om_observations' => $this->insertAll($connection, 'om_observations', $sessionPk, $rows['observations'], '(memory_session_id, observation_id)', ['content', 'content_hash', 'relevance', 'timestamp', 'token_count', 'source_refs_json']),
+            // Insert-only: Librarian owns memory after the cutover, so a (re-)import never
+            // overwrites rows Librarian already has.
+            'om_observations' => $this->insertAll($connection, 'om_observations', $sessionPk, $rows['observations'], '(memory_session_id, observation_id)'),
             'om_observer_coverage' => $this->insertAll($connection, 'om_observer_coverage', $sessionPk, $rows['coverage'], '(memory_session_id, coverage_key)'),
-            'om_reflections' => $this->insertAll($connection, 'om_reflections', $sessionPk, $rows['reflections'], '(memory_session_id, reflection_id)', ['content', 'supporting_observation_ids_json', 'token_count']),
+            'om_reflections' => $this->insertAll($connection, 'om_reflections', $sessionPk, $rows['reflections'], '(memory_session_id, reflection_id)'),
         ];
 
         // Generations are immutable once terminal: links are copied only with a newly inserted row.
@@ -313,34 +307,22 @@ final readonly class OmSqliteImporter
     }
 
     /**
-     * @param list<array<string, mixed>> $rows            column => value in target column order
-     * @param list<string>               $mirroredColumns columns updated when an existing row differs
+     * @param list<array<string, mixed>> $rows column => value in target column order
      *
      * @return array{source: int, inserted: int}
      */
-    private function insertAll(Connection $connection, string $table, int $sessionPk, array $rows, string $conflictTarget, array $mirroredColumns = []): array
+    private function insertAll(Connection $connection, string $table, int $sessionPk, array $rows, string $conflictTarget): array
     {
-        $onConflict = 'DO NOTHING';
-        if ([] !== $mirroredColumns) {
-            $onConflict = \sprintf(
-                'DO UPDATE SET %s WHERE (%s) IS DISTINCT FROM (%s)',
-                implode(', ', array_map(static fn (string $c): string => $c.' = EXCLUDED.'.$c, $mirroredColumns)),
-                implode(', ', array_map(static fn (string $c): string => $table.'.'.$c, $mirroredColumns)),
-                implode(', ', array_map(static fn (string $c): string => 'EXCLUDED.'.$c, $mirroredColumns)),
-            );
-        }
-
         $inserted = 0;
         foreach ($rows as $row) {
             $columns = ['memory_session_id', ...array_keys($row)];
             $inserted += $connection->executeStatement(
                 \sprintf(
-                    'INSERT INTO %s (%s) VALUES (%s) ON CONFLICT %s %s',
+                    'INSERT INTO %s (%s) VALUES (%s) ON CONFLICT %s DO NOTHING',
                     $table,
                     implode(', ', $columns),
                     implode(', ', array_fill(0, \count($columns), '?')),
                     $conflictTarget,
-                    $onConflict,
                 ),
                 [$sessionPk, ...array_values($row)],
             );

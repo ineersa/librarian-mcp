@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Support;
 
 use App\Index\Source\MemoryKind;
-use Symfony\Component\Filesystem\Filesystem;
 
 /**
  * Paths and hashing helpers for plan 03/04 synthetic project fixtures.
@@ -93,81 +92,6 @@ final class ProjectSourceFixture
         if ($before !== $after) {
             throw new \RuntimeException(\sprintf("%s source tree changed.\nBefore keys: %s\nAfter keys: %s", $label, implode(',', array_keys($before)), implode(',', array_keys($after))));
         }
-    }
-
-    /**
-     * Updates one observation content and bumps om_source_revision on a verified
-     * harness-owned synthetic OM database. Restores exact bytes via the
-     * returned callable so repeated browser runs stay idempotent.
-     *
-     * @return callable(): void
-     */
-    public static function updateObservationContent(
-        string $builderProjectRoot,
-        string $databaseRelativePath,
-        string $observationId,
-        string $newContent,
-        int $newRevision,
-    ): callable {
-        self::assertOwnedFixtureRoot($builderProjectRoot);
-
-        $databasePath = $builderProjectRoot.'/'.ltrim($databaseRelativePath, '/');
-        if (!is_file($databasePath) || is_link($databasePath)) {
-            throw new \RuntimeException(\sprintf('Owned fixture OM database missing or symlinked: %s', $databasePath));
-        }
-
-        $originalBytes = file_get_contents($databasePath);
-        if (false === $originalBytes) {
-            throw new \RuntimeException('Unable to save owned fixture database.');
-        }
-
-        $pdo = new \PDO('sqlite:'.$databasePath);
-        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        $pdo->beginTransaction();
-        try {
-            $select = $pdo->prepare('SELECT content, content_hash FROM om_observation WHERE observation_id = :id');
-            $select->execute(['id' => $observationId]);
-            $row = $select->fetch(\PDO::FETCH_ASSOC);
-            if (!\is_array($row) || !isset($row['content'], $row['content_hash'])) {
-                throw new \RuntimeException(\sprintf('Observation %s not found in owned fixture database.', $observationId));
-            }
-
-            $revisionRow = $pdo->query('SELECT revision FROM om_source_revision WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
-            if (!\is_array($revisionRow) || !isset($revisionRow['revision'])) {
-                throw new \RuntimeException('Owned fixture OM database is missing om_source_revision.');
-            }
-            $update = $pdo->prepare('UPDATE om_observation SET content = :content, content_hash = :hash WHERE observation_id = :id');
-            $update->execute([
-                'content' => $newContent,
-                'hash' => hash('sha256', $newContent),
-                'id' => $observationId,
-            ]);
-            $pdo->prepare('UPDATE om_source_revision SET revision = :revision WHERE id = 1')
-                ->execute(['revision' => $newRevision]);
-            $pdo->prepare('INSERT INTO om_source_change (kind, source_id, revision) VALUES (?, ?, ?)
-                ON CONFLICT(kind, source_id) DO UPDATE SET revision = excluded.revision')
-                ->execute(['observation', $observationId, $newRevision]);
-            $pdo->commit();
-        } catch (\Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            throw $exception;
-        }
-
-        $pdo = null;
-
-        return static function () use ($databasePath, $builderProjectRoot, $originalBytes): void {
-            self::assertOwnedFixtureRoot($builderProjectRoot);
-            if (is_link($databasePath)) {
-                throw new \RuntimeException('Refusing to restore a symlinked fixture database.');
-            }
-
-            // Atomic replacement also restores SQLite headers and the original
-            // journal rows; reversing SQL alone cannot restore a byte hash.
-            new Filesystem()->dumpFile($databasePath, $originalBytes);
-        };
     }
 
     private static function assertOwnedFixtureRoot(string $builderProjectRoot): void

@@ -82,7 +82,7 @@ final class MemoryRecall
             $totalMatches = \count($obsMatches) + \count($refMatches);
 
             if (0 === $totalMatches) {
-                return $this->error(MemoryErrorCode::NotFound, 'No observation or reflection with that id in the selected project.');
+                return $this->error(MemoryErrorCode::NotFound, 'No observation or reflection with that id in the selected project. It may have been removed with a deleted session.');
             }
 
             if ($totalMatches > 1) {
