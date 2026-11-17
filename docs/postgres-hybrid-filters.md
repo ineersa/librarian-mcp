@@ -23,19 +23,25 @@ Focused monorepo PR opened against `symfony/ai` `main`:
 
 No reviewers were requested manually; GitHub applied the upstream repository's CODEOWNERS review requests automatically. Waiting on upstream review/merge/release before Librarian can drop the temporary pin.
 
-## Temporary reviewed pin still in use
+## Main-based development dependency
 
-Until an upstream release includes the change, this checkout pins a reviewed fork tag through Composer:
+At the owner's request, the actual application consumes a development branch combining upstream main, GIN and stored text vectors, retaining parameterized hybrid filtering:
 
 - Temporary package fork: https://github.com/ineersa/ai-postgres-store
-- Branch: `feat/hybrid-where-params`
-- Commit: `790eaadc969c11db0a8d531d3e02443d249d71ec`
-- Annotated tag / constraint: `0.15.0.1`
+- Branch: `development`; Composer constraint: **`dev-development`**, exact revision in `composer.lock`
+- Upstream split-package main merged into the branch: `da91fb8` (the package code corresponding to monorepo `999d5fbe`)
 - VCS repository: `https://github.com/ineersa/ai-postgres-store.git`
-- Global `minimum-stability` remains `stable`
+- Global `minimum-stability` remains `stable`; only this package uses a development constraint
+- Required runtime AI platform/store and Generic/Voyage bridges use package-scoped `~1.0.0-BETA1` allowances; Mate remains 0.15
 - No `vendor/` edits and no duplicated Store class in application code
 
-The temporary fork change matches the monorepo PR behavior: when `where` is present it is AND-combined in parentheses with the hybrid lexical clause, and `params` are merged into the bound parameter map before execute.
+This replaces the mistakenly deployed 0.15 backport. The branch uses **upstream main's mixed-hybrid semantics**, including documents with no keyword match, and its `Metric`/constructor dimensions/setup API. Filtering remains parameterized: optional `where` is AND-combined with other applicable conditions and bound `params` are included before execute. The old mandatory lexical gate is not restored; it applies only to keyword-only queries. Date predicates still run before candidate limiting.
+
+The fork's `setup()` creates/backfills a stored generated `search_tsv` using `to_tsvector(lang, COALESCE(metadata->>'_text', ''))` and creates a matching `*_search_tsv_gin` index. Queries read that column. Existing generation tables must receive this schema upgrade before application deployment; normal `IndexStoreFactory` provisioning handles new generations. Adding the column takes an exclusive lock and backfills rows. Changing its language or upgrading a prior non-`COALESCE` representation requires rebuilding the column; `IF NOT EXISTS` does not rewrite it. Prior expression GIN indexes are not automatically dropped by the package. See [main-based performance results](postgres-main-live-results.md).
+
+The owner-requested deferred-fetch experiment was reverted at `d03d231` after [live comparison](postgres-main-live-results.md#deferred-document-fetching-experiment) showed no clear latency improvement; its feature branch was removed. Development retains stored vectors and GIN, with the same package sources as `399c78f`.
+
+The stored-vector and GIN changes are consolidated in [Symfony AI PR #2964](https://github.com/symfony/ai/pull/2964), as one signed commit `dba6b38f` on upstream main; the separate PR #2967 was closed as superseded. The combined PR does not include Librarian's date-filter patch or the reverted deferred-fetch experiment. The application continues to use the fork's `dev-development` branch.
 
 Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreatePullRequest` permission denied), which matches the split-repo contribution guidance above.
 
@@ -72,4 +78,4 @@ Direct PR creation against `symfony/ai-postgres-store` remains blocked (`CreateP
 - HybridSearch maps embedding failures to `QUERY_EMBEDDING_FAILED`, retrieval/rerank failures to `QUERY_RETRIEVAL_FAILED`, and native `TimeoutExceptionInterface` (including wrapped previous chains) to `QUERY_TIMEOUT`
 - Provider bodies are not chained
 
-Existing indexed `occurred_at` numeric metadata is reused; no schema migration or reindex.
+Date filtering reuses existing indexed `occurred_at` numeric metadata. The stored-vector follow-up changes only Librarian-owned store schema through the package's setup, not Doctrine metadata or source databases; no embedding rebuild is needed.

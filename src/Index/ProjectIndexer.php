@@ -92,11 +92,8 @@ final class ProjectIndexer
         } catch (ProjectSourceException $exception) {
             throw IndexException::sanitized($exception->getMessage(), $exception);
         }
-        if (null === $project->databasePath || '' === $project->databasePath) {
-            throw IndexException::sanitized('Project has no observational memory database path.');
-        }
 
-        $snapshot = $this->sourceReader->snapshot($project->databasePath);
+        $snapshot = $this->sourceReader->snapshot($projectId);
         $generation = $this->selectOrCreateGeneration($project, $snapshot);
         if (null === $generation->scanRevision) {
             if ($generation->committedRevision === $snapshot->revision) {
@@ -118,7 +115,7 @@ final class ProjectIndexer
 
         $store = $this->storeFactory->forGeneration($projectId, (int) $generation->id, initialize: false);
         if (null !== $generation->sourceCursor) {
-            $this->processSourceBatch($generation, $snapshot, $store);
+            $this->processSourceBatch($generation, $store);
 
             return true;
         }
@@ -157,10 +154,10 @@ final class ProjectIndexer
         return $generation;
     }
 
-    private function processSourceBatch(IndexGeneration $generation, SourceSnapshot $snapshot, Store $store): void
+    private function processSourceBatch(IndexGeneration $generation, Store $store): void
     {
         $generationId = (int) $generation->id;
-        $batch = $this->sourceReader->fetchBatch($snapshot->path, $generation->sourceCursor, self::SOURCE_BATCH_SIZE);
+        $batch = $this->sourceReader->fetchBatch((int) $generation->project->id, $generation->sourceCursor, self::SOURCE_BATCH_SIZE);
         $parents = $this->memoryRepository->findParents($generationId, array_map(static fn (CanonicalMemory $memory): string => $memory->sourceId, $batch));
         $byKey = [];
         foreach ($parents as $parent) {
@@ -270,7 +267,7 @@ final class ProjectIndexer
 
     private function finishRound(IndexGeneration $generation): bool
     {
-        $snapshot = $this->sourceReader->snapshot($generation->sourcePath);
+        $snapshot = $this->sourceReader->snapshot((int) $generation->project->id);
         if ($snapshot->identity !== $generation->sourceIdentity) {
             return false;
         }
@@ -314,8 +311,8 @@ final class ProjectIndexer
         $generation = $this->entityManager->find(IndexGeneration::class, (int) $expected->id, LockMode::PESSIMISTIC_WRITE);
         if (null === $project || null === $generation
             || $this->rootBinding($project) !== $expected->rootBinding
-            || $project->databasePath !== $expected->sourcePath
-            || $this->sourceReader->identityFor($expected->sourcePath) !== $expected->sourceIdentity) {
+            || CanonicalSourceReader::SOURCE_PATH !== $expected->sourcePath
+            || $this->sourceReader->identityFor((int) $project->id) !== $expected->sourceIdentity) {
             throw IndexException::sanitized('Project source rebinding invalidated this index checkpoint.');
         }
 

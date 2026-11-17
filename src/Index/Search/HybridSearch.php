@@ -67,8 +67,12 @@ final readonly class HybridSearch
         } catch (ProjectSourceException $exception) {
             throw IndexException::sanitized($exception->getMessage(), $exception);
         }
-        if ($generation->rootBinding !== $root || $generation->sourcePath !== $project->databasePath
-            || $this->sourceReader->identityFor($generation->sourcePath) !== $generation->sourceIdentity) {
+        $sourceBound = CanonicalSourceReader::SOURCE_PATH === $generation->sourcePath
+            ? $this->sourceReader->identityFor($projectId) === $generation->sourceIdentity
+            // Transitional: an om.sqlite-bound generation stays searchable until its Postgres
+            // replacement activates; callers re-verify hits by canonical content signature.
+            : $generation->sourcePath === $project->databasePath;
+        if ($generation->rootBinding !== $root || !$sourceBound) {
             throw IndexException::sanitized('The active index belongs to an earlier source binding. Wait for indexing to complete.');
         }
 

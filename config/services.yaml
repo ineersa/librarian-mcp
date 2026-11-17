@@ -7,6 +7,7 @@
 imports:
     - { resource: services/indexing_stores.yaml }
     - { resource: services/indexing_domain.yaml }
+    - { resource: services/observational_memory.yaml }
 
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
@@ -38,6 +39,15 @@ services:
             - '../src/Scheduler/'
             - '../src/Project/ProjectDiscoveryResult.php'
             - '../src/Project/ProjectSourceException.php'
+            # Per-call OM value objects and model tool handlers are built by pipelines.
+            - '../src/ObservationalMemory/MemorySettings.php'
+            - '../src/ObservationalMemory/Agent/MemoryAgentTool.php'
+            - '../src/ObservationalMemory/Agent/MemoryAgentToolbox.php'
+            - '../src/ObservationalMemory/Observer/SessionEventDTO.php'
+            - '../src/ObservationalMemory/Observer/*ToolHandler.php'
+            - '../src/ObservationalMemory/Compaction/*ToolHandler.php'
+            - '../src/ObservationalMemory/Compaction/RequestLocalObservationIdMap.php'
+            - '../src/ObservationalMemory/**/*Exception.php'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

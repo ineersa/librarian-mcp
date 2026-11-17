@@ -44,8 +44,8 @@ services:
       - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
       - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
       - type: bind
-        source: '${PROJECTS_HOST_PATH:-.}'
-        target: /projects
+        source: '${PROJECTS_HOST_PATH:-/tmp}'
+        target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: false
         bind:
           create_host_path: false
@@ -89,8 +89,8 @@ services:
     volumes:
       - ./:/app
       - type: bind
-        source: '${PROJECTS_HOST_PATH:-.}'
-        target: /projects
+        source: '${PROJECTS_HOST_PATH:-/tmp}'
+        target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: false
         bind:
           create_host_path: false

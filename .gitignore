@@ -42,3 +42,6 @@
 .bash_history
 callgraph.json
 callgraph.html
+
+# Claude Code local overrides
+/.claude/settings.local.json

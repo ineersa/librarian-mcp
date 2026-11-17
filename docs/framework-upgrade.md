@@ -13,10 +13,13 @@ On 2026-11-12 the owner explicitly approved **Symfony 8.2.0-BETA1** because stab
 | EasyAdmin | 5.10.0 | Admin UI |
 | Doctrine ORM | 3.7.6 | PostgreSQL application metadata |
 | Stimulus / Turbo | 3.7.0 | UX 2.x conflicts with Symfony 8.2 AssetMapper |
-| Symfony AI Postgres store | 0.15.0 | Native generation-scoped document storage |
+| Symfony AI Postgres store | `dev-development` (revision in `composer.lock`) | Owner-requested main + GIN + stored-tsvector branch; native generation-scoped storage |
+| AI platform/store + Generic/Voyage bridges | 1.0.0-BETA1 | Required by the main-based store; package-scoped `~1.0.0-BETA1` allowances |
 | Castor / Symfony TUI | 1.9.1 / 8.1.11 | Castor does not implement the new 8.2 terminal interface |
 
 Explicit core constraints allow required prerelease transitive dependencies without relaxing global stability. `extra.symfony.require` stays scoped to 8.2. The TUI pin is tooling-only, not a framework downgrade. `composer.lock` records the exact approved selections; dependency updates require review.
+
+The AI runtime rows reflect the owner's 2026-11-16 request to install the main-based Postgres development branch in the actual application. Mate, MCP and Symfony framework selections did not change. See [store dependency provenance](postgres-hybrid-filters.md).
 
 ## Active integrations
 

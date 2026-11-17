@@ -36,6 +36,8 @@ Associative maps merge recursively; lists/scalars/null replace. Missing optional
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
 - Enter an absolute directory path visible to the Librarian service, e.g. `/projects/my-project`. There is no directory picker or security root allowlist for this local single-admin utility.
 
+Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory. The OM database is **optional**: Librarian owns memory in PostgreSQL (plan 09) and only reads `om.sqlite` as a legacy source for the transition import. A missing file is normal; a present but unreadable or unsupported file is reported as a source issue and its import is skipped, without blocking readiness or indexing.
+
 Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
 
 ## Derived indexing (plan 04)
@@ -69,7 +71,7 @@ Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `Callb
 
 ## Docker source mounts
 
-`PROJECTS_HOST_PATH` defaults to this checkout (`.`) and is bound read-write at `/projects` in development. Production uses `PROJECTS_CONTAINER_PATH` for the target (default `/projects`); setting it to the host absolute path lets that same path work in the registration form. Web and Messenger consumer need identical source mounts/env. SQLite connections remain `mode=ro`: the writable mount lets SQLite create/manage WAL/SHM sidecars when absent, not write source tables. Source journals must not be modified. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack; OM database directories there also need writable mounts. Production consumer service name is `messenger` (not `worker`).
+`PROJECTS_HOST_PATH` is bound read-write at `PROJECTS_CONTAINER_PATH` in development and production (defaults `/tmp` → `/projects`, which only keep a fresh checkout bootable). Clients send host paths in `X-Librarian-Project` and Librarian resolves them as-is, so set both to the same absolute host path: in `.env.local` for dev (Castor passes it to Compose) or `.env.prod.local` for prod. `HATFIELD_USER_HOME` is set the same way. Web and Messenger consumer need identical source mounts/env. SQLite connections remain `mode=ro`: the writable mount lets SQLite create/manage WAL/SHM sidecars when absent, not write source tables. Source journals must not be modified. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack; OM database directories there also need writable mounts. Production consumer service name is `messenger` (not `worker`).
 
 EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry so the public Tailwind reset stays out of admin. Login uses EasyAdmin's built-in dark template.
 

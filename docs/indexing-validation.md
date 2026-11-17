@@ -1,5 +1,11 @@
 # Indexing validation
 
+## Live PostgreSQL hybrid performance follow-up — 2026-11-16
+
+The owner-authorized agent-core experiment on production port 8093 measured **27,109 chunks** before/after a temporary matching GIN index. Median SQL execution improved from **348.364 to 0.585 ms** for `CodeRankEmbed`, **365.772 to 33.141 ms** for `project`, and **444.311 to 175.045 ms** for the full OpenCode/token-usage question. Query plans changed from parallel sequential scans to GIN bitmap scans. These are warm-cache database timings with a fixed existing embedding, not end-to-end MCP latency or a quality evaluation. The temporary index was removed and cleanup verified; no permanent schema/code change was made. See [full method, measurements, limitations, and proposed store-level implementation](postgres-hybrid-performance.md).
+
+## Original PostgreSQL replacement validation
+
 Validated on 2026-11-13 after switching to the unmodified Symfony AI Postgres store **0.15.0**, PostgreSQL **17** + pgvector, and a shared Doctrine/store connection. See [indexing-design.md](indexing-design.md).
 
 ## Checks performed

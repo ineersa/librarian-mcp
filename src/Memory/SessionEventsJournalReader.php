@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Memory;
 
+use App\ObservationalMemory\Observer\SessionEventDTO;
+
 /**
  * Read-only hydration of canonical Hatfield session events.jsonl journals.
  *
@@ -191,6 +193,86 @@ final class SessionEventsJournalReader
                 if (\count($events) === \count($wanted)) {
                     break;
                 }
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        ksort($events);
+
+        return array_values($events);
+    }
+
+    /**
+     * Read-only range read for the Observer (port of Hatfield SessionEventReader::readRange).
+     *
+     * Streams the whole journal without recall's scan cap because live journals can be
+     * 50-100 MB; only events inside [startSeq, endSeq] are decoded and kept.
+     *
+     * @return list<SessionEventDTO>
+     *
+     * @throws \RuntimeException when the journal is missing, unreadable, or malformed in range
+     */
+    public function readRange(string $sessionsPath, string $sessionId, int $startSeq, int $endSeq): array
+    {
+        if ($startSeq < 1 || $endSeq < $startSeq) {
+            throw new \InvalidArgumentException('Journal range requires 1 <= start_seq <= end_seq.');
+        }
+        $pathOrError = $this->resolveJournalPath($sessionsPath, $sessionId);
+        if (!isset($pathOrError['path'])) {
+            throw new \RuntimeException($pathOrError['message']);
+        }
+
+        $handle = @fopen($pathOrError['path'], 'rb');
+        if (false === $handle) {
+            throw new \RuntimeException('Session event journal is unreadable.');
+        }
+
+        $events = [];
+        try {
+            while (false !== ($line = fgets($handle))) {
+                // Cheap pre-filter: skip lines of other runs without decoding large payloads.
+                if (!str_contains($line, $sessionId)) {
+                    continue;
+                }
+                $line = trim($line);
+                if ('' === $line) {
+                    continue;
+                }
+                try {
+                    $decoded = json_decode($line, true, 512, \JSON_THROW_ON_ERROR);
+                } catch (\JsonException $e) {
+                    throw new \RuntimeException('Session event journal contains corrupt JSON.', previous: $e);
+                }
+                if (!\is_array($decoded) || ($decoded['run_id'] ?? null) !== $sessionId) {
+                    continue;
+                }
+                $seq = $decoded['seq'] ?? null;
+                if (!\is_int($seq)) {
+                    continue;
+                }
+                // Journals are append-only with ascending seq; stop past the wanted window.
+                if ($seq > $endSeq) {
+                    break;
+                }
+                if ($seq < $startSeq) {
+                    continue;
+                }
+                $type = $decoded['type'] ?? null;
+                $payload = $decoded['payload'] ?? null;
+                $createdAt = $decoded['ts'] ?? ($decoded['created_at'] ?? '');
+                if (!\is_string($type) || '' === $type || !\is_array($payload) || !\is_string($createdAt)) {
+                    throw new \RuntimeException('Session event journal contains an unexpected event shape.');
+                }
+                $turnNo = $decoded['turn_no'] ?? 0;
+                $events[$seq] = new SessionEventDTO(
+                    runId: $sessionId,
+                    seq: $seq,
+                    turnNo: \is_int($turnNo) ? $turnNo : 0,
+                    type: $type,
+                    payload: $payload,
+                    createdAt: $createdAt,
+                );
             }
         } finally {
             fclose($handle);

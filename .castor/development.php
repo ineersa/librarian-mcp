@@ -276,7 +276,14 @@ function ensureBrowserPostgresService(): void
 /** @return list<string> */
 function stackCommand(string $mode): array
 {
-    return ['docker', 'compose', '--project-name', stackProject($mode), '-f', 'compose.yaml', '-f', 'compose.override.yaml', ...('browser' === $mode ? ['-f', 'compose.browser.yaml'] : (is_file(\dirname(__DIR__).'/compose.sources.yaml') ? ['-f', 'compose.sources.yaml'] : []))];
+    // Like production: compose interpolates source mounts from .env plus the private .env.local.
+    // The browser stack replaces those mounts with synthetic sources and never reads .env.local.
+    $envFiles = ['--env-file', '.env'];
+    if ('dev' === $mode && is_file(\dirname(__DIR__).'/.env.local')) {
+        $envFiles = [...$envFiles, '--env-file', '.env.local'];
+    }
+
+    return ['docker', 'compose', ...$envFiles, '--project-name', stackProject($mode), '-f', 'compose.yaml', '-f', 'compose.override.yaml', ...('browser' === $mode ? ['-f', 'compose.browser.yaml'] : (is_file(\dirname(__DIR__).'/compose.sources.yaml') ? ['-f', 'compose.sources.yaml'] : []))];
 }
 
 /** @return array<string, string> */

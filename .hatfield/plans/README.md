@@ -32,7 +32,9 @@ Stock Postgres hybrid uses weighted similarity + `ts_rank` (not BM25/RRF). Date 
 | 06 | [Remaining production MCP/integration proof](06-production-and-validation.md) | 05 | **TODO** — preserve existing deployment; prove both tools live |
 | 07 | [Hatfield OM Librarian bridge and semantic removal](07-hatfield-integration.md) | 05, 06 | **TODO** — final Hatfield change/review |
 
-[Deferred backups](90-deferred-backups-and-global-search.md) remain separate. Cross-project/global search in that historical filename has been withdrawn.
+| 09 | [Librarian-owned observational memory](09-librarian-owned-observational-memory.md) | 05, 06 | **DRAFT** — Librarian becomes OM owner for Hatfield and Claude Code; supersedes the "Librarian never observes or reflects" boundary below once approved |
+
+[Deferred backups](90-deferred-backups-and-global-search.md) remain separate; plan 09 schedules them between its Librarian phase and the Hatfield thin-client phase. Cross-project/global search in that historical filename has been withdrawn.
 
 ## Shared invariants
 

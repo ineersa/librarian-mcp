@@ -58,15 +58,13 @@ final readonly class MemorySearch
         if (null === $generation || null === $generation->id || !$generation->state->isUsable() || null === $generation->committedRevision) {
             throw new MemoryToolException(MemoryErrorCode::IndexUnavailable, 'No committed searchable index is active for this project yet.');
         }
-        if (null === $project->databasePath) {
-            throw new MemoryToolException(MemoryErrorCode::SourceUnavailable, 'The registered project has no discovered OM source.');
-        }
         try {
-            $snapshot = $this->sourceReader->snapshot($project->databasePath);
+            $snapshot = $this->sourceReader->snapshot($projectId);
         } catch (IndexException) {
             throw new MemoryToolException(MemoryErrorCode::SourceUnavailable, 'The registered OM source cannot currently be read.');
         }
-        if ($snapshot->revision < $generation->committedRevision) {
+        // A transitional om.sqlite-bound generation carries OM's revision counter; skip that comparison.
+        if ($generation->sourceIdentity === $snapshot->identity && $snapshot->revision < $generation->committedRevision) {
             throw new MemoryToolException(MemoryErrorCode::IndexUnavailable, 'The committed index is ahead of the current source revision; wait for reconciliation.');
         }
 
@@ -96,11 +94,11 @@ final readonly class MemorySearch
                         $ids[] = $hit['source_id'];
                     }
                 }
-                foreach ($this->sourceReader->fetchByIds($project->databasePath, $kind, $ids) as $memory) {
+                foreach ($this->sourceReader->fetchByIds($projectId, $kind, $ids) as $memory) {
                     $canonical[$memory->kind->value."\0".$memory->sourceId] = $memory;
                 }
             }
-            $latest = $this->sourceReader->snapshot($project->databasePath);
+            $latest = $this->sourceReader->snapshot($projectId);
         } catch (IndexException) {
             throw new MemoryToolException(MemoryErrorCode::SourceUnavailable, 'Canonical search results cannot currently be read.');
         }

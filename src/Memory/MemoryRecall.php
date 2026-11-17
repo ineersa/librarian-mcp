@@ -6,12 +6,16 @@ namespace App\Memory;
 
 use App\Entity\Project;
 use App\Index\Source\MemoryKind;
-use App\Project\OmSourceReader;
-use App\Project\ProjectSourceException;
+use App\ObservationalMemory\Storage\MemoryGenerationRepository;
+use App\ObservationalMemory\Storage\ObservationRepository;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception as DbalException;
+use Doctrine\DBAL\ParameterType;
 use Psr\Clock\ClockInterface;
 
 /**
- * Canonical read-only OM recall against a registered project's discovered sources.
+ * Canonical OM recall against Librarian-owned memory tables plus session journals.
  *
  * Matches Hatfield OM recall payload/error semantics for observations and
  * reflections, including source_refs and events.jsonl evidence hydration.
@@ -21,7 +25,6 @@ use Psr\Clock\ClockInterface;
 final class MemoryRecall
 {
     private const string ID_PATTERN = '/^[a-f0-9]{12,64}$/';
-    private const int PREFIX_LOOKUP_LIMIT = 51;
     private const int AMBIGUITY_LIST_LIMIT = 50;
     private const int SUPPORT_CHUNK_SIZE = 400;
     private const int MAX_SUPPORT_IDS = 10_000;
@@ -29,7 +32,9 @@ final class MemoryRecall
     private const int DEFAULT_DEADLINE_SECONDS = 30;
 
     public function __construct(
-        private readonly OmSourceReader $omSourceReader,
+        private readonly ObservationRepository $observations,
+        private readonly MemoryGenerationRepository $generations,
+        private readonly Connection $connection,
         private readonly SessionEventsJournalReader $journalReader,
         private readonly ClockInterface $clock,
     ) {
@@ -54,298 +59,171 @@ final class MemoryRecall
             return $interrupt;
         }
 
-        $databasePath = $project->databasePath;
+        $projectId = $project->id;
         $sessionsPath = $project->sessionsPath;
-        if (!\is_string($databasePath) || '' === $databasePath) {
-            return $this->error(MemoryErrorCode::SourceUnavailable, 'Registered project has no discovered observational memory database.');
+        if (null === $projectId) {
+            return $this->error(MemoryErrorCode::SourceUnavailable, 'Registered project is not persisted.');
         }
         if (!\is_string($sessionsPath) || '' === $sessionsPath) {
             return $this->error(MemoryErrorCode::SessionsUnavailable, 'Registered project has no discovered session journal root.');
         }
 
         try {
-            $pdo = $this->omSourceReader->openReadonlyConnection($databasePath);
-        } catch (ProjectSourceException $exception) {
-            return $this->error(MemoryErrorCode::SourceUnavailable, $exception->getMessage());
-        }
+            if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before memory lookup.'))) {
+                return $interrupt;
+            }
 
-        try {
-            $pdo->beginTransaction();
-            try {
-                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before memory lookup.'))) {
-                    return $interrupt;
-                }
+            $obsMatches = $this->observations->findObservationsByIdPrefix($projectId, $id);
+            if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection lookup.'))) {
+                return $interrupt;
+            }
+            $refMatches = $this->generations->findReflectionsByIdPrefix($projectId, $id);
 
-                try {
-                    $this->omSourceReader->validateSchema($pdo);
-                } catch (ProjectSourceException $exception) {
-                    return $this->error(MemoryErrorCode::SourceUnavailable, $exception->getMessage());
-                }
+            $totalMatches = \count($obsMatches) + \count($refMatches);
 
-                $obsMatches = $this->findObservationsByIdPrefix($pdo, $id);
-                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection lookup.'))) {
-                    return $interrupt;
-                }
-                $refMatches = $this->findReflectionsByIdPrefix($pdo, $id);
+            if (0 === $totalMatches) {
+                return $this->error(MemoryErrorCode::NotFound, 'No observation or reflection with that id in the selected project.');
+            }
 
-                $totalMatches = \count($obsMatches) + \count($refMatches);
-
-                if (0 === $totalMatches) {
-                    return $this->error(MemoryErrorCode::NotFound, 'No observation or reflection with that id in the selected project.');
-                }
-
-                if ($totalMatches > 1) {
-                    $candidates = [];
-                    foreach ($obsMatches as $observation) {
-                        if (\count($candidates) >= self::AMBIGUITY_LIST_LIMIT) {
-                            break;
-                        }
-                        $candidates[] = [
-                            'id' => $observation['observation_id'],
-                            'content' => $observation['content'],
-                        ];
+            if ($totalMatches > 1) {
+                $candidates = [];
+                foreach ($obsMatches as $observation) {
+                    if (\count($candidates) >= self::AMBIGUITY_LIST_LIMIT) {
+                        break;
                     }
-                    foreach ($refMatches as $reflection) {
-                        if (\count($candidates) >= self::AMBIGUITY_LIST_LIMIT) {
-                            break;
-                        }
-                        $candidates[] = [
-                            'id' => $reflection['reflection_id'],
-                            'content' => $reflection['content'],
-                        ];
-                    }
-
-                    return $this->ambiguousId(
-                        $candidates,
-                        $totalMatches > self::AMBIGUITY_LIST_LIMIT,
-                    );
-                }
-
-                if (1 === \count($obsMatches)) {
-                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before observation event hydration.'))) {
-                        return $interrupt;
-                    }
-
-                    $observation = $obsMatches[0];
-                    $targetRunId = $observation['run_id'];
-                    $refs = $this->sourceRefsForRun(
-                        $targetRunId,
-                        $this->decodeSourceRefs($observation['source_refs_json']),
-                    );
-                    if (\count($refs) > self::MAX_SOURCE_REFS) {
-                        return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Observation source refs exceeded the bounded recall limit.');
-                    }
-
-                    $pendingEvents = [
-                        'kind' => MemoryKind::Observation,
+                    $candidates[] = [
                         'id' => $observation['observation_id'],
                         'content' => $observation['content'],
-                        'timestamp' => $observation['timestamp'],
-                        'importance' => $observation['relevance'],
-                        'refs' => $refs,
-                        'support_ids' => null,
                     ];
-                } else {
-                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
-                        return $interrupt;
+                }
+                foreach ($refMatches as $reflection) {
+                    if (\count($candidates) >= self::AMBIGUITY_LIST_LIMIT) {
+                        break;
                     }
-
-                    $reflection = $refMatches[0];
-                    $targetRunId = $reflection['run_id'];
-                    $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
-                    if (\count($requestedSupportIds) > self::MAX_SUPPORT_IDS) {
-                        return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Supporting observation ids exceeded the bounded recall limit.');
-                    }
-                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
-                        return $interrupt;
-                    }
-
-                    $supportReferences = $this->supportReferences($pdo, $targetRunId, $requestedSupportIds, $deadline);
-                    if ($this->isFailureResult($supportReferences)) {
-                        return $supportReferences;
-                    }
-
-                    /** @var array<string, string> $supportReferences */
-                    $supportIds = $this->supportIdsForRun($supportReferences, $requestedSupportIds);
-                    $refs = [];
-                    foreach ($supportIds as $supportId) {
-                        if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
-                            return $interrupt;
-                        }
-                        foreach ($this->sourceRefsForRun(
-                            $targetRunId,
-                            $this->decodeSourceRefs($supportReferences[$supportId]),
-                        ) as $ref) {
-                            $key = $ref['run_id'].':'.$ref['seq'];
-                            $refs[$key] = $ref;
-                            if (\count($refs) > self::MAX_SOURCE_REFS) {
-                                return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Reflection source refs exceeded the bounded recall limit.');
-                            }
-                        }
-                    }
-                    $refs = array_values($refs);
-                    usort($refs, static function (array $a, array $b): int {
-                        $byRun = strcmp($a['run_id'], $b['run_id']);
-                        if (0 !== $byRun) {
-                            return $byRun;
-                        }
-
-                        return $a['seq'] <=> $b['seq'];
-                    });
-
-                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection event hydration.'))) {
-                        return $interrupt;
-                    }
-
-                    $pendingEvents = [
-                        'kind' => MemoryKind::Reflection,
+                    $candidates[] = [
                         'id' => $reflection['reflection_id'],
                         'content' => $reflection['content'],
-                        'timestamp' => null,
-                        'importance' => null,
-                        'refs' => $refs,
-                        'support_ids' => $supportIds,
                     ];
                 }
-            } catch (\PDOException) {
-                return $this->error(MemoryErrorCode::SourceUnavailable, 'Unable to read observational memory database snapshot.');
-            } finally {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
+
+                return $this->ambiguousId(
+                    $candidates,
+                    $totalMatches > self::AMBIGUITY_LIST_LIMIT,
+                );
+            }
+
+            if (1 === \count($obsMatches)) {
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before observation event hydration.'))) {
+                    return $interrupt;
                 }
-            }
 
-            $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $pendingEvents['refs'], $deadline);
-            if ($this->isFailureResult($events)) {
-                return $events;
-            }
+                $observation = $obsMatches[0];
+                $targetRunId = $observation['run_id'];
+                $refs = $this->sourceRefsForRun(
+                    $targetRunId,
+                    $this->decodeSourceRefs($observation['source_refs_json']),
+                );
+                if (\count($refs) > self::MAX_SOURCE_REFS) {
+                    return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Observation source refs exceeded the bounded recall limit.');
+                }
 
-            $result = [
-                'ok' => true,
-                'kind' => $pendingEvents['kind']->value,
-                'session_id' => $targetRunId,
-                'id' => $pendingEvents['id'],
-                'content' => $pendingEvents['content'],
-                'source_refs' => $pendingEvents['refs'],
-                'events' => $events,
-            ];
-            if (MemoryKind::Observation === $pendingEvents['kind']) {
-                $result['timestamp'] = $pendingEvents['timestamp'];
-                $result['importance'] = $pendingEvents['importance'];
+                $pendingEvents = [
+                    'kind' => MemoryKind::Observation,
+                    'id' => $observation['observation_id'],
+                    'content' => $observation['content'],
+                    'timestamp' => $observation['timestamp'],
+                    'importance' => $observation['relevance'],
+                    'refs' => $refs,
+                    'support_ids' => null,
+                ];
             } else {
-                $result['supporting_observation_ids'] = $pendingEvents['support_ids'];
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
+                    return $interrupt;
+                }
+
+                $reflection = $refMatches[0];
+                $targetRunId = $reflection['run_id'];
+                $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
+                if (\count($requestedSupportIds) > self::MAX_SUPPORT_IDS) {
+                    return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Supporting observation ids exceeded the bounded recall limit.');
+                }
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
+                    return $interrupt;
+                }
+
+                $supportReferences = $this->supportReferences($reflection['session_pk'], $requestedSupportIds, $deadline);
+                if ($this->isFailureResult($supportReferences)) {
+                    return $supportReferences;
+                }
+
+                /** @var array<string, string> $supportReferences */
+                $supportIds = $this->supportIdsForRun($supportReferences, $requestedSupportIds);
+                $refs = [];
+                foreach ($supportIds as $supportId) {
+                    if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
+                        return $interrupt;
+                    }
+                    foreach ($this->sourceRefsForRun(
+                        $targetRunId,
+                        $this->decodeSourceRefs($supportReferences[$supportId]),
+                    ) as $ref) {
+                        $key = $ref['run_id'].':'.$ref['seq'];
+                        $refs[$key] = $ref;
+                        if (\count($refs) > self::MAX_SOURCE_REFS) {
+                            return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Reflection source refs exceeded the bounded recall limit.');
+                        }
+                    }
+                }
+                $refs = array_values($refs);
+                usort($refs, static function (array $a, array $b): int {
+                    $byRun = strcmp($a['run_id'], $b['run_id']);
+                    if (0 !== $byRun) {
+                        return $byRun;
+                    }
+
+                    return $a['seq'] <=> $b['seq'];
+                });
+
+                if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out before reflection event hydration.'))) {
+                    return $interrupt;
+                }
+
+                $pendingEvents = [
+                    'kind' => MemoryKind::Reflection,
+                    'id' => $reflection['reflection_id'],
+                    'content' => $reflection['content'],
+                    'timestamp' => null,
+                    'importance' => null,
+                    'refs' => $refs,
+                    'support_ids' => $supportIds,
+                ];
             }
-
-            return $result;
-        } finally {
-            $pdo = null;
-        }
-    }
-
-    /**
-     * @return list<array{
-     *   observation_id: string,
-     *   run_id: string,
-     *   content: string,
-     *   relevance: string,
-     *   timestamp: string,
-     *   source_refs_json: string
-     * }>
-     */
-    private function findObservationsByIdPrefix(\PDO $pdo, string $idPrefix): array
-    {
-        if (64 === \strlen($idPrefix)) {
-            $statement = $pdo->prepare(
-                'SELECT observation_id, run_id, content, relevance, timestamp, source_refs_json
-                 FROM om_observation
-                 WHERE observation_id = :observation_id
-                 LIMIT 1',
-            );
-            $statement->bindValue(':observation_id', $idPrefix);
-            $statement->execute();
-            $row = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (false === $row) {
-                return [];
-            }
-            if (!\is_array($row)) {
-                throw new \PDOException('Unexpected observation row shape.');
-            }
-
-            return [$this->mapObservationRow($row)];
-        }
-
-        $statement = $pdo->prepare(
-            'SELECT observation_id, run_id, content, relevance, timestamp, source_refs_json
-             FROM om_observation
-             WHERE observation_id GLOB :id_prefix
-             ORDER BY observation_id ASC
-             LIMIT :limit',
-        );
-        $statement->bindValue(':id_prefix', $idPrefix.'*');
-        $statement->bindValue(':limit', self::PREFIX_LOOKUP_LIMIT, \PDO::PARAM_INT);
-        $statement->execute();
-
-        $out = [];
-        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
-            if (!\is_array($row)) {
-                throw new \PDOException('Unexpected observation row shape.');
-            }
-            $out[] = $this->mapObservationRow($row);
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return list<array{
-     *   reflection_id: string,
-     *   run_id: string,
-     *   content: string,
-     *   supporting_observation_ids_json: string
-     * }>
-     */
-    private function findReflectionsByIdPrefix(\PDO $pdo, string $idPrefix): array
-    {
-        if (64 === \strlen($idPrefix)) {
-            $statement = $pdo->prepare(
-                'SELECT reflection_id, run_id, content, supporting_observation_ids_json
-                 FROM om_reflection
-                 WHERE reflection_id = :reflection_id
-                 LIMIT 1',
-            );
-            $statement->bindValue(':reflection_id', $idPrefix);
-            $statement->execute();
-            $row = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (false === $row) {
-                return [];
-            }
-            if (!\is_array($row)) {
-                throw new \PDOException('Unexpected reflection row shape.');
-            }
-
-            return [$this->mapReflectionRow($row)];
+        } catch (\PDOException|DbalException) {
+            return $this->error(MemoryErrorCode::SourceUnavailable, 'Unable to read observational memory.');
         }
 
-        $statement = $pdo->prepare(
-            'SELECT reflection_id, run_id, content, supporting_observation_ids_json
-             FROM om_reflection
-             WHERE reflection_id GLOB :id_prefix
-             ORDER BY reflection_id ASC
-             LIMIT :limit',
-        );
-        $statement->bindValue(':id_prefix', $idPrefix.'*');
-        $statement->bindValue(':limit', self::PREFIX_LOOKUP_LIMIT, \PDO::PARAM_INT);
-        $statement->execute();
-
-        $out = [];
-        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
-            if (!\is_array($row)) {
-                throw new \PDOException('Unexpected reflection row shape.');
-            }
-            $out[] = $this->mapReflectionRow($row);
+        $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $pendingEvents['refs'], $deadline);
+        if ($this->isFailureResult($events)) {
+            return $events;
         }
 
-        return $out;
+        $result = [
+            'ok' => true,
+            'kind' => $pendingEvents['kind']->value,
+            'session_id' => $targetRunId,
+            'id' => $pendingEvents['id'],
+            'content' => $pendingEvents['content'],
+            'source_refs' => $pendingEvents['refs'],
+            'events' => $events,
+        ];
+        if (MemoryKind::Observation === $pendingEvents['kind']) {
+            $result['timestamp'] = $pendingEvents['timestamp'];
+            $result['importance'] = $pendingEvents['importance'];
+        } else {
+            $result['supporting_observation_ids'] = $pendingEvents['support_ids'];
+        }
+
+        return $result;
     }
 
     /**
@@ -353,7 +231,7 @@ final class MemoryRecall
      *
      * @return array<string, string>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function supportReferences(\PDO $pdo, string $runId, array $ids, \DateTimeImmutable $deadline): array
+    private function supportReferences(int $sessionPk, array $ids, \DateTimeImmutable $deadline): array
     {
         $references = [];
         foreach (array_chunk(array_values(array_unique($ids)), self::SUPPORT_CHUNK_SIZE) as $page) {
@@ -364,40 +242,19 @@ final class MemoryRecall
                 continue;
             }
 
-            $placeholders = [];
-            $params = ['run_id' => $runId];
-            foreach ($page as $index => $supportId) {
-                $name = 'id_'.$index;
-                $placeholders[] = ':'.$name;
-                $params[$name] = $supportId;
-            }
-
-            $sql = \sprintf(
-                'SELECT observation_id, source_refs_json
-                 FROM om_observation
-                 WHERE run_id = :run_id AND observation_id IN (%s)',
-                implode(', ', $placeholders),
+            $rows = $this->connection->fetchAllAssociative(
+                'SELECT observation_id, source_refs_json FROM om_observations
+                 WHERE memory_session_id = ? AND observation_id IN (?)',
+                [$sessionPk, $page],
+                [ParameterType::INTEGER, ArrayParameterType::STRING],
             );
-            $statement = $pdo->prepare($sql);
-            foreach ($params as $name => $value) {
-                $statement->bindValue(':'.$name, $value);
-            }
-            $statement->execute();
-
-            foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
-                if (!\is_array($row)) {
-                    throw new \PDOException('Unexpected supporting observation row shape.');
-                }
+            foreach ($rows as $row) {
                 $observationId = $row['observation_id'] ?? null;
                 $sourceRefsJson = $row['source_refs_json'] ?? null;
                 if (!\is_string($observationId) || '' === $observationId || !\is_string($sourceRefsJson)) {
                     throw new \PDOException('Supporting observation row is missing required columns.');
                 }
                 $references[$observationId] = $sourceRefsJson;
-            }
-
-            if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
-                return $interrupt;
             }
         }
 
@@ -448,80 +305,7 @@ final class MemoryRecall
     }
 
     /**
-     * @param array<string, mixed> $row
-     *
-     * @return array{
-     *   observation_id: string,
-     *   run_id: string,
-     *   content: string,
-     *   relevance: string,
-     *   timestamp: string,
-     *   source_refs_json: string
-     * }
-     */
-    private function mapObservationRow(array $row): array
-    {
-        $observationId = $row['observation_id'] ?? null;
-        $runId = $row['run_id'] ?? null;
-        $content = $row['content'] ?? null;
-        $relevance = $row['relevance'] ?? null;
-        $timestamp = $row['timestamp'] ?? null;
-        $sourceRefsJson = $row['source_refs_json'] ?? null;
-        if (
-            !\is_string($observationId) || '' === $observationId
-            || !\is_string($runId) || '' === $runId
-            || !\is_string($content)
-            || !\is_string($relevance) || '' === $relevance
-            || !\is_string($timestamp) || '' === $timestamp
-            || !\is_string($sourceRefsJson)
-        ) {
-            throw new \PDOException('Observation row is missing required columns.');
-        }
-
-        return [
-            'observation_id' => $observationId,
-            'run_id' => $runId,
-            'content' => $content,
-            'relevance' => $relevance,
-            'timestamp' => $timestamp,
-            'source_refs_json' => $sourceRefsJson,
-        ];
-    }
-
-    /**
-     * @param array<string, mixed> $row
-     *
-     * @return array{
-     *   reflection_id: string,
-     *   run_id: string,
-     *   content: string,
-     *   supporting_observation_ids_json: string
-     * }
-     */
-    private function mapReflectionRow(array $row): array
-    {
-        $reflectionId = $row['reflection_id'] ?? null;
-        $runId = $row['run_id'] ?? null;
-        $content = $row['content'] ?? null;
-        $supporting = $row['supporting_observation_ids_json'] ?? null;
-        if (
-            !\is_string($reflectionId) || '' === $reflectionId
-            || !\is_string($runId) || '' === $runId
-            || !\is_string($content)
-            || !\is_string($supporting)
-        ) {
-            throw new \PDOException('Reflection row is missing required columns.');
-        }
-
-        return [
-            'reflection_id' => $reflectionId,
-            'run_id' => $runId,
-            'content' => $content,
-            'supporting_observation_ids_json' => $supporting,
-        ];
-    }
-
-    /**
+     * /**
      * @return list<array{run_id: string, seq: int}>
      */
     private function decodeSourceRefs(string $json): array
