@@ -177,7 +177,7 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         assertOwnedBrowserDatabaseUrl($databaseUrl);
 
         // Release worker/web PostgreSQL sessions before dropping the browser DB.
-        stackRun('browser', ['stop', 'worker']);
+        stackRun('browser', ['stop', ...BROWSER_WORKER_SERVICES]);
         stackRun('browser', ['restart', 'php']);
         // Clear stale compiled containers before migrations/fixture setup.
         stackRun('browser', ['exec', '-T', 'php', 'php', 'bin/console', 'cache:clear', '--env=test', '--no-interaction']);
@@ -187,7 +187,7 @@ function browserTest(bool $headed = false, #[AsArgsAfterOptionEnd] array $argume
         stackRun('browser', ['exec', '-T', '-e', 'DATABASE_URL='.$databaseUrl, 'php', 'php', 'bin/console', 'doctrine:migrations:migrate', '--no-interaction']);
         // FrankenPHP workers retain loaded classes; use current application code.
         stackRun('browser', ['restart', 'php']);
-        stackRun('browser', ['up', '-d', '--wait', 'worker']);
+        stackRun('browser', ['up', '-d', '--wait', ...BROWSER_WORKER_SERVICES]);
 
         // Native-network tooling reaches private Postgres and the shared proxy hostname.
         return report('test:browser', ['env', 'DATABASE_URL='.$databaseUrl, 'LOCK_DSN='.$lockDsn, 'PLAYWRIGHT_HEADLESS='.($headed ? 'false' : 'true'), 'LIBRARIAN_BROWSER_URL='.stackUrl('browser'), 'LIBRARIAN_PROXY_IP='.proxyAddress(), 'php', 'vendor/bin/phpunit', ...$arguments, '--fail-on-empty-test-suite', '--log-junit', 'var/qa/test/junit.xml'], headed: $headed, networked: true);

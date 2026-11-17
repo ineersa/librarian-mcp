@@ -62,13 +62,14 @@ services:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
-  messenger:
+  messenger: &messenger
     image: ${APP_IMAGE:-librarian-mcp-php:prod}
     restart: unless-stopped
     <<: [*prod-env-file, *host-gateway, *json-logging]
     environment:
       APP_ENV: prod
-    command: ["php", "bin/console", "messenger:consume", "--all", "--exclude-receivers=failed"]
+    # Indexing consumer: discovery/import/embeddings and the scheduler. Generation runs in messenger-om.
+    command: ["php", "bin/console", "messenger:consume", "async", "scheduler_default"]
     healthcheck:
       disable: true
     depends_on:
@@ -89,6 +90,11 @@ services:
     dns:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
+
+  # Observational memory generation consumer (Observer, Reflector + Dropper), one LLM job at a time.
+  messenger-om:
+    <<: *messenger
+    command: ["php", "bin/console", "messenger:consume", "om"]
 
   postgres:
     networks:

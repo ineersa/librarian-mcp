@@ -32,7 +32,7 @@ services:
       - ./docker/frankenphp/worker.Caddyfile:/etc/caddy/worker.Caddyfile:ro
       - ./docker/php/conf.d/app.dev.ini:/usr/local/etc/php/conf.d/app.dev.ini:ro
       - ./var/browser-live/project-sources:/project-sources:rw
-  worker:
+  worker: &browser-worker
     environment:
       APP_ENV: test
       APP_DEBUG: '1'
@@ -56,6 +56,7 @@ services:
       - ./var/browser-live/log:/app/var/log
       - ./var/browser-live/indexes:/app/var/browser-live/indexes
       - ./var/browser-live/project-sources:/project-sources:rw
+  om-worker: *browser-worker
   postgres:
     environment:
       POSTGRES_DB: '${POSTGRES_DB}'

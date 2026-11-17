@@ -632,11 +632,14 @@ function browserStackStop(): int
     return developmentStack('browser', 'stop');
 }
 
-#[AsTask(namespace: 'browser', name: 'stack:restart', description: 'Restart one verified service in this checkout\'s isolated browser stack: php, worker, or postgres.')]
+/** Messenger consumers: indexing (async + scheduler) and observational memory generation (om). */
+const BROWSER_WORKER_SERVICES = ['worker', 'om-worker'];
+
+#[AsTask(namespace: 'browser', name: 'stack:restart', description: 'Restart one verified service in this checkout\'s isolated browser stack: php, worker, om-worker, or postgres.')]
 function browserStackRestart(string $service = 'php', bool $force = false): int
 {
-    if (!\in_array($service, ['php', 'worker', 'postgres'], true)) {
-        throw new \InvalidArgumentException('Choose a verified browser service: php, worker, or postgres.');
+    if (!\in_array($service, ['php', ...BROWSER_WORKER_SERVICES, 'postgres'], true)) {
+        throw new \InvalidArgumentException('Choose a verified browser service: php, worker, om-worker, or postgres.');
     }
 
     return report('browser:stack:restart', [...stackCommand('browser'), 'restart', $service], runtime: false, operation: static function () use ($service, $force): int {
@@ -649,10 +652,17 @@ function browserStackRestart(string $service = 'php', bool $force = false): int
     });
 }
 
-#[AsTask(namespace: 'browser', name: 'stack:restart-worker', description: 'Restart only this checkout\'s isolated browser worker to load changed code.')]
+#[AsTask(namespace: 'browser', name: 'stack:restart-worker', description: 'Restart only this checkout\'s isolated browser workers (indexing and OM) to load changed code.')]
 function browserStackRestartWorker(bool $force = false): int
 {
-    return browserStackRestart('worker', $force);
+    foreach (BROWSER_WORKER_SERVICES as $service) {
+        $exit = browserStackRestart($service, $force);
+        if (0 !== $exit) {
+            return $exit;
+        }
+    }
+
+    return 0;
 }
 
 /** @param list<string> $arguments */

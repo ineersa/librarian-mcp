@@ -101,7 +101,7 @@ vendor/bin/castor browser:stack:status
 
 Use `vendor/bin/castor test` for a fresh migrated database and canonical fixture preparation. `browser:live:test` intentionally reuses current storage and therefore does not promise restarted IDs; use it only for deliberate live-stack diagnosis. It sets `LIBRARIAN_BROWSER_REUSE_STORAGE=1` so Alice treats the existing database as already populated and neither purges rows nor reloads fixtures. Prepare the stack with `test` first; the selected live journey still performs its normal application writes and cleanup. To watch only Projects with fresh IDs, use `vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php`.
 
-After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` before the live journey. It leaves the web preview and storage intact.
+After changing worker code or streamed templates, run `vendor/bin/castor browser:stack:restart-worker` (restarts both `worker` and `om-worker`) before the live journey. It leaves the web preview and storage intact.
 
 Development and browser stacks share this repository's Caddy proxy and route registry across worktrees, following the finance setup. The repository-wide port initially defaults to **8082**; see [Castor proxy operations](docs/castor.md#isolated-browser-stack) for overrides and explicit recreation. App/worker/PostgreSQL remain checkout-scoped and no database ports are published. Always use the URL Castor prints for this checkout. The browser stack never imports operator source overlays.
 

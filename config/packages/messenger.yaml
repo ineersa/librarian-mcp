@@ -9,6 +9,20 @@ framework:
                 retry_strategy:
                     max_retries: 3
                     multiplier: 2
+            # Observational memory generation (Observer, Reflector + Dropper): long LLM jobs on
+            # their own queue and consumer, so indexing and generation never wait on each other.
+            # queue_name in options applies because the shared DSN does not set one.
+            om:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    queue_name: om
+                # No ordering with discovery on `async`: an observe for a just-registered project
+                # retries until its journal root is discovered (30s, 1m, 2m, 4m, 8m), which also
+                # rides out short LLM endpoint outages.
+                retry_strategy:
+                    max_retries: 5
+                    delay: 30000
+                    multiplier: 2
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 
@@ -25,5 +39,5 @@ framework:
             # 'App\Message\YourMessage': async
             'App\Message\ScanProjectMessage': async
             'App\Message\IndexProjectMessage': async
-            'App\Message\ObserveMemorySessionMessage': async
-            'App\Message\ReflectMemoryGenerationMessage': async
+            'App\Message\ObserveMemorySessionMessage': om
+            'App\Message\ReflectMemoryGenerationMessage': om
