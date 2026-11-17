@@ -72,7 +72,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
 6. Create an admin user, then configure nginx to proxy the explicit loopback port selected above.
 
-Optional: maintain an ignored `compose.sources.yaml` for additional mounts of user/global/custom Hatfield settings or data. OM database directories need writable mounts for SQLite WAL/SHM sidecars; database connections remain `mode=ro`. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production use service name `messenger`, not development's `worker`; see [source mounts](project-sources.md#docker-source-mounts).
+Optional: maintain an ignored `compose.sources.yaml` for additional mounts of user/global/custom Hatfield settings or data. OM database directories need writable mounts for SQLite WAL/SHM sidecars; database connections remain `mode=ro`. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production add them to both consumers, `messenger` and `messenger-om` (development: `worker` and `om-worker`), since memory generation reads session journals; see [source mounts](project-sources.md#docker-source-mounts).
 
 Use the generated PostgreSQL baseline in `migrations/postgres`. The actual local checkout replacement is recorded in [indexing validation](indexing-validation.md#actual-checkout-replacement).
 
@@ -142,7 +142,7 @@ Then publish host 443 with a local compose override.
 - Symfony environment is baked by `composer dump-env prod` during image build.
 - Castor loads `.env`, `.env.prod` and `.env.prod.local` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
 - Project sources are mounted read-write for SQLite WAL/SHM sidecars; source database connections remain `mode=ro`, with no source-table or journal writes.
-- Postgres stays on the private network with no host ports. Worker consumes Messenger `async` and `scheduler_default`.
+- Postgres stays on the private network with no host ports. `messenger` consumes Messenger `async` and `scheduler_default`; `messenger-om` consumes `om` (memory generation).
 - Web, Messenger and PostgreSQL use `restart: unless-stopped`. The Messenger-only container disables the image's Caddy HTTP health check because it does not run an HTTP server; a running worker is not an HTTP health-check result.
 - Scheduler uses `CallbackMessageProvider` for automatic source discovery followed by incremental indexing (`INDEX_INTERVAL`, default 60s). Check timestamps advance even when unchanged memories do not need rebuilding.
 - Live admin status uses private Mercure + Turbo Streams with native topic-scoped authorization cookies; anonymous hub subscriptions are disabled. Use the configured `MERCURE_PUBLIC_URL` origin for admin access so the app and hub can share the cookie. If a reverse proxy is added, preserve long-lived, unbuffered event-stream responses.

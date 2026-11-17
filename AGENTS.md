@@ -103,7 +103,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.
 - Project sources mount read-write via `PROJECTS_HOST_PATH` → `/projects` so SQLite can manage WAL/SHM sidecars; SQLite connections remain `mode=ro`. Optional ignored `compose.sources.yaml` may add more mounts for dev/prod only. Browser uses synthetic `/project-sources` with the same mount permissions.
-- Worker consumes Messenger `async` and `scheduler_default`. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs (`INDEX_INTERVAL`, default 60s); successful discovery queues incremental indexing. Unchanged source revisions are checked without rebuilding.
+- Two Messenger consumers: `worker` (prod `messenger`) consumes `async` and `scheduler_default` for discovery, import and indexing; `om-worker` (prod `messenger-om`) consumes `om` for observational memory generation (Observer, Reflector + Dropper), one LLM job at a time. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs (`INDEX_INTERVAL`, default 60s); successful discovery queues incremental indexing. Unchanged source revisions are checked without rebuilding.
 
 ## Suggested defaults for new features
 

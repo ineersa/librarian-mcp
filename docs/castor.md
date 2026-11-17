@@ -49,7 +49,7 @@ The port is repository-wide: worktrees without an explicit `LIBRARIAN_PROXY_PORT
 
 Native-network PHPUnit joins the proxy network and the checkout-private browser network. `LIBRARIAN_PROXY_IP` supplies Chromium's hostname resolution and an exact Docker hosts entry for Playwright's Node HTTP client; both use the public hostname, not `http://php:8080`. No host networking or database port publishing is needed. Dev/browser stacks retain their own PostgreSQL/pgvector volumes (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`). Lifecycle: `browser:stack:restart --service=php|worker|...` (and compatible `browser:stack:restart-worker`). Stop checkout stacks before `dev:proxy:stop`; `--for-upgrade` explicitly permits a shared preview outage without deleting application data.
 
-`test` stops the owned worker and Doctrine-drops/creates/migrates only the guarded browser database `librarian_browser` in the checkout-scoped Postgres volume, resetting integer sequences. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture in the PHPUnit browser base. `browser:live:test` reuses the current database and does not provide that reset. To watch the single Projects journey rather than the whole suite:
+`test` stops the owned workers (`worker`, `om-worker`) and Doctrine-drops/creates/migrates only the guarded browser database `librarian_browser` in the checkout-scoped Postgres volume, resetting integer sequences. Alice's `RefreshDatabaseTrait` loads the canonical admin fixture in the PHPUnit browser base. `browser:live:test` reuses the current database and does not provide that reset. To watch the single Projects journey rather than the whole suite:
 
 ```bash
 vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
@@ -107,7 +107,7 @@ vendor/bin/castor list --raw
 
 - Docker commands for the app are executed through Castor-owned compose invocations.
 - Dev tasks use `compose.yaml` + `compose.override.yaml`; optional ignored `compose.sources.yaml` supplies additional source mounts. OM database directories must be writable for SQLite WAL/SHM sidecars; PDO connections stay `mode=ro`.
-- Prod-like tasks use `compose.yaml` + `compose.prod.yaml`, with the same optional source override (use production service name `messenger`, not `worker`).
+- Prod-like tasks use `compose.yaml` + `compose.prod.yaml`, with the same optional source override (add mounts to both production consumers, `messenger` and `messenger-om`, not `worker` / `om-worker`).
 - Browser tasks always use `compose.browser.yaml` instead of the operator's source override, and prepare only synthetic project sources. `test` restarts the checkout's browser web workers after setup so loaded PHP classes match the code under test.
 - User-mapped container commands should use the host UID/GID to keep file ownership correct.
 - Do not run host PHP/Composer for application operations once the tooling runtime exists.

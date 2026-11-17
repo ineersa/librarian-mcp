@@ -67,7 +67,7 @@ services:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
-  worker:
+  worker: &dev-worker
     image: "librarian-${LIBRARIAN_CHECKOUT_ID:?Run vendor/bin/castor dev:stack:up}-php:dev"
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     init: true
@@ -94,8 +94,8 @@ services:
         read_only: false
         bind:
           create_host_path: false
-    # --all includes async + scheduler_default; failed stays excluded.
-    command: ['php', 'bin/console', 'messenger:consume', '--all', '--exclude-receivers=failed', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
+    # Indexing consumer: discovery/import/embeddings and the scheduler. Generation runs in om-worker.
+    command: ['php', 'bin/console', 'messenger:consume', 'async', 'scheduler_default', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
     healthcheck:
       disable: true
     depends_on:
@@ -112,6 +112,11 @@ services:
       - "${DOCKER_DNS_PRIMARY:-1.1.1.1}"
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
+
+  # Observational memory generation consumer (Observer, Reflector + Dropper), one LLM job at a time.
+  om-worker:
+    <<: *dev-worker
+    command: ['php', 'bin/console', 'messenger:consume', 'om', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
   postgres:
     environment:
       POSTGRES_DB: '${POSTGRES_DB}'
