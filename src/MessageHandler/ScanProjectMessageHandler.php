@@ -139,7 +139,7 @@ final class ScanProjectMessageHandler
         }
     }
 
-    /** Copy new om.sqlite rows into Librarian memory tables after the scan write committed. */
+    /** One-time legacy om.sqlite import into Librarian memory, after the scan write committed. */
     private function syncObservationalMemory(int $projectId): void
     {
         $this->entityManager->clear();
@@ -149,10 +149,10 @@ final class ScanProjectMessageHandler
         }
 
         try {
-            $this->omImporter->syncIfChanged($project);
+            $this->omImporter->importOnce($project);
         } catch (\Throwable $exception) {
-            // Indexing still runs on already-imported rows; the next scan retries the sync.
-            $this->logger->error('Observational memory sync from om.sqlite failed.', [
+            // Not recorded as imported, so the next scan retries; indexing runs on existing rows.
+            $this->logger->error('Legacy observational memory import from om.sqlite failed.', [
                 'projectId' => $projectId,
                 'error' => $exception->getMessage(),
             ]);

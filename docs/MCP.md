@@ -131,7 +131,7 @@ Domain failure payload: `{ok: false, error, message, retryable}` with `isError: 
 |---|---|
 | Shared / search | `invalid_project_context`, `linked_worktree_unsupported`, `project_not_found`, `invalid_query`, `invalid_limit`, `invalid_after`, `invalid_before`, `invalid_date_range`, `index_unavailable`, `embedding_failed`, `retrieval_failed`, `source_unavailable`, `timeout`, `response_too_large`, `internal_error` |
 | Registration | `project_registration_conflict` (non-retryable name/origin conflict), `project_registration_unavailable` (retryable database/queue/Git-inspection failure); invalid/inaccessible roots reuse `invalid_project_context` |
-| Recall | `invalid_id`, `ambiguous_id`, `not_found`, `sessions_unavailable`, `events_unreadable`, `resource_limit_exceeded` |
+| Recall | `invalid_id`, `ambiguous_id`, `not_found`, `sessions_unavailable`, `events_unreadable`, `session_deleted` (non-retryable: the source session was deleted), `resource_limit_exceeded` |
 
 Limits (honest):
 
@@ -210,3 +210,15 @@ On 2026-11-15, `vendor/bin/castor cs:fix`, the complete existing headless browse
 Optional-auth follow-up: the same MCP journey passed with `MCP_AUTH_REQUIRED=0` (**1 journey / 47 assertions**, 5.036s), including an anonymous first connection and an authenticated second connection. The complete existing suite then passed with the default required-auth setting (**5 journeys / 87 assertions**, 12.031s); `cs:fix` and `qa:static` passed. The temporary test-local override was removed.
 
 At the owner's subsequent request, the PR build was deployed on the existing production port **8093**, with private server configuration `MCP_AUTH_REQUIRED=0`, using Castor `prod:up` and `prod:restart`. A tokenless modern-protocol HTTP `tools/list` returned exactly `memory_search` and `recall`; the homepage returned HTTP 200 and web/Postgres were healthy, with the worker running. This is endpoint/authentication deployment verification, not a claim of production search/recall evidence coverage. No database reset, migration, or source modification was performed.
+
+## 8) Observational memory API (plan 09, contract v1)
+
+Plain HTTP endpoints for the Hatfield thin client, not MCP tools (models never write memory). They use the same authentication and `X-Librarian-Project` header as MCP. `{sourceKind}` is `hatfield`.
+
+| Method | Path | Behavior |
+|---|---|---|
+| `POST` | `/api/om/v1/observe` | Content-free signal `{contract_version: 1, source_kind, session_id, parent_session_id, end_seq, terminal_status}`; registers an unknown project like `ensure_project` and queues the Observer. `202 {ok, contract_version, status: "queued"}`. |
+| `GET` | `/api/om/v1/sessions/{sourceKind}/{sessionId}/projection` | Rendered active memory for compaction. `200 {ok, contract_version, text}` (`""` when nothing is active). Never registers a project. |
+| `DELETE` | `/api/om/v1/sessions/{sourceKind}/{sessionId}` | The client permanently deleted the session: removes its observations, reflections, coverage and generations; the next incremental index pass drops its chunks. `200 {ok, contract_version, deleted}`; idempotent (`deleted: false` for an unknown project or session). Never registers a project. Only that session: child sessions are deleted by their own calls. |
+
+Errors: `422` invalid/unsupported request, `503` retryable `{ok: false, error, message, retryable}`.

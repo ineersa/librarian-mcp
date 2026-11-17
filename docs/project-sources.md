@@ -36,7 +36,7 @@ Associative maps merge recursively; lists/scalars/null replace. Missing optional
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
 - Enter an absolute directory path visible to the Librarian service, e.g. `/projects/my-project`. There is no directory picker or security root allowlist for this local single-admin utility.
 
-Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory. The OM database is **optional**: Librarian owns memory in PostgreSQL (plan 09) and only reads `om.sqlite` as a legacy source for the transition import. A missing file is normal; a present but unreadable or unsupported file is reported as a source issue and its import is skipped, without blocking readiness or indexing.
+Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory. The OM database is **optional**: Librarian owns memory in PostgreSQL (plan 09) and reads `om.sqlite` only for a **one-time** legacy import: the first successful discovery that finds it imports it and records `legacy_imported_at` on the project; later scans and deploys never re-import, so memory deleted in Librarian stays deleted. Hatfield no longer writes `om.sqlite` after the thin-client cutover; use `app:om:import <project-id>` to re-run an import deliberately. A missing file is normal; a present but unreadable or unsupported file is reported as a source issue and its import is skipped, without blocking readiness or indexing.
 
 Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
 
@@ -77,6 +77,6 @@ EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry s
 
 ## Validation evidence
 
-Saved coverage remains **one** Projects journey: register → row-click details → wait for live automatic discovery/index status → per-row search of a public synthetic observation → ordinary harness-owned fixture content/revision update → scheduler-only discovery/indexing → updated search → delete with source-hash checks. Fixture mutation is harness-owned and restored; app code must not mutate sources.
+Saved coverage remains **one** Projects journey: register → row-click details → wait for live automatic discovery/index status → per-row search of a public synthetic observation → delete the fixture session through `DELETE /api/om/v1/sessions/hatfield/{id}` → scheduler-only reindex to zero memories, unchanged across later scans (no legacy re-import) → empty search → delete with source-hash checks. Sources are never mutated, by the harness or app code.
 
 Do not claim plan 04 acceptance from docs alone. Prefer [indexing-design.md](indexing-design.md), [indexing-validation.md](indexing-validation.md), and [TESTING.md](../TESTING.md).

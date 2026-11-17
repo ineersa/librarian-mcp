@@ -15,6 +15,8 @@ use Playwright\Page\PageInterface;
 use Playwright\PlaywrightClient;
 use Playwright\PlaywrightFactory;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /** Real HTTP journeys: fixtures must be committed for the separate web/worker processes. */
 #[SkipDatabaseRollback]
@@ -114,6 +116,35 @@ abstract class LibrarianNetworkBrowserTest extends KernelTestCase
     protected function submitEasyAdminForm(): void
     {
         $this->page->locator('button[value="'.Action::SAVE_AND_RETURN.'"]')->click();
+    }
+
+    /** Regenerates the seeded admin's MCP token through the admin UI and returns the plaintext. */
+    protected function regenerateMcpToken(): string
+    {
+        $page = $this->visit('/admin/users?query='.rawurlencode('admin@test.com'));
+        $adminRow = $page->locator('tbody tr')->filter(['hasText' => 'admin@test.com']);
+        $adminEditUrl = $adminRow->locator('a.action-edit')->getAttribute('href');
+        self::assertNotNull($adminEditUrl);
+        $page->goto($adminEditUrl);
+        $page->getByRole('button', ['name' => 'Regenerate MCP token'])->click();
+        $page->locator('#flash-messages')->waitFor();
+        $flashText = (string) $page->locator('#flash-messages')->textContent();
+        self::assertMatchesRegularExpression('/mcp_[0-9a-f]{48}/', $flashText);
+        preg_match('/mcp_[0-9a-f]{48}/', $flashText, $matches);
+
+        return $matches[0];
+    }
+
+    /** Native HTTP client that reaches the isolated stack's proxy hostname, like Chromium does. */
+    protected function stackHttpClient(): HttpClientInterface
+    {
+        $hostname = parse_url($this->url, \PHP_URL_HOST);
+        $proxyIp = getenv('LIBRARIAN_PROXY_IP');
+        if (!\is_string($hostname) || false === $proxyIp || '' === $proxyIp) {
+            throw new \LogicException('Native HTTP requires the isolated browser proxy hostname and IP.');
+        }
+
+        return HttpClient::create(['resolve' => [$hostname => $proxyIp]]);
     }
 
     protected function deleteRecord(string $detailUrl): void

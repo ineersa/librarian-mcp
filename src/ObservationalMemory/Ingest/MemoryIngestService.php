@@ -6,16 +6,18 @@ namespace App\ObservationalMemory\Ingest;
 
 use App\Entity\MemorySourceKind;
 use App\Entity\Project;
+use App\Index\ProjectIndexManager;
 use App\Message\ObserveMemorySessionMessage;
 use App\ObservationalMemory\Compaction\ActiveMemoryRenderer;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
+use App\ObservationalMemory\Storage\MemoryRevision;
 use App\ObservationalMemory\Storage\ObservationRepository;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
- * Observe signal + session projection. Stores no conversation content: the Observer
+ * Observe signal, session projection and session deletion. Stores no conversation content: the Observer
  * job reads the journal range, and OM coverage makes repeated signals idempotent.
  */
 final readonly class MemoryIngestService
@@ -26,6 +28,7 @@ final readonly class MemoryIngestService
         private ObservationRepository $observations,
         private MemoryGenerationRepository $generations,
         private ClockInterface $clock,
+        private ProjectIndexManager $projectIndexManager,
     ) {
     }
 
@@ -59,6 +62,36 @@ final readonly class MemoryIngestService
             $this->generations->listActiveReflections($sessionPk),
             $this->observations->listActiveCandidateObservations($sessionPk),
         ));
+    }
+
+    /**
+     * Forget a session the client deleted: its observations, reflections, coverage and
+     * generations cascade with the session row; the revision bump plus a queued index
+     * pass drop the session's chunks. Idempotent: false when absent.
+     *
+     * An in-flight Observer/Reflector job for the session fails its writes on the
+     * missing session and is inert on retry, so no session lock is taken here.
+     */
+    public function deleteSession(Project $project, MemorySourceKind $sourceKind, string $sessionId): bool
+    {
+        $deleted = $this->connection->transactional(static function (Connection $connection) use ($project, $sourceKind, $sessionId): bool {
+            $deleted = $connection->executeStatement(
+                'DELETE FROM om_sessions WHERE project_id = ? AND source_kind = ? AND session_id = ?',
+                [$project->id, $sourceKind->value, $sessionId],
+            );
+            if (0 === $deleted) {
+                return false;
+            }
+            MemoryRevision::bumpForProject($connection, (int) $project->id);
+
+            return true;
+        });
+        if ($deleted) {
+            // Drop the session's chunks now rather than waiting for the next discovery scan.
+            $this->projectIndexManager->queueId((int) $project->id);
+        }
+
+        return $deleted;
     }
 
     private function findSessionPk(Project $project, MemorySourceKind $sourceKind, string $sessionId): ?int

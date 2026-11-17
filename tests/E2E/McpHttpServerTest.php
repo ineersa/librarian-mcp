@@ -15,7 +15,6 @@ use Mcp\Client;
 use Mcp\Client\Transport\HttpTransport;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\Result\CallToolResult;
-use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
 
 final class McpHttpServerTest extends LibrarianNetworkBrowserTest
@@ -25,17 +24,7 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
     public function testProjectScopedMemorySearchAndRecall(): void
     {
         $this->login();
-        $page = $this->visit('/admin/users?query='.rawurlencode('admin@test.com'));
-        $adminRow = $page->locator('tbody tr')->filter(['hasText' => 'admin@test.com']);
-        $adminEditUrl = $adminRow->locator('a.action-edit')->getAttribute('href');
-        self::assertNotNull($adminEditUrl);
-        $page->goto($adminEditUrl);
-        $page->getByRole('button', ['name' => 'Regenerate MCP token'])->click();
-        $page->locator('#flash-messages')->waitFor();
-        $flashText = $page->locator('#flash-messages')->textContent();
-        self::assertMatchesRegularExpression('/mcp_[0-9a-f]{48}/', $flashText);
-        preg_match('/mcp_[0-9a-f]{48}/', $flashText, $matches);
-        $token = $matches[0];
+        $token = $this->regenerateMcpToken();
 
         $beforeA = ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-a'));
         $beforeB = ProjectSourceFixture::hashTree(ProjectSourceFixture::builderProjectPath('mcp-b'));
@@ -130,11 +119,6 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
 
     private function client(?string $token, string $slug): Client
     {
-        $hostname = parse_url($this->url, \PHP_URL_HOST);
-        $proxyIp = getenv('LIBRARIAN_PROXY_IP');
-        if (!\is_string($hostname) || false === $proxyIp || '' === $proxyIp) {
-            throw new \LogicException('The SDK client requires the isolated browser proxy hostname and IP.');
-        }
         $client = Client::builder()
             ->setClientInfo('librarian-browser-journey', '1.0')
             ->setProtocolVersion(ProtocolVersion::V2026_07_28)
@@ -147,7 +131,7 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
         if (null !== $token) {
             $headers['Authorization'] = 'Bearer '.$token;
         }
-        $client->connect(new HttpTransport($this->url.'/_mcp', $headers, httpClient: new Psr18Client(HttpClient::create(['resolve' => [$hostname => $proxyIp]]))));
+        $client->connect(new HttpTransport($this->url.'/_mcp', $headers, httpClient: new Psr18Client($this->stackHttpClient())));
 
         return $client;
     }
