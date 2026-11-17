@@ -9,6 +9,7 @@ use App\Entity\MemorySourceKind;
 use App\Entity\Project;
 use App\ObservationalMemory\Storage\MemoryRevision;
 use App\Project\OmSourceReader;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -281,13 +282,27 @@ final readonly class OmSqliteImporter
         }
 
         if (null !== $rows['active_generation_id']) {
-            // OM stays authoritative for imported sessions until the Hatfield client switches over.
+            // The importer only moves pointers it owns: an unset pointer, or one still on a generation
+            // that om.sqlite knows (OM advanced). A generation absent from om.sqlite was produced by
+            // Librarian after cutover and is never replaced by an older imported one.
             $connection->executeStatement(
-                'UPDATE om_sessions SET active_generation_id = g.id, updated_at = ?
+                'UPDATE om_sessions SET active_generation_id = g.id, updated_at = :updated_at
                  FROM om_memory_generations g
-                 WHERE om_sessions.id = ? AND g.memory_session_id = om_sessions.id AND g.generation_id = ? AND g.status = ?
-                   AND om_sessions.active_generation_id IS DISTINCT FROM g.id',
-                [$timestamp, $sessionPk, $rows['active_generation_id'], MemoryGenerationStatus::Succeeded->value],
+                 WHERE om_sessions.id = :session AND g.memory_session_id = om_sessions.id
+                   AND g.generation_id = :active AND g.status = :succeeded
+                   AND om_sessions.active_generation_id IS DISTINCT FROM g.id
+                   AND (om_sessions.active_generation_id IS NULL OR EXISTS (
+                       SELECT 1 FROM om_memory_generations current
+                       WHERE current.id = om_sessions.active_generation_id AND current.generation_id IN (:imported)
+                   ))',
+                [
+                    'updated_at' => $timestamp,
+                    'session' => $sessionPk,
+                    'active' => $rows['active_generation_id'],
+                    'succeeded' => MemoryGenerationStatus::Succeeded->value,
+                    'imported' => array_map(static fn (array $generation): string => (string) $generation['generation_id'], $rows['generations']),
+                ],
+                ['imported' => ArrayParameterType::STRING],
             );
         }
         if ($changed > 0) {

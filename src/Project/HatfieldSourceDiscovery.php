@@ -125,15 +125,34 @@ final class HatfieldSourceDiscovery
 
         try {
             $sessionCount = $this->countSessions($sessionsPath);
-            $om = $this->omSourceReader->inspect($databasePath);
         } catch (ProjectSourceException $exception) {
             return ProjectDiscoveryResult::error(
                 $exception->getMessage(),
                 issues: [$this->issue($exception->issueCode, $exception->getMessage())],
                 details: $details,
-                databasePath: $databasePath,
                 sessionsPath: $sessionsPath,
-                sessionCount: $sessionCount ?? 0,
+            );
+        }
+
+        // Librarian owns memory in Postgres and reads journals directly; om.sqlite is only
+        // a legacy source for the transition import, so its absence or damage never blocks
+        // readiness. A present but unusable file is reported and skipped, not imported.
+        try {
+            $om = $this->omSourceReader->inspect($databasePath);
+        } catch (ProjectSourceException $exception) {
+            return ProjectDiscoveryResult::ready(
+                databasePath: null,
+                sessionsPath: $sessionsPath,
+                schemaVersion: null,
+                observationCount: 0,
+                reflectionCount: 0,
+                sessionCount: $sessionCount,
+                sourceRevision: null,
+                sourceChangeCount: 0,
+                details: $details,
+                issues: ProjectSourceIssueCode::OmDatabaseMissing === $exception->issueCode
+                    ? []
+                    : [$this->issue($exception->issueCode, $exception->getMessage().' Legacy import skipped.')],
             );
         }
 

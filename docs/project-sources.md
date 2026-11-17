@@ -36,6 +36,8 @@ Associative maps merge recursively; lists/scalars/null replace. Missing optional
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
 - Enter an absolute directory path visible to the Librarian service, e.g. `/projects/my-project`. There is no directory picker or security root allowlist for this local single-admin utility.
 
+Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory. The OM database is **optional**: Librarian owns memory in PostgreSQL (plan 09) and only reads `om.sqlite` as a legacy source for the transition import. A missing file is normal; a present but unreadable or unsupported file is reported as a source issue and its import is skipped, without blocking readiness or indexing.
+
 Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
 
 ## Derived indexing (plan 04)

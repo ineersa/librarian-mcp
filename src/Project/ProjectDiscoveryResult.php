@@ -67,9 +67,9 @@ final class ProjectDiscoveryResult
      * @param list<array{code: string, message: string}> $issues
      */
     public static function ready(
-        string $databasePath,
+        ?string $databasePath,
         string $sessionsPath,
-        string $schemaVersion,
+        ?string $schemaVersion,
         int $observationCount,
         int $reflectionCount,
         int $sessionCount,
