@@ -68,7 +68,7 @@ final class ProjectDiscoveryResult
      */
     public static function ready(
         ?string $databasePath,
-        string $sessionsPath,
+        ?string $sessionsPath,
         ?string $schemaVersion,
         int $observationCount,
         int $reflectionCount,

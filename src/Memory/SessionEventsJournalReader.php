@@ -12,7 +12,7 @@ use App\ObservationalMemory\Observer\SessionEventDTO;
  * Paths are derived only from a discovered sessions root plus a validated
  * session/run id. Never writes journals and never accepts absolute client paths.
  */
-final class SessionEventsJournalReader
+final class SessionEventsJournalReader implements SessionSourceReader
 {
     private const string EVENTS_BASENAME = 'events.jsonl';
     private const int MAX_LINE_BYTES = 1_048_576;

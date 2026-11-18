@@ -51,6 +51,13 @@ services:
         read_only: false
         bind:
           create_host_path: false
+      # Claude Code transcripts, read-only at the host path (CLAUDE_PROJECTS_PATH); unset mounts an inert placeholder.
+      - type: bind
+        source: '${CLAUDE_PROJECTS_PATH:-.}'
+        target: '${CLAUDE_PROJECTS_PATH:-/claude-projects}'
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - app_net
     ports:
@@ -83,6 +90,13 @@ services:
         source: '${PROJECTS_HOST_PATH:-.}'
         target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: false
+        bind:
+          create_host_path: false
+      # Claude Code transcripts, read-only at the host path (CLAUDE_PROJECTS_PATH); unset mounts an inert placeholder.
+      - type: bind
+        source: '${CLAUDE_PROJECTS_PATH:-.}'
+        target: '${CLAUDE_PROJECTS_PATH:-/claude-projects}'
+        read_only: true
         bind:
           create_host_path: false
     networks:

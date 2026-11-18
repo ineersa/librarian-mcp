@@ -31,6 +31,7 @@ services:
         }
       FRANKENPHP_CONFIG: import /etc/caddy/worker.Caddyfile
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
+      CLAUDE_PROJECTS_PATH: '${CLAUDE_PROJECTS_PATH}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
       MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
@@ -47,6 +48,13 @@ services:
         source: '${PROJECTS_HOST_PATH:-/tmp}'
         target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: false
+        bind:
+          create_host_path: false
+      # Claude Code transcripts, read-only at the host path (CLAUDE_PROJECTS_PATH); unset mounts an inert placeholder.
+      - type: bind
+        source: '${CLAUDE_PROJECTS_PATH:-/tmp}'
+        target: '${CLAUDE_PROJECTS_PATH:-/claude-projects}'
+        read_only: true
         bind:
           create_host_path: false
     ports: !override []
@@ -79,6 +87,7 @@ services:
       MERCURE_PUBLIC_URL: /.well-known/mercure
       MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
       HATFIELD_USER_HOME: '${HATFIELD_USER_HOME}'
+      CLAUDE_PROJECTS_PATH: '${CLAUDE_PROJECTS_PATH}'
       HATFIELD_APP_ROOT: '${HATFIELD_APP_ROOT}'
       HATFIELD_PATH_MAPPINGS: '${HATFIELD_PATH_MAPPINGS}'
       MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
@@ -92,6 +101,13 @@ services:
         source: '${PROJECTS_HOST_PATH:-/tmp}'
         target: '${PROJECTS_CONTAINER_PATH:-/projects}'
         read_only: false
+        bind:
+          create_host_path: false
+      # Claude Code transcripts, read-only at the host path (CLAUDE_PROJECTS_PATH); unset mounts an inert placeholder.
+      - type: bind
+        source: '${CLAUDE_PROJECTS_PATH:-/tmp}'
+        target: '${CLAUDE_PROJECTS_PATH:-/claude-projects}'
+        read_only: true
         bind:
           create_host_path: false
     # Indexing consumer: discovery/import/embeddings and the scheduler. Generation runs in om-worker.

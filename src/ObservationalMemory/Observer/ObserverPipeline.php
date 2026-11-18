@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\ObservationalMemory\Observer;
 
-use App\Memory\SessionEventsJournalReader;
+use App\Memory\SessionSourceReader;
 use App\ObservationalMemory\Agent\MemoryAgentRunner;
 use App\ObservationalMemory\Agent\MemoryAgentTool;
 use App\ObservationalMemory\MemorySettings;
@@ -16,7 +16,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\ClockInterface;
 
 /**
- * Port of OM ObserverPipeline: reads the session journal range read-only, builds
+ * Port of OM ObserverPipeline: reads the client's session transcript range read-only, builds
  * source blocks, packs, calls the model and persists coverage exactly as OM does.
  *
  * Chunks under the configured context-window ratio; multi-call accumulate; zero-obs coverage valid.
@@ -29,7 +29,6 @@ final readonly class ObserverPipeline
         private MemoryAgentRunner $agentRunner,
         private ObservationRepository $repository,
         private MemoryGenerationRepository $generationRepository,
-        private SessionEventsJournalReader $journalReader,
         private MemorySettings $settings,
         private ClockInterface $clock,
         private LoggerInterface $logger,
@@ -50,7 +49,8 @@ final readonly class ObserverPipeline
     public function observeThrough(
         int $sessionPk,
         string $runId,
-        string $sessionsPath,
+        SessionSourceReader $sourceReader,
+        string $sourceRoot,
         int $terminalEndSeq,
         string $terminalStatus,
         ?string $jobId,
@@ -96,7 +96,7 @@ final readonly class ObserverPipeline
         $memoryReflections = $this->memoryReflectionLines($sessionPk);
         $memoryObservations = $this->memoryObservationLines($sessionPk);
 
-        $events = $this->journalReader->readRange($sessionsPath, $runId, $sourceStartSeq, $terminalEndSeq);
+        $events = $sourceReader->readRange($sourceRoot, $runId, $sourceStartSeq, $terminalEndSeq);
         if ([] === $events) {
             // end_seq comes from the client; the journal holds nothing past coverage yet.
             $this->logger->info('om.observe.journal_behind_signal', [

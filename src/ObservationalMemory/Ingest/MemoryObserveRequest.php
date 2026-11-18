@@ -48,9 +48,6 @@ final readonly class MemoryObserveRequest
 
         $sourceKind = MemorySourceKind::tryFrom(\is_string($data['source_kind'] ?? null) ? $data['source_kind'] : '')
             ?? throw self::invalid('source_kind must be one of: '.implode(', ', array_column(MemorySourceKind::cases(), 'value')).'.');
-        if (MemorySourceKind::Hatfield !== $sourceKind) {
-            throw new MemoryIngestException(MemoryIngestErrorCode::UnsupportedSourceKind, 'Only hatfield sessions can be observed until the Claude transcript reader exists.');
-        }
 
         $endSeq = $data['end_seq'] ?? null;
         if (!\is_int($endSeq) || $endSeq < 1) {

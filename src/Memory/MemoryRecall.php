@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Memory;
 
+use App\Entity\MemorySourceKind;
 use App\Entity\Project;
 use App\Index\Source\MemoryKind;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
@@ -18,7 +19,7 @@ use Psr\Clock\ClockInterface;
  * Canonical OM recall against Librarian-owned memory tables plus session journals.
  *
  * Matches Hatfield OM recall payload/error semantics for observations and
- * reflections, including source_refs and events.jsonl evidence hydration.
+ * reflections, including source_refs and client transcript evidence hydration (Hatfield events.jsonl or Claude JSONL).
  * Memory IDs are resolved project-wide; the stored run_id becomes the session
  * used for supporting observations and journal evidence.
  */
@@ -35,7 +36,7 @@ final class MemoryRecall
         private readonly ObservationRepository $observations,
         private readonly MemoryGenerationRepository $generations,
         private readonly Connection $connection,
-        private readonly SessionEventsJournalReader $journalReader,
+        private readonly MemorySourceReaders $sources,
         private readonly ClockInterface $clock,
     ) {
     }
@@ -60,12 +61,8 @@ final class MemoryRecall
         }
 
         $projectId = $project->id;
-        $sessionsPath = $project->sessionsPath;
         if (null === $projectId) {
             return $this->error(MemoryErrorCode::SourceUnavailable, 'Registered project is not persisted.');
-        }
-        if (!\is_string($sessionsPath) || '' === $sessionsPath) {
-            return $this->error(MemoryErrorCode::SessionsUnavailable, 'Registered project has no discovered session journal root.');
         }
 
         try {
@@ -119,6 +116,7 @@ final class MemoryRecall
 
                 $observation = $obsMatches[0];
                 $targetRunId = $observation['run_id'];
+                $targetSourceKind = $observation['source_kind'];
                 $refs = $this->sourceRefsForRun(
                     $targetRunId,
                     $this->decodeSourceRefs($observation['source_refs_json']),
@@ -143,6 +141,7 @@ final class MemoryRecall
 
                 $reflection = $refMatches[0];
                 $targetRunId = $reflection['run_id'];
+                $targetSourceKind = $reflection['source_kind'];
                 $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
                 if (\count($requestedSupportIds) > self::MAX_SUPPORT_IDS) {
                     return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Supporting observation ids exceeded the bounded recall limit.');
@@ -202,7 +201,13 @@ final class MemoryRecall
             return $this->error(MemoryErrorCode::SourceUnavailable, 'Unable to read observational memory.');
         }
 
-        $events = $this->loadEventsForRefs($sessionsPath, $targetRunId, $pendingEvents['refs'], $deadline);
+        $sourceKind = MemorySourceKind::tryFrom($targetSourceKind);
+        $sourceRoot = null === $sourceKind ? null : $this->sources->sourceRoot($sourceKind, $project->rootCanonical, $project->sessionsPath);
+        if (null === $sourceKind || null === $sourceRoot) {
+            return $this->error(MemoryErrorCode::SessionsUnavailable, 'Registered project has no available session source for this memory.');
+        }
+
+        $events = $this->loadEventsForRefs($this->sources->reader($sourceKind), $sourceRoot, $targetRunId, $pendingEvents['refs'], $deadline);
         if ($this->isFailureResult($events)) {
             return $events;
         }
@@ -266,7 +271,7 @@ final class MemoryRecall
      *
      * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function loadEventsForRefs(string $sessionsPath, string $currentRunId, array $refs, \DateTimeImmutable $deadline): array
+    private function loadEventsForRefs(SessionSourceReader $reader, string $sourceRoot, string $currentRunId, array $refs, \DateTimeImmutable $deadline): array
     {
         if ([] === $refs) {
             return [];
@@ -294,8 +299,8 @@ final class MemoryRecall
             return $interrupt;
         }
 
-        return $this->journalReader->loadForSession(
-            $sessionsPath,
+        return $reader->loadForSession(
+            $sourceRoot,
             $currentRunId,
             $seqs,
             function () use ($deadline): ?array {

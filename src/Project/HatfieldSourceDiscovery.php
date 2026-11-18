@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Project;
 
+use App\Memory\ClaudeTranscriptReader;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Discovers Hatfield OM/session source locations without booting Hatfield.
+ * Discovers Hatfield OM/session source locations without booting Hatfield. A project without
+ * Hatfield observational memory is still ready when it has Claude Code transcripts.
  */
 final class HatfieldSourceDiscovery
 {
@@ -24,6 +26,7 @@ final class HatfieldSourceDiscovery
         private readonly ServicePathMapper $pathMapper,
         private readonly HatfieldPathResolver $pathResolver,
         private readonly GitOriginNormalizer $gitOriginNormalizer,
+        private readonly ClaudeTranscriptReader $claudeTranscripts,
     ) {
     }
 
@@ -76,8 +79,13 @@ final class HatfieldSourceDiscovery
             );
         }
 
+        $claudeTranscripts = $this->claudeTranscripts->transcriptDirectory($projectRoot);
+        if (null !== $claudeTranscripts) {
+            $details['claudeTranscriptsPath'] = $claudeTranscripts;
+        }
+
         if (!is_dir($hatfieldDir)) {
-            return ProjectDiscoveryResult::error(
+            return $this->claudeOnlyResult($claudeTranscripts, $details) ?? ProjectDiscoveryResult::error(
                 'Project has no .hatfield directory.',
                 issues: [$this->issue(ProjectSourceIssueCode::HatfieldMissing, 'Missing .hatfield directory under the registered project root.')],
                 details: $details,
@@ -95,7 +103,7 @@ final class HatfieldSourceDiscovery
         }
 
         if (!$this->isOmEnabled($effective)) {
-            return ProjectDiscoveryResult::error(
+            return $this->claudeOnlyResult($claudeTranscripts, $details) ?? ProjectDiscoveryResult::error(
                 'Observational memory extension is not enabled for this project.',
                 issues: [$this->issue(ProjectSourceIssueCode::OmDisabled, 'extensions.enabled does not include ObservationalMemoryExtension.')],
                 details: [
@@ -167,6 +175,30 @@ final class HatfieldSourceDiscovery
             sessionCount: $sessionCount,
             sourceRevision: $om['sourceRevision'],
             sourceChangeCount: $om['sourceChangeCount'],
+            details: $details,
+        );
+    }
+
+    /**
+     * Ready without Hatfield sources when Claude Code transcripts exist for the root.
+     *
+     * @param array<string, mixed> $details
+     */
+    private function claudeOnlyResult(?string $claudeTranscripts, array $details): ?ProjectDiscoveryResult
+    {
+        if (null === $claudeTranscripts) {
+            return null;
+        }
+
+        return ProjectDiscoveryResult::ready(
+            databasePath: null,
+            sessionsPath: null,
+            schemaVersion: null,
+            observationCount: 0,
+            reflectionCount: 0,
+            sessionCount: $this->claudeTranscripts->countTranscripts($claudeTranscripts),
+            sourceRevision: null,
+            sourceChangeCount: 0,
             details: $details,
         );
     }
