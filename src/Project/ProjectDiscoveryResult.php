@@ -68,7 +68,7 @@ final class ProjectDiscoveryResult
      */
     public static function ready(
         ?string $databasePath,
-        string $sessionsPath,
+        ?string $sessionsPath,
         ?string $schemaVersion,
         int $observationCount,
         int $reflectionCount,
@@ -91,6 +91,27 @@ final class ProjectDiscoveryResult
             sourceChangeCount: $sourceChangeCount,
             issues: $issues,
             details: $details,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $details
+     */
+    public function withDetails(array $details): self
+    {
+        return new self(
+            successful: $this->successful,
+            error: $this->error,
+            databasePath: $this->databasePath,
+            sessionsPath: $this->sessionsPath,
+            schemaVersion: $this->schemaVersion,
+            observationCount: $this->observationCount,
+            reflectionCount: $this->reflectionCount,
+            sessionCount: $this->sessionCount,
+            sourceRevision: $this->sourceRevision,
+            sourceChangeCount: $this->sourceChangeCount,
+            issues: $this->issues,
+            details: [...$this->details, ...$details],
         );
     }
 }

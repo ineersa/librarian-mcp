@@ -129,6 +129,7 @@ final readonly class ObservationRepository
      *   observation_id: string,
      *   session_pk: int,
      *   run_id: string,
+     *   source_kind: string,
      *   content: string,
      *   content_hash: string,
      *   relevance: string,
@@ -149,7 +150,7 @@ final readonly class ObservationRepository
 
         $exact = 64 === \strlen($idPrefix);
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT o.observation_id, o.memory_session_id, s.session_id AS run_id, o.content, o.content_hash, o.relevance,
+            'SELECT o.observation_id, o.memory_session_id, s.session_id AS run_id, s.source_kind, o.content, o.content_hash, o.relevance,
                     o.timestamp, o.token_count, o.source_refs_json, o.source_start_seq, o.source_end_seq, o.created_at
              FROM om_observations o
              INNER JOIN om_sessions s ON s.id = o.memory_session_id
@@ -165,6 +166,7 @@ final readonly class ObservationRepository
             $out[] = $mapped + [
                 'session_pk' => (int) $row['memory_session_id'],
                 'run_id' => (string) $row['run_id'],
+                'source_kind' => (string) $row['source_kind'],
             ];
         }
 

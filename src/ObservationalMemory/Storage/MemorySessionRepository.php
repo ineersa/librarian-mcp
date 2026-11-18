@@ -17,12 +17,12 @@ final readonly class MemorySessionRepository
     }
 
     /**
-     * @return array{session_pk: int, project_id: int, source_kind: string, run_id: string, sessions_path: ?string}|null
+     * @return array{session_pk: int, project_id: int, source_kind: string, run_id: string, project_root: string, sessions_path: ?string}|null
      */
     public function find(int $sessionPk): ?array
     {
         $row = $this->connection->fetchAssociative(
-            'SELECT s.id, s.project_id, s.source_kind, s.session_id, p.sessions_path
+            'SELECT s.id, s.project_id, s.source_kind, s.session_id, p.root_canonical, p.sessions_path
              FROM om_sessions s INNER JOIN projects p ON p.id = s.project_id WHERE s.id = ?',
             [$sessionPk],
         );
@@ -35,6 +35,7 @@ final readonly class MemorySessionRepository
             'project_id' => (int) $row['project_id'],
             'source_kind' => (string) $row['source_kind'],
             'run_id' => (string) $row['session_id'],
+            'project_root' => (string) $row['root_canonical'],
             'sessions_path' => null === $row['sessions_path'] ? null : (string) $row['sessions_path'],
         ];
     }

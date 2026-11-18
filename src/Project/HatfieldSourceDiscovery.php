@@ -4,15 +4,28 @@ declare(strict_types=1);
 
 namespace App\Project;
 
+use App\Memory\ClaudeTranscriptReader;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Discovers Hatfield OM/session source locations without booting Hatfield.
+ * Discovers Hatfield OM/session source locations without booting Hatfield. A project without
+ * Hatfield observational memory is still ready when it has Claude Code transcripts.
  */
 final class HatfieldSourceDiscovery
 {
     private const string DEFAULT_SESSIONS_PATH = '.hatfield/sessions';
+
+    /**
+     * Failures of the project root itself; any other Hatfield prerequisite failure still
+     * leaves a project with Claude Code transcripts ready.
+     */
+    private const array CLAUDE_BLOCKING_ISSUES = [
+        ProjectSourceIssueCode::RootUnavailable->value,
+        ProjectSourceIssueCode::GitMetadataUnavailable->value,
+        ProjectSourceIssueCode::LinkedWorktreeUnsupported->value,
+        ProjectSourceIssueCode::UnexpectedFailure->value,
+    ];
 
     private const string DEFAULT_OM_DATABASE_PATH = '.hatfield/extensions-data/observational-memory/om.sqlite';
 
@@ -24,10 +37,30 @@ final class HatfieldSourceDiscovery
         private readonly ServicePathMapper $pathMapper,
         private readonly HatfieldPathResolver $pathResolver,
         private readonly GitOriginNormalizer $gitOriginNormalizer,
+        private readonly ClaudeTranscriptReader $claudeTranscripts,
     ) {
     }
 
     public function discover(string $projectRoot): ProjectDiscoveryResult
+    {
+        $hatfield = $this->discoverHatfield($projectRoot);
+        $claudeTranscripts = $this->claudeTranscripts->transcriptDirectory($projectRoot);
+        if (null === $claudeTranscripts) {
+            return $hatfield;
+        }
+        if ($hatfield->successful) {
+            return $hatfield->withDetails(['claudeTranscriptsPath' => $claudeTranscripts]);
+        }
+        foreach ($hatfield->issues as $issue) {
+            if (\in_array($issue['code'], self::CLAUDE_BLOCKING_ISSUES, true)) {
+                return $hatfield;
+            }
+        }
+
+        return $this->claudeOnlyResult($claudeTranscripts, $hatfield);
+    }
+
+    private function discoverHatfield(string $projectRoot): ProjectDiscoveryResult
     {
         $details = [
             'projectRoot' => $projectRoot,
@@ -168,6 +201,31 @@ final class HatfieldSourceDiscovery
             sourceRevision: $om['sourceRevision'],
             sourceChangeCount: $om['sourceChangeCount'],
             details: $details,
+        );
+    }
+
+    /**
+     * Ready without Hatfield sources when Claude Code transcripts exist for the root. The
+     * Hatfield shortfall is kept as a diagnostic unless the project simply has no Hatfield OM.
+     */
+    private function claudeOnlyResult(string $claudeTranscripts, ProjectDiscoveryResult $hatfield): ProjectDiscoveryResult
+    {
+        $issues = array_values(array_filter(
+            $hatfield->issues,
+            static fn (array $issue): bool => !\in_array($issue['code'], [ProjectSourceIssueCode::HatfieldMissing->value, ProjectSourceIssueCode::OmDisabled->value], true),
+        ));
+
+        return ProjectDiscoveryResult::ready(
+            databasePath: null,
+            sessionsPath: null,
+            schemaVersion: null,
+            observationCount: 0,
+            reflectionCount: 0,
+            sessionCount: $this->claudeTranscripts->countTranscripts($claudeTranscripts),
+            sourceRevision: null,
+            sourceChangeCount: 0,
+            details: [...$hatfield->details, 'claudeTranscriptsPath' => $claudeTranscripts],
+            issues: $issues,
         );
     }
 

@@ -6,6 +6,7 @@ namespace App\MessageHandler;
 
 use App\Entity\MemorySourceKind;
 use App\Index\ProjectIndexManager;
+use App\Memory\MemorySourceReaders;
 use App\Message\ObserveMemorySessionMessage;
 use App\Message\ReflectMemoryGenerationMessage;
 use App\ObservationalMemory\MemorySessionLock;
@@ -30,6 +31,7 @@ final readonly class ObserveMemorySessionMessageHandler
 {
     public function __construct(
         private MemorySessionRepository $sessions,
+        private MemorySourceReaders $sources,
         private MemorySessionLock $sessionLock,
         private ObserverPipeline $observer,
         private ObservationRepository $repository,
@@ -48,13 +50,13 @@ final readonly class ObserveMemorySessionMessageHandler
             // Project removal cascades sessions; stale jobs are inert.
             return;
         }
-        if (MemorySourceKind::Hatfield->value !== $session['source_kind']) {
-            // Claude transcript reader is phase 4; the API does not accept these yet.
-            throw new UnrecoverableMessageHandlingException('No journal reader for this memory source kind yet.');
-        }
-        if (null === $session['sessions_path']) {
-            // Discovery has not resolved the journal root yet; retry later.
-            throw new \RuntimeException('Project session journal root is not discovered yet.');
+        $sourceKind = MemorySourceKind::tryFrom($session['source_kind'])
+            ?? throw new UnrecoverableMessageHandlingException('Unknown memory source kind.');
+        $sourceRoot = $this->sources->sourceRoot($sourceKind, $session['project_root'], $session['sessions_path']);
+        if (null === $sourceRoot) {
+            // Discovery has not resolved the Hatfield journal root yet, or the Claude transcript
+            // directory is not mounted/created yet; retry later.
+            throw new \RuntimeException('Session source root for this project is not available yet.');
         }
 
         $lock = $this->sessionLock->acquire($message->sessionPk);
@@ -63,7 +65,8 @@ final readonly class ObserveMemorySessionMessageHandler
                 $result = $this->observer->observeThrough(
                     sessionPk: $session['session_pk'],
                     runId: $session['run_id'],
-                    sessionsPath: $session['sessions_path'],
+                    sourceReader: $this->sources->reader($sourceKind),
+                    sourceRoot: $sourceRoot,
                     terminalEndSeq: $message->terminalEndSeq,
                     terminalStatus: $message->terminalStatus->value,
                     jobId: null,

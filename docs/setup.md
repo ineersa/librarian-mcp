@@ -36,14 +36,14 @@ The product path is local project registration, read-only Hatfield source discov
 
    Put application settings such as `CODERANK_*`, `BGE_*` and `INDEX_INTERVAL` in `.env.local` or `.env.dev.local`. Symfony loads these for both web and worker; development Compose does not inject tracked model defaults over them. Castor supplies checkout-owned database credentials explicitly.
 
-   - `PROJECTS_HOST_PATH` (default `.`) mounted read-write as `/projects` for SQLite WAL/SHM sidecars; database connections remain `mode=ro`
+   - `PROJECTS_HOST_PATH` (default `.`) mounted read-only as `/projects`; database connections remain `mode=ro`
    - `HATFIELD_USER_HOME` (required)
    - `HATFIELD_APP_ROOT` when settings use `%kernel.project_dir%`
    - optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix mappings
    - `CODERANK_URL` / `CODERANK_MODEL` / `CODERANK_ARTIFACT`
    - `BGE_URL` / `BGE_MODEL`
    - `INDEX_INTERVAL`
-   - optional ignored `compose.sources.yaml` for additional user/global/custom mounts (dev/prod via Castor; never imported by the browser stack); OM database directories also need writable mounts
+   - optional ignored `compose.sources.yaml` for additional user/global/custom mounts (dev/prod via Castor; never imported by the browser stack); read-only mounts suffice
 
 3. Start the development stack and Messenger consumer:
 

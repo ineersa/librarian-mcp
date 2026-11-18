@@ -17,6 +17,8 @@ parameters:
     app.hatfield_user_home: '%env(HATFIELD_USER_HOME)%'
     app.hatfield_app_root: '%env(HATFIELD_APP_ROOT)%'
     app.hatfield_path_mappings: '%env(json:HATFIELD_PATH_MAPPINGS)%'
+    # Host ~/.claude/projects, mounted read-only at the same path; empty disables Claude transcripts.
+    app.claude_projects_path: '%env(CLAUDE_PROJECTS_PATH)%'
 
 services:
     # default configuration for services in *this* file
@@ -27,6 +29,7 @@ services:
             $hatfieldUserHome: '%app.hatfield_user_home%'
             $hatfieldAppRoot: '%app.hatfield_app_root%'
             $pathMappings: '%app.hatfield_path_mappings%'
+            $claudeProjectsPath: '%app.claude_projects_path%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name

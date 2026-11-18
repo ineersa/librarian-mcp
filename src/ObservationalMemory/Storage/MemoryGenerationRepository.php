@@ -45,6 +45,7 @@ final readonly class MemoryGenerationRepository
      *   reflection_id: string,
      *   session_pk: int,
      *   run_id: string,
+     *   source_kind: string,
      *   content: string,
      *   supporting_observation_ids_json: string,
      *   token_count: int
@@ -59,7 +60,7 @@ final readonly class MemoryGenerationRepository
 
         $exact = 64 === \strlen($idPrefix);
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT r.reflection_id, r.memory_session_id, s.session_id AS run_id, r.content,
+            'SELECT r.reflection_id, r.memory_session_id, s.session_id AS run_id, s.source_kind, r.content,
                     r.supporting_observation_ids_json, r.token_count
              FROM om_reflections r
              INNER JOIN om_sessions s ON s.id = r.memory_session_id
@@ -75,6 +76,7 @@ final readonly class MemoryGenerationRepository
                 'reflection_id' => (string) $row['reflection_id'],
                 'session_pk' => (int) $row['memory_session_id'],
                 'run_id' => (string) $row['run_id'],
+                'source_kind' => (string) $row['source_kind'],
                 'content' => (string) $row['content'],
                 'supporting_observation_ids_json' => (string) $row['supporting_observation_ids_json'],
                 'token_count' => (int) $row['token_count'],

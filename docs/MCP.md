@@ -213,7 +213,10 @@ At the owner's subsequent request, the PR build was deployed on the existing pro
 
 ## 8) Observational memory API (plan 09, contract v1)
 
-Plain HTTP endpoints for the Hatfield thin client, not MCP tools (models never write memory). They use the same authentication and `X-Librarian-Project` header as MCP. `{sourceKind}` is `hatfield`.
+Plain HTTP endpoints for the Hatfield and Claude Code thin clients, not MCP tools (models never write memory). They use the same authentication and `X-Librarian-Project` header as MCP. `source_kind` / `{sourceKind}` is `hatfield` or `claude_code`.
+
+- `hatfield`: `end_seq` is the `events.jsonl` event seq; journals are read from the discovered sessions directory.
+- `claude_code`: `session_id` is the Claude session UUID and `end_seq` the number of complete transcript lines (1-based line numbers are the seqs; an unterminated last line is ignored). The transcript is read from `CLAUDE_PROJECTS_PATH/<project root with each non-alphanumeric character replaced by '-'>/<session_id>.jsonl`, so the header root must be the directory Claude Code was started in, and the service path must equal the host path (no `HATFIELD_PATH_MAPPINGS` translation; very long roots that Claude Code truncates with a hash suffix are not found). `session_id` must be a lowercase UUID or the request is rejected. Sidechain (subagent), meta and compaction-summary records are not observed. Recall evidence is the matched transcript lines' `message` reduced to role, text, tool calls and tool-result text (images and other blocks become type markers; a line over 1 MiB is reported as omitted); a removed transcript (deleted, or expired by Claude's `cleanupPeriodDays`) returns `session_deleted`.
 
 | Method | Path | Behavior |
 |---|---|---|
