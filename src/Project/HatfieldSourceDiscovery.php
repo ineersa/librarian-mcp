@@ -16,6 +16,17 @@ final class HatfieldSourceDiscovery
 {
     private const string DEFAULT_SESSIONS_PATH = '.hatfield/sessions';
 
+    /**
+     * Failures of the project root itself; any other Hatfield prerequisite failure still
+     * leaves a project with Claude Code transcripts ready.
+     */
+    private const array CLAUDE_BLOCKING_ISSUES = [
+        ProjectSourceIssueCode::RootUnavailable->value,
+        ProjectSourceIssueCode::GitMetadataUnavailable->value,
+        ProjectSourceIssueCode::LinkedWorktreeUnsupported->value,
+        ProjectSourceIssueCode::UnexpectedFailure->value,
+    ];
+
     private const string DEFAULT_OM_DATABASE_PATH = '.hatfield/extensions-data/observational-memory/om.sqlite';
 
     public function __construct(
@@ -31,6 +42,25 @@ final class HatfieldSourceDiscovery
     }
 
     public function discover(string $projectRoot): ProjectDiscoveryResult
+    {
+        $hatfield = $this->discoverHatfield($projectRoot);
+        $claudeTranscripts = $this->claudeTranscripts->transcriptDirectory($projectRoot);
+        if (null === $claudeTranscripts) {
+            return $hatfield;
+        }
+        if ($hatfield->successful) {
+            return $hatfield->withDetails(['claudeTranscriptsPath' => $claudeTranscripts]);
+        }
+        foreach ($hatfield->issues as $issue) {
+            if (\in_array($issue['code'], self::CLAUDE_BLOCKING_ISSUES, true)) {
+                return $hatfield;
+            }
+        }
+
+        return $this->claudeOnlyResult($claudeTranscripts, $hatfield);
+    }
+
+    private function discoverHatfield(string $projectRoot): ProjectDiscoveryResult
     {
         $details = [
             'projectRoot' => $projectRoot,
@@ -79,13 +109,8 @@ final class HatfieldSourceDiscovery
             );
         }
 
-        $claudeTranscripts = $this->claudeTranscripts->transcriptDirectory($projectRoot);
-        if (null !== $claudeTranscripts) {
-            $details['claudeTranscriptsPath'] = $claudeTranscripts;
-        }
-
         if (!is_dir($hatfieldDir)) {
-            return $this->claudeOnlyResult($claudeTranscripts, $details) ?? ProjectDiscoveryResult::error(
+            return ProjectDiscoveryResult::error(
                 'Project has no .hatfield directory.',
                 issues: [$this->issue(ProjectSourceIssueCode::HatfieldMissing, 'Missing .hatfield directory under the registered project root.')],
                 details: $details,
@@ -103,7 +128,7 @@ final class HatfieldSourceDiscovery
         }
 
         if (!$this->isOmEnabled($effective)) {
-            return $this->claudeOnlyResult($claudeTranscripts, $details) ?? ProjectDiscoveryResult::error(
+            return ProjectDiscoveryResult::error(
                 'Observational memory extension is not enabled for this project.',
                 issues: [$this->issue(ProjectSourceIssueCode::OmDisabled, 'extensions.enabled does not include ObservationalMemoryExtension.')],
                 details: [
@@ -180,15 +205,15 @@ final class HatfieldSourceDiscovery
     }
 
     /**
-     * Ready without Hatfield sources when Claude Code transcripts exist for the root.
-     *
-     * @param array<string, mixed> $details
+     * Ready without Hatfield sources when Claude Code transcripts exist for the root. The
+     * Hatfield shortfall is kept as a diagnostic unless the project simply has no Hatfield OM.
      */
-    private function claudeOnlyResult(?string $claudeTranscripts, array $details): ?ProjectDiscoveryResult
+    private function claudeOnlyResult(string $claudeTranscripts, ProjectDiscoveryResult $hatfield): ProjectDiscoveryResult
     {
-        if (null === $claudeTranscripts) {
-            return null;
-        }
+        $issues = array_values(array_filter(
+            $hatfield->issues,
+            static fn (array $issue): bool => !\in_array($issue['code'], [ProjectSourceIssueCode::HatfieldMissing->value, ProjectSourceIssueCode::OmDisabled->value], true),
+        ));
 
         return ProjectDiscoveryResult::ready(
             databasePath: null,
@@ -199,7 +224,8 @@ final class HatfieldSourceDiscovery
             sessionCount: $this->claudeTranscripts->countTranscripts($claudeTranscripts),
             sourceRevision: null,
             sourceChangeCount: 0,
-            details: $details,
+            details: [...$hatfield->details, 'claudeTranscriptsPath' => $claudeTranscripts],
+            issues: $issues,
         );
     }
 

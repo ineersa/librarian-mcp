@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\ObservationalMemory\Ingest;
 
 use App\Entity\MemorySourceKind;
+use App\Memory\ClaudeTranscriptReader;
 use Symfony\Component\DependencyInjection\Attribute\Exclude;
 
 /**
@@ -60,9 +61,14 @@ final readonly class MemoryObserveRequest
                 ?? throw self::invalid('terminal_status must be one of: '.implode(', ', array_column(MemoryTerminalStatus::cases(), 'value')).'.');
         }
 
+        $sessionId = self::identifier($data['session_id'] ?? null, 'session_id');
+        if (MemorySourceKind::ClaudeCode === $sourceKind && 1 !== preg_match(ClaudeTranscriptReader::SESSION_ID_PATTERN, $sessionId)) {
+            throw self::invalid('claude_code session_id must be a lowercase Claude session UUID.');
+        }
+
         return new self(
             $sourceKind,
-            self::identifier($data['session_id'] ?? null, 'session_id'),
+            $sessionId,
             null === ($data['parent_session_id'] ?? null) ? null : self::identifier($data['parent_session_id'], 'parent_session_id'),
             $endSeq,
             $terminalStatus,

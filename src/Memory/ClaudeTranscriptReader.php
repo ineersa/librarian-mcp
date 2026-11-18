@@ -16,10 +16,9 @@ use App\ObservationalMemory\Observer\SessionEventDTO;
  */
 final readonly class ClaudeTranscriptReader implements SessionSourceReader
 {
-    private const string TRANSCRIPT_EXTENSION = '.jsonl';
-
     /** Claude Code session ids are lowercase UUIDs; anything else is not a transcript name. */
-    private const string SESSION_ID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/';
+    public const string SESSION_ID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/';
+    private const string TRANSCRIPT_EXTENSION = '.jsonl';
 
     /** Claude Code names a project's transcript directory by replacing each non-alphanumeric character of its root with '-'. */
     private const string ROOT_ENCODING_PATTERN = '/[^A-Za-z0-9]/';
@@ -136,37 +135,43 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         $evidenceBytes = 0;
         $lineNo = 0;
         try {
-            while (false !== ($line = fgets($handle))) {
+            // fgets($length) returns at most length-1 bytes, so physical lines are capped in memory.
+            while (false !== ($chunk = fgets($handle, self::MAX_EVIDENCE_LINE_BYTES + 1))) {
                 if (null !== $checkpoint && \is_array($interrupt = $checkpoint())) {
                     return $interrupt;
                 }
                 ++$lineNo;
+                $oversized = !str_ends_with($chunk, "\n") && self::MAX_EVIDENCE_LINE_BYTES === \strlen($chunk);
+                if ($oversized && !$this->skipRestOfLine($handle)) {
+                    break;
+                }
                 if ($lineNo > $maxSeq) {
                     break;
                 }
                 if (!isset($wanted[$lineNo])) {
                     continue;
                 }
-                if (\strlen($line) > self::MAX_EVIDENCE_LINE_BYTES) {
-                    return $this->failure(MemoryErrorCode::ResourceLimitExceeded, 'Claude transcript line exceeded the bounded byte limit.');
+                if ($oversized) {
+                    $event = ['run_id' => $sessionId, 'seq' => $lineNo, 'type' => '', 'created_at' => '', 'payload' => ['omitted' => 'Transcript line exceeds the bounded evidence size.']];
+                } else {
+                    try {
+                        $record = $this->decode($chunk);
+                    } catch (\RuntimeException $e) {
+                        return $this->failure(MemoryErrorCode::EventsUnreadable, $e->getMessage());
+                    }
+                    if (null === $record) {
+                        continue;
+                    }
+                    $message = \is_array($record['message'] ?? null) ? $record['message'] : null;
+                    $event = [
+                        'run_id' => $sessionId,
+                        'seq' => $lineNo,
+                        'type' => \is_string($record['type'] ?? null) ? $record['type'] : '',
+                        'created_at' => \is_string($record['timestamp'] ?? null) ? $record['timestamp'] : '',
+                        'payload' => null === $message ? [] : ['message' => $this->evidenceMessage($message)],
+                    ];
                 }
-                try {
-                    $record = $this->decode($line);
-                } catch (\RuntimeException $e) {
-                    return $this->failure(MemoryErrorCode::EventsUnreadable, $e->getMessage());
-                }
-                if (null === $record) {
-                    continue;
-                }
-                $type = \is_string($record['type'] ?? null) ? $record['type'] : '';
-                $event = [
-                    'run_id' => $sessionId,
-                    'seq' => $lineNo,
-                    'type' => $type,
-                    'created_at' => \is_string($record['timestamp'] ?? null) ? $record['timestamp'] : '',
-                    'payload' => \is_array($record['message'] ?? null) ? ['message' => $record['message']] : [],
-                ];
-                $evidenceBytes += \strlen(json_encode($event, \JSON_THROW_ON_ERROR));
+                $evidenceBytes += \strlen(json_encode($event, \JSON_THROW_ON_ERROR | \JSON_INVALID_UTF8_SUBSTITUTE));
                 if ($evidenceBytes > self::MAX_EVIDENCE_BYTES) {
                     return $this->failure(MemoryErrorCode::ResourceLimitExceeded, 'Claude transcript evidence exceeded the bounded response byte limit.');
                 }
@@ -179,6 +184,63 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         }
 
         return $events;
+    }
+
+    /**
+     * Consume the remainder of an over-long physical line; false when the file ends inside it.
+     *
+     * @param resource $handle
+     */
+    private function skipRestOfLine($handle): bool
+    {
+        while (false !== ($rest = fgets($handle, self::MAX_EVIDENCE_LINE_BYTES + 1))) {
+            if (str_ends_with($rest, "\n")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Role plus text-bearing content only: images and other binary blocks become type markers.
+     *
+     * @param array<string, mixed> $message
+     *
+     * @return array<string, mixed>
+     */
+    private function evidenceMessage(array $message): array
+    {
+        $content = $message['content'] ?? null;
+        if (\is_array($content)) {
+            $content = array_map(fn (mixed $block): mixed => \is_array($block) ? $this->evidenceBlock($block) : $block, $content);
+        }
+
+        return ['role' => $message['role'] ?? null, 'content' => $content];
+    }
+
+    /**
+     * @param array<mixed> $block
+     *
+     * @return array<string, mixed>
+     */
+    private function evidenceBlock(array $block): array
+    {
+        $type = \is_string($block['type'] ?? null) ? $block['type'] : '';
+
+        return match ($type) {
+            self::BLOCK_TEXT => ['type' => $type, 'text' => $block['text'] ?? ''],
+            self::BLOCK_TOOL_USE => ['type' => $type, 'id' => $block['id'] ?? null, 'name' => $block['name'] ?? null, 'input' => $block['input'] ?? null],
+            self::BLOCK_TOOL_RESULT => [
+                'type' => $type,
+                'tool_use_id' => $block['tool_use_id'] ?? null,
+                'is_error' => true === ($block['is_error'] ?? false),
+                'content' => \is_array($block['content'] ?? null)
+                    ? array_map(fn (mixed $part): mixed => \is_array($part) ? $this->evidenceBlock($part) : $part, $block['content'])
+                    : ($block['content'] ?? ''),
+            ],
+            default => ['type' => $type],
+        };
     }
 
     /**
