@@ -15,6 +15,8 @@ final class JsonlLines
     public const int RANGE_BUDGET_BYTES = 8_388_608;
     /** Hatfield's own per-record staging limit; longer lines are skipped by the Observer. */
     public const int MAX_RECORD_BYTES = 16_777_216;
+    /** Distinct source lines of open tool calls one forced cut carries into its continuation. */
+    public const int MAX_CARRIED_LINES = 16;
 
     /** fgets(length) allocates the requested buffer even for short lines; keep it small. */
     private const int CHUNK_BYTES = 8193;
@@ -28,7 +30,7 @@ final class JsonlLines
      *
      * @param resource $handle
      *
-     * @return \Generator<int, array{end: int, line: ?string}>
+     * @return \Generator<int, array{start: int, end: int, line: ?string}>
      */
     public static function lines($handle, int $start, int $cut, int $maxLineBytes): \Generator
     {
@@ -36,6 +38,7 @@ final class JsonlLines
             throw new \RuntimeException('Cannot seek session source to its read position.');
         }
         $position = $start;
+        $lineStart = $start;
         $line = '';
         $oversized = false;
         while ($position < $cut && false !== ($chunk = fgets($handle, min(self::CHUNK_BYTES, $cut - $position + 1)))) {
@@ -48,11 +51,29 @@ final class JsonlLines
                 }
             }
             if (str_ends_with($chunk, "\n")) {
-                yield ['end' => $position, 'line' => $oversized ? null : $line];
+                yield ['start' => $lineStart, 'end' => $position, 'line' => $oversized ? null : $line];
+                $lineStart = $position;
                 $line = '';
                 $oversized = false;
             }
         }
+    }
+
+    /**
+     * Exactly one complete line at a known location before $cut, or null when it is not there.
+     *
+     * @param resource $handle
+     */
+    public static function lineAt($handle, int $offset, int $length, int $cut): ?string
+    {
+        if ($offset < 0 || $length < 1 || $length > self::MAX_RECORD_BYTES || $offset + $length > $cut) {
+            return null;
+        }
+        foreach (self::lines($handle, $offset, $offset + $length, $length) as $read) {
+            return $read['end'] === $offset + $length ? $read['line'] : null;
+        }
+
+        return null;
     }
 
     /**
@@ -70,13 +91,14 @@ final class JsonlLines
     }
 
     /**
-     * @param resource $handle
+     * @param resource              $handle
+     * @param list<OpenToolCallRef> $openToolCalls
      */
-    public static function checkpoint($handle, int $seq, int $offset): ?SourceCheckpoint
+    public static function checkpoint($handle, int $seq, int $offset, array $openToolCalls = []): ?SourceCheckpoint
     {
         $hash = self::boundaryHash($handle, $offset);
 
-        return null === $hash ? null : new SourceCheckpoint($seq, $offset, $hash);
+        return null === $hash ? null : new SourceCheckpoint($seq, $offset, $hash, $openToolCalls);
     }
 
     /**

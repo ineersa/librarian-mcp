@@ -14,6 +14,8 @@ use App\ObservationalMemory\Support\OmIdentity;
  */
 final class OmSourceBlockBuilder
 {
+    /** Event types build() renders; every other type is skipped as a control event. */
+    public const array RENDERED_EVENT_TYPES = ['run_started', 'agent_command_applied', 'llm_step_completed', 'tool_execution_end', 'llm_step_failed', 'agent_end'];
     private const int TOOL_RESULT_MAX_TOKENS = 5_000;
 
     private const int TOOL_DIGEST_PREFIX_CHARS = 400;
@@ -23,7 +25,13 @@ final class OmSourceBlockBuilder
     private const array IMMUTABLE_PROMPT_ROLES = ['system', 'developer', 'user-context'];
 
     /**
+     * $carried are earlier `llm_step_completed` events (filtered to their still-open calls)
+     * that a forced budget cut left without results. They were already rendered by an earlier
+     * job, so they only pair with a result here, as a tool group placed at the result's seq,
+     * and are never rendered on their own again.
+     *
      * @param list<SessionEventDTO> $events
+     * @param list<SessionEventDTO> $carried
      *
      * @return list<array{
      *   run_id: string,
@@ -33,7 +41,7 @@ final class OmSourceBlockBuilder
      *   source_refs: list<array{run_id: string, seq: int}>
      * }>
      */
-    public function build(array $events): array
+    public function build(array $events, array $carried = []): array
     {
         if ([] === $events) {
             return [];
@@ -43,6 +51,32 @@ final class OmSourceBlockBuilder
 
         $pendingToolCalls = [];
         $blocks = [];
+
+        foreach ($carried as $callEvent) {
+            $assistant = $callEvent->payload['assistant_message'] ?? null;
+            $toolCalls = \is_array($assistant) ? ($assistant['tool_calls'] ?? null) : null;
+            foreach (\is_array($toolCalls) ? $toolCalls : [] as $toolCall) {
+                if (!\is_array($toolCall)) {
+                    continue;
+                }
+                $id = (string) ($toolCall['id'] ?? $toolCall['tool_call_id'] ?? '');
+                if ('' === $id) {
+                    continue;
+                }
+                $name = (string) ($toolCall['name'] ?? $toolCall['function']['name'] ?? 'tool');
+                $args = $toolCall['arguments'] ?? $toolCall['function']['arguments'] ?? [];
+                $pendingToolCalls[$id] = [
+                    'event' => $callEvent,
+                    'name' => $name,
+                    'parts' => [
+                        \sprintf('[Earlier tool call @ %s, result below]', $this->eventTimestamp($callEvent)),
+                        \sprintf('[Tool call %s name=%s args=%s]', $id, $name, $this->jsonCompact($args)),
+                    ],
+                    'timestamp' => $this->eventTimestamp($callEvent),
+                    'carried' => true,
+                ];
+            }
+        }
 
         foreach ($events as $event) {
             $timestamp = $this->eventTimestamp($event);
@@ -140,11 +174,13 @@ final class OmSourceBlockBuilder
                         /** @var SessionEventDTO $callEvent */
                         $callEvent = $pending['event'];
                         $rendered = implode("\n", $pending['parts'])."\n".$resultLine;
+                        // A carried call sits before this job's range; place the group at its result.
+                        $groupEvent = true === ($pending['carried'] ?? false) ? $event : $callEvent;
                         $blocks[] = [
                             'run_id' => $callEvent->runId,
-                            'seq' => $callEvent->seq,
+                            'seq' => $groupEvent->seq,
                             'kind' => 'tool_group',
-                            'rendered_text' => $this->withSourceLabel($callEvent, $rendered),
+                            'rendered_text' => $this->withSourceLabel($groupEvent, $rendered),
                             'source_refs' => OmIdentity::normalizeSourceRefs([
                                 ['run_id' => $callEvent->runId, 'seq' => $callEvent->seq],
                                 ['run_id' => $event->runId, 'seq' => $event->seq],
@@ -177,8 +213,11 @@ final class OmSourceBlockBuilder
             }
         }
 
-        // Flush unmatched tool calls as assistant blocks.
+        // Flush unmatched tool calls as assistant blocks; carried ones were rendered by an earlier job.
         foreach ($pendingToolCalls as $pending) {
+            if (true === ($pending['carried'] ?? false)) {
+                continue;
+            }
             /** @var SessionEventDTO $callEvent */
             $callEvent = $pending['event'];
             $blocks[] = $this->singleBlock($callEvent, 'tool_call', implode("\n", $pending['parts']));

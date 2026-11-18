@@ -37,6 +37,14 @@ class MemorySourceCheckpoint
     #[ORM\Column(name: 'boundary_hash', type: Types::STRING, length: 64)]
     public private(set) string $boundaryHash;
 
+    /**
+     * Tool calls a forced budget cut left waiting for results: {id, seq, offset, length} each.
+     *
+     * @var list<array{id: string, seq: int, offset: int, length: int}>
+     */
+    #[ORM\Column(name: 'open_tool_calls', type: Types::JSON)]
+    public private(set) array $openToolCalls = [];
+
     private function __construct()
     {
     }

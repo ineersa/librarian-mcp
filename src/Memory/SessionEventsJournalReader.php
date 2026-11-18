@@ -236,32 +236,31 @@ final class SessionEventsJournalReader implements SessionSourceReader
             throw new \RuntimeException('Session event journal is unreadable.');
         }
 
-        $collector = new BudgetedRangeCollector($endSeq);
         try {
             $cut = $this->committedCut($pathOrError['path'], JsonlLines::size($handle));
             $from = JsonlLines::usable($handle, $from, $cut, $startSeq);
+            $carried = BudgetedRangeCollector::readCarried(
+                $handle,
+                $cut,
+                $from->openToolCalls ?? [],
+                function (string $line) use ($sessionId): array {
+                    $event = $this->eventFromLine($line, $sessionId);
+
+                    return null === $event ? [] : [$event];
+                },
+            );
+            $collector = new BudgetedRangeCollector($endSeq, $carried['refs']);
             foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, JsonlLines::MAX_RECORD_BYTES) as $read) {
                 $line = $read['line'];
                 // Cheap pre-filter: skip lines of other runs without decoding large payloads.
                 if (null === $line || !str_contains($line, $sessionId)) {
                     continue;
                 }
-                $line = trim($line);
-                if ('' === $line) {
+                $event = $this->eventFromLine($line, $sessionId);
+                if (null === $event) {
                     continue;
                 }
-                try {
-                    $decoded = json_decode($line, true, 512, \JSON_THROW_ON_ERROR);
-                } catch (\JsonException $e) {
-                    throw new \RuntimeException('Session event journal contains corrupt JSON.', previous: $e);
-                }
-                if (!\is_array($decoded) || ($decoded['run_id'] ?? null) !== $sessionId) {
-                    continue;
-                }
-                $seq = $decoded['seq'] ?? null;
-                if (!\is_int($seq)) {
-                    continue;
-                }
+                $seq = $event->seq;
                 // Journals are append-only with ascending seq; stop past the wanted window.
                 if ($seq > $endSeq) {
                     break;
@@ -269,31 +268,57 @@ final class SessionEventsJournalReader implements SessionSourceReader
                 if ($seq < $startSeq) {
                     continue;
                 }
-                $type = $decoded['type'] ?? null;
-                $payload = $decoded['payload'] ?? null;
-                $createdAt = $decoded['ts'] ?? ($decoded['created_at'] ?? '');
-                if (!\is_string($type) || '' === $type || !\is_array($payload) || !\is_string($createdAt)) {
-                    throw new \RuntimeException('Session event journal contains an unexpected event shape.');
-                }
-                $turnNo = $decoded['turn_no'] ?? 0;
-                $event = new SessionEventDTO(
-                    runId: $sessionId,
-                    seq: $seq,
-                    turnNo: \is_int($turnNo) ? $turnNo : 0,
-                    type: $type,
-                    payload: $payload,
-                    createdAt: $createdAt,
-                );
                 // Seqs ascend through the journal, so events arrive already ordered.
-                if (!$collector->add($seq, $read['end'], \strlen($line), [$event])) {
+                if (!$collector->add($seq, $read['start'], $read['end'], \strlen($line), [$event])) {
                     break;
                 }
             }
 
-            return $collector->result($handle);
+            return $collector->result($handle, $carried['events']);
         } finally {
             fclose($handle);
         }
+    }
+
+    /**
+     * The canonical event on one journal line of this run, or null for other runs and blank lines.
+     *
+     * @throws \RuntimeException on corrupt JSON or an unexpected event shape
+     */
+    private function eventFromLine(string $line, string $sessionId): ?SessionEventDTO
+    {
+        $line = trim($line);
+        if ('' === $line) {
+            return null;
+        }
+        try {
+            $decoded = json_decode($line, true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new \RuntimeException('Session event journal contains corrupt JSON.', previous: $e);
+        }
+        if (!\is_array($decoded) || ($decoded['run_id'] ?? null) !== $sessionId) {
+            return null;
+        }
+        $seq = $decoded['seq'] ?? null;
+        if (!\is_int($seq)) {
+            return null;
+        }
+        $type = $decoded['type'] ?? null;
+        $payload = $decoded['payload'] ?? null;
+        $createdAt = $decoded['ts'] ?? ($decoded['created_at'] ?? '');
+        if (!\is_string($type) || '' === $type || !\is_array($payload) || !\is_string($createdAt)) {
+            throw new \RuntimeException('Session event journal contains an unexpected event shape.');
+        }
+        $turnNo = $decoded['turn_no'] ?? 0;
+
+        return new SessionEventDTO(
+            runId: $sessionId,
+            seq: $seq,
+            turnNo: \is_int($turnNo) ? $turnNo : 0,
+            type: $type,
+            payload: $payload,
+            createdAt: $createdAt,
+        );
     }
 
     /**

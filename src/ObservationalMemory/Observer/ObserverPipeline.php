@@ -133,7 +133,7 @@ final readonly class ObserverPipeline
         // Never mark seqs the source does not hold yet, or that this job's read budget did not reach.
         $terminalEndSeq = min($terminalEndSeq, $range->lastSeq);
 
-        $blocks = (new OmSourceBlockBuilder())->build($events);
+        $blocks = (new OmSourceBlockBuilder())->build($events, $range->carried);
         if ([] === $blocks) {
             // No content blocks — still advance coverage for the range with a synthetic empty part.
             $blocks = [[

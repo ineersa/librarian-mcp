@@ -103,10 +103,21 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
 
         /** @var array<string, string> $toolNames */
         $toolNames = [];
-        $collector = new BudgetedRangeCollector($endSeq);
         try {
             $cut = JsonlLines::size($handle);
             $from = JsonlLines::usable($handle, $from, $cut, $startSeq);
+            // Re-reading carried calls also restores their tool names for the results here.
+            $carried = BudgetedRangeCollector::readCarried(
+                $handle,
+                $cut,
+                $from->openToolCalls ?? [],
+                function (string $line, int $seq) use ($sessionId, &$toolNames): array {
+                    $record = $this->decode($line);
+
+                    return null === $record ? [] : $this->eventsFor($record, $sessionId, $seq, $toolNames);
+                },
+            );
+            $collector = new BudgetedRangeCollector($endSeq, $carried['refs']);
             // Line numbers are positions, so a checkpoint also fixes the numbering base.
             $lineNo = $from->seq ?? 0;
             // Unterminated last lines are still being written and are never yielded.
@@ -121,12 +132,12 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
                 $line = $read['line'];
                 $record = null === $line ? null : $this->decode($line);
                 $events = null === $record ? [] : $this->eventsFor($record, $sessionId, $lineNo, $toolNames);
-                if (!$collector->add($lineNo, $read['end'], null === $line ? 0 : \strlen($line), $events)) {
+                if (!$collector->add($lineNo, $read['start'], $read['end'], null === $line ? 0 : \strlen($line), $events)) {
                     break;
                 }
             }
 
-            return $collector->result($handle);
+            return $collector->result($handle, $carried['events']);
         } finally {
             fclose($handle);
         }
