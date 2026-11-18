@@ -20,8 +20,15 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
     public const string SESSION_ID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/';
     private const string TRANSCRIPT_EXTENSION = '.jsonl';
 
-    /** Claude Code names a project's transcript directory by replacing each non-alphanumeric character of its root with '-'. */
-    private const string ROOT_ENCODING_PATTERN = '/[^A-Za-z0-9]/';
+    /**
+     * Claude Code names a project's transcript directory with JavaScript's
+     * `root.replace(/[^a-zA-Z0-9]/g, '-')`, which works per UTF-16 code unit: one '-' per
+     * BMP character ('é', 'я', '中') and two for a character outside the BMP (4-byte UTF-8).
+     */
+    private const string ROOT_ENCODING_PATTERN = '/[^A-Za-z0-9]/u';
+    private const string ROOT_ENCODING_BYTE_PATTERN = '/[^A-Za-z0-9]/';
+    private const string ROOT_ENCODING_CHAR = '-';
+    private const int UTF8_ASTRAL_BYTES = 4;
 
     private const string RECORD_USER = 'user';
     private const string RECORD_ASSISTANT = 'assistant';
@@ -52,10 +59,25 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         if ('' === $base || '' === $projectRoot) {
             return null;
         }
-        $directory = $base.\DIRECTORY_SEPARATOR.preg_replace(self::ROOT_ENCODING_PATTERN, '-', $projectRoot);
+        $directory = $base.\DIRECTORY_SEPARATOR.self::encodeProjectRoot($projectRoot);
         clearstatcache(true, $directory);
 
         return is_dir($directory) && is_readable($directory) ? $directory : null;
+    }
+
+    /**
+     * Claude Code's transcript directory name for a project root (see ROOT_ENCODING_PATTERN).
+     */
+    public static function encodeProjectRoot(string $projectRoot): string
+    {
+        $encoded = preg_replace_callback(
+            self::ROOT_ENCODING_PATTERN,
+            static fn (array $match): string => str_repeat(self::ROOT_ENCODING_CHAR, self::UTF8_ASTRAL_BYTES === \strlen($match[0]) ? 2 : 1),
+            $projectRoot,
+        );
+
+        // Not valid UTF-8, so not a root Claude Code could have encoded per character.
+        return $encoded ?? (string) preg_replace(self::ROOT_ENCODING_BYTE_PATTERN, self::ROOT_ENCODING_CHAR, $projectRoot);
     }
 
     public function countTranscripts(string $transcriptDirectory): int
@@ -79,12 +101,9 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
             throw new \RuntimeException('Claude transcript is unreadable.');
         }
 
-        $events = [];
         /** @var array<string, string> $toolNames */
         $toolNames = [];
-        $last = null;
-        $truncated = false;
-        $budget = JsonlLines::RANGE_BUDGET_BYTES;
+        $collector = new BudgetedRangeCollector($endSeq);
         try {
             $cut = JsonlLines::size($handle);
             $from = JsonlLines::usable($handle, $from, $cut, $startSeq);
@@ -99,29 +118,15 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
                 if ($lineNo < $startSeq) {
                     continue;
                 }
-                $last = ['seq' => $lineNo, 'end' => $read['end']];
-                if (null === $read['line']) {
-                    continue;
-                }
-                $budget -= \strlen($read['line']);
-                $record = $this->decode($read['line']);
-                if (null !== $record) {
-                    foreach ($this->eventsFor($record, $sessionId, $lineNo, $toolNames) as $event) {
-                        $events[] = $event;
-                    }
-                }
-                if ($budget <= 0 && $lineNo < $endSeq) {
-                    $truncated = true;
+                $line = $read['line'];
+                $record = null === $line ? null : $this->decode($line);
+                $events = null === $record ? [] : $this->eventsFor($record, $sessionId, $lineNo, $toolNames);
+                if (!$collector->add($lineNo, $read['end'], null === $line ? 0 : \strlen($line), $events)) {
                     break;
                 }
             }
 
-            return new SessionSourceRange(
-                $events,
-                $last['seq'] ?? null,
-                null === $last ? null : JsonlLines::checkpoint($handle, $last['seq'], $last['end']),
-                $truncated,
-            );
+            return $collector->result($handle);
         } finally {
             fclose($handle);
         }

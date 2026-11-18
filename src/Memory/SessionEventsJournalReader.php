@@ -236,10 +236,7 @@ final class SessionEventsJournalReader implements SessionSourceReader
             throw new \RuntimeException('Session event journal is unreadable.');
         }
 
-        $events = [];
-        $last = null;
-        $truncated = false;
-        $budget = JsonlLines::RANGE_BUDGET_BYTES;
+        $collector = new BudgetedRangeCollector($endSeq);
         try {
             $cut = $this->committedCut($pathOrError['path'], JsonlLines::size($handle));
             $from = JsonlLines::usable($handle, $from, $cut, $startSeq);
@@ -279,7 +276,7 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     throw new \RuntimeException('Session event journal contains an unexpected event shape.');
                 }
                 $turnNo = $decoded['turn_no'] ?? 0;
-                $events[$seq] = new SessionEventDTO(
+                $event = new SessionEventDTO(
                     runId: $sessionId,
                     seq: $seq,
                     turnNo: \is_int($turnNo) ? $turnNo : 0,
@@ -287,22 +284,13 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     payload: $payload,
                     createdAt: $createdAt,
                 );
-                $last = ['seq' => $seq, 'end' => $read['end']];
-                $budget -= \strlen($line);
-                if ($budget <= 0 && $seq < $endSeq) {
-                    $truncated = true;
+                // Seqs ascend through the journal, so events arrive already ordered.
+                if (!$collector->add($seq, $read['end'], \strlen($line), [$event])) {
                     break;
                 }
             }
 
-            ksort($events);
-
-            return new SessionSourceRange(
-                array_values($events),
-                $last['seq'] ?? null,
-                null === $last ? null : JsonlLines::checkpoint($handle, $last['seq'], $last['end']),
-                $truncated,
-            );
+            return $collector->result($handle);
         } finally {
             fclose($handle);
         }
@@ -311,6 +299,7 @@ final class SessionEventsJournalReader implements SessionSourceReader
     /**
      * Readable end of the journal. While Hatfield has an append pending, bytes past the
      * manifest offset are not committed yet (Hatfield JsonlAppendJournal::readableOffset()).
+     * $size must be sampled before the manifest is read.
      */
     private function committedCut(string $journalPath, int $size): int
     {
@@ -330,11 +319,13 @@ final class SessionEventsJournalReader implements SessionSourceReader
             throw new \RuntimeException('Session event journal has an unreadable pending-append manifest.', previous: $e);
         }
         $offset = \is_array($manifest) ? ($manifest['offset'] ?? null) : null;
-        if (!\is_int($offset) || $offset < 0 || $offset > $size) {
+        if (!\is_int($offset) || $offset < 0) {
             throw new \RuntimeException('Session event journal pending-append manifest is inconsistent.');
         }
 
-        return $offset;
+        // Hatfield appends without Librarian sharing its lock: a manifest past the size sampled
+        // earlier belongs to a newer append, so every byte up to that size is already committed.
+        return min($offset, $size);
     }
 
     /**
