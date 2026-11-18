@@ -107,7 +107,7 @@ Librarian-owned:
 - Generated PostgreSQL migrations under `migrations/postgres` (`DoctrineMigrations\Postgres`)
 - Development and browser stacks use separate checkout-owned PostgreSQL storage
 
-Source-owned (writable mounts for SQLite WAL/SHM sidecars; database connections remain `mode=ro`):
+Source-owned (read-only mounts; database connections remain `mode=ro`):
 
 - `PROJECTS_HOST_PATH` → `/projects` in dev/prod
 - optional ignored `compose.sources.yaml` overlays for user/global/custom settings or data (dev/prod via Castor only)
@@ -120,7 +120,7 @@ Do not commit private project settings, OM databases, session journals, or deriv
 ## 7) Operational model
 
 - Long-running discovery/indexing is async (Messenger workers required: one consumes `async` + `scheduler_default`, a second consumes `om` for memory generation)
-- Source tables/journals remain read-only; writable mounts allow SQLite WAL/SHM sidecars
+- Source tables, journals and transcripts are read-only; mounts are read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport at `/_mcp`; project selection uses `X-Librarian-Project`, search retains OM's schema, and recall takes only `id` with the session derived from the matched record (see [MCP.md](MCP.md))
 - Browser database is `librarian_browser` in the checkout-scoped Postgres volume. Native browser tooling joins the private network; PostgreSQL publishes no host ports in any stack

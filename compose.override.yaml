@@ -47,7 +47,7 @@ services:
       - type: bind
         source: '${PROJECTS_HOST_PATH:-/tmp}'
         target: '${PROJECTS_CONTAINER_PATH:-/projects}'
-        read_only: false
+        read_only: true
         bind:
           create_host_path: false
       # Claude Code transcripts, read-only at the host path (CLAUDE_PROJECTS_PATH); unset mounts an empty placeholder directory.
@@ -100,7 +100,7 @@ services:
       - type: bind
         source: '${PROJECTS_HOST_PATH:-/tmp}'
         target: '${PROJECTS_CONTAINER_PATH:-/projects}'
-        read_only: false
+        read_only: true
         bind:
           create_host_path: false
       # Claude Code transcripts, read-only at the host path (CLAUDE_PROJECTS_PATH); unset mounts an empty placeholder directory.

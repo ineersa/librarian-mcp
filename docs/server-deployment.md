@@ -45,7 +45,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
    Production compose receives `--env-file .env.prod.local`. Production web and worker must share the same Postgres database and lock store. Keep lock DSN overrides on shared storage, not container-local paths. See `.env.prod.local.dist`.
 
-3. Configure the published app port and writable project bind in `.env.prod.local` (Castor loads it for both Compose interpolation and container environment):
+3. Configure the published app port and read-only project bind in `.env.prod.local` (Castor loads it for both Compose interpolation and container environment):
 
    ```bash
    APP_HTTP_BIND=127.0.0.1
@@ -73,7 +73,7 @@ For host nginx TLS, explicitly set `APP_HTTP_BIND=127.0.0.1` and proxy to `APP_H
 
 6. Create an admin user, then configure nginx to proxy the explicit loopback port selected above.
 
-Optional: maintain an ignored `compose.sources.yaml` for additional mounts of user/global/custom Hatfield settings or data. OM database directories need writable mounts for SQLite WAL/SHM sidecars; database connections remain `mode=ro`. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production add them to both consumers, `messenger` and `messenger-om` (development: `worker` and `om-worker`), since memory generation reads session journals; see [source mounts](project-sources.md#docker-source-mounts).
+Optional: maintain an ignored `compose.sources.yaml` for additional mounts of user/global/custom Hatfield settings or data. Mounts are read-only; database connections remain `mode=ro`. Castor layers it for **dev/prod only**, never for the isolated browser stack. In production add them to both consumers, `messenger` and `messenger-om` (development: `worker` and `om-worker`), since memory generation reads session journals; see [source mounts](project-sources.md#docker-source-mounts).
 
 Use the generated PostgreSQL baseline in `migrations/postgres`. The actual local checkout replacement is recorded in [indexing validation](indexing-validation.md#actual-checkout-replacement).
 
@@ -142,7 +142,7 @@ Then publish host 443 with a local compose override.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
 - Symfony environment is baked by `composer dump-env prod` during image build.
 - Castor loads `.env`, `.env.prod` and `.env.prod.local` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
-- Project sources are mounted read-write for SQLite WAL/SHM sidecars; source database connections remain `mode=ro`, with no source-table or journal writes.
+- Project sources are mounted read-only; source database connections remain `mode=ro`, with no source-table, journal or transcript writes. Mounting the whole home (`PROJECTS_HOST_PATH=/home/<user>`) is supported and also covers `~/.claude/projects`.
 - Postgres stays on the private network with no host ports. `messenger` consumes Messenger `async` and `scheduler_default`; `messenger-om` consumes `om` (memory generation).
 - Web, Messenger and PostgreSQL use `restart: unless-stopped`. The Messenger-only container disables the image's Caddy HTTP health check because it does not run an HTTP server; a running worker is not an HTTP health-check result.
 - Scheduler uses `CallbackMessageProvider` for automatic source discovery followed by incremental indexing (`INDEX_INTERVAL`, default 60s). Check timestamps advance even when unchanged memories do not need rebuilding.
