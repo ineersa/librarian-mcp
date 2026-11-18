@@ -65,7 +65,7 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         return false === $files ? 0 : \count($files);
     }
 
-    public function readRange(string $sourceRoot, string $sessionId, int $startSeq, int $endSeq): array
+    public function readRange(string $sourceRoot, string $sessionId, int $startSeq, int $endSeq, ?SourceCheckpoint $from = null): SessionSourceRange
     {
         if ($startSeq < 1 || $endSeq < $startSeq) {
             throw new \InvalidArgumentException('Transcript range requires 1 <= start_seq <= end_seq.');
@@ -82,33 +82,52 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         $events = [];
         /** @var array<string, string> $toolNames */
         $toolNames = [];
-        $lineNo = 0;
+        $last = null;
+        $truncated = false;
+        $budget = JsonlLines::RANGE_BUDGET_BYTES;
         try {
-            while (false !== ($line = fgets($handle))) {
+            $cut = JsonlLines::size($handle);
+            $from = JsonlLines::usable($handle, $from, $cut, $startSeq);
+            // Line numbers are positions, so a checkpoint also fixes the numbering base.
+            $lineNo = $from->seq ?? 0;
+            // Unterminated last lines are still being written and are never yielded.
+            foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, JsonlLines::MAX_RECORD_BYTES) as $read) {
                 ++$lineNo;
-                // An unterminated last line is still being written; never cover it.
-                if ($lineNo > $endSeq || !str_ends_with($line, "\n")) {
+                if ($lineNo > $endSeq) {
                     break;
                 }
                 if ($lineNo < $startSeq) {
                     continue;
                 }
-                $record = $this->decode($line);
-                if (null === $record) {
+                $last = ['seq' => $lineNo, 'end' => $read['end']];
+                if (null === $read['line']) {
                     continue;
                 }
-                foreach ($this->eventsFor($record, $sessionId, $lineNo, $toolNames) as $event) {
-                    $events[] = $event;
+                $budget -= \strlen($read['line']);
+                $record = $this->decode($read['line']);
+                if (null !== $record) {
+                    foreach ($this->eventsFor($record, $sessionId, $lineNo, $toolNames) as $event) {
+                        $events[] = $event;
+                    }
+                }
+                if ($budget <= 0 && $lineNo < $endSeq) {
+                    $truncated = true;
+                    break;
                 }
             }
+
+            return new SessionSourceRange(
+                $events,
+                $last['seq'] ?? null,
+                null === $last ? null : JsonlLines::checkpoint($handle, $last['seq'], $last['end']),
+                $truncated,
+            );
         } finally {
             fclose($handle);
         }
-
-        return $events;
     }
 
-    public function loadForSession(string $sourceRoot, string $sessionId, array $seqs, ?callable $checkpoint = null): array
+    public function loadForSession(string $sourceRoot, string $sessionId, array $seqs, ?callable $checkpoint = null, ?SourceCheckpoint $from = null): array
     {
         /** @var array<int, true> $wanted */
         $wanted = [];
@@ -133,29 +152,26 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
 
         $events = [];
         $evidenceBytes = 0;
-        $lineNo = 0;
         try {
-            // fgets($length) returns at most length-1 bytes, so physical lines are capped in memory.
-            while (false !== ($chunk = fgets($handle, self::MAX_EVIDENCE_LINE_BYTES + 1))) {
+            $cut = JsonlLines::size($handle);
+            $from = JsonlLines::usable($handle, $from, $cut, min(array_keys($wanted)));
+            $lineNo = $from->seq ?? 0;
+            foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, self::MAX_EVIDENCE_LINE_BYTES) as $read) {
                 if (null !== $checkpoint && \is_array($interrupt = $checkpoint())) {
                     return $interrupt;
                 }
                 ++$lineNo;
-                $oversized = !str_ends_with($chunk, "\n") && self::MAX_EVIDENCE_LINE_BYTES === \strlen($chunk);
-                if ($oversized && !$this->skipRestOfLine($handle)) {
-                    break;
-                }
                 if ($lineNo > $maxSeq) {
                     break;
                 }
                 if (!isset($wanted[$lineNo])) {
                     continue;
                 }
-                if ($oversized) {
+                if (null === $read['line']) {
                     $event = ['run_id' => $sessionId, 'seq' => $lineNo, 'type' => '', 'created_at' => '', 'payload' => ['omitted' => 'Transcript line exceeds the bounded evidence size.']];
                 } else {
                     try {
-                        $record = $this->decode($chunk);
+                        $record = $this->decode($read['line']);
                     } catch (\RuntimeException $e) {
                         return $this->failure(MemoryErrorCode::EventsUnreadable, $e->getMessage());
                     }
@@ -179,27 +195,13 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
             }
         } catch (\JsonException) {
             return $this->failure(MemoryErrorCode::EventsUnreadable, 'Claude transcript contains an unexpected record shape.');
+        } catch (\RuntimeException $e) {
+            return $this->failure(MemoryErrorCode::EventsUnreadable, $e->getMessage());
         } finally {
             fclose($handle);
         }
 
         return $events;
-    }
-
-    /**
-     * Consume the remainder of an over-long physical line; false when the file ends inside it.
-     *
-     * @param resource $handle
-     */
-    private function skipRestOfLine($handle): bool
-    {
-        while (false !== ($rest = fgets($handle, self::MAX_EVIDENCE_LINE_BYTES + 1))) {
-            if (str_ends_with($rest, "\n")) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

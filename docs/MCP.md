@@ -137,7 +137,7 @@ Limits (honest):
 
 - Response payload max **1 MiB** (JSON text + identical `structuredContent` means the wire duplicates the object).
 - Recall default cooperative clock deadline **30s** between DB/journal checkpoints — not a hard I/O timeout on every read.
-- Source evidence caps: **10 000** refs / support IDs; **1 MiB** physical journal line / evidence; **64 MiB** scanned journal bytes.
+- Source evidence caps: **10 000** refs / support IDs; **1 MiB** physical journal line / evidence; **64 MiB** scanned journal bytes, counted from the nearest source checkpoint before the requested seqs (see §8), so evidence deep in a long journal stays recallable.
 - Search provider HTTP `max_duration` **30s** per model request. BGE batches of 8 mean there is **no** aggregate hard deadline or cancellation claim beyond that.
 
 MCP channel logs stay informational and exclude SDK debug argument logging. Prefer project id, latency, and non-sensitive error class — not query text, source content, tokens, or credentials.
@@ -215,8 +215,10 @@ At the owner's subsequent request, the PR build was deployed on the existing pro
 
 Plain HTTP endpoints for the Hatfield and Claude Code thin clients, not MCP tools (models never write memory). They use the same authentication and `X-Librarian-Project` header as MCP. `source_kind` / `{sourceKind}` is `hatfield` or `claude_code`.
 
-- `hatfield`: `end_seq` is the `events.jsonl` event seq; journals are read from the discovered sessions directory.
+- `hatfield`: `end_seq` is the `events.jsonl` event seq; journals are read from the discovered sessions directory. Reads stop at Hatfield's committed cut: while `events.jsonl.append.pending.json` exists, bytes past its `offset` are not read.
 - `claude_code`: `session_id` is the Claude session UUID and `end_seq` the number of complete transcript lines (1-based line numbers are the seqs; an unterminated last line is ignored). The transcript is read from `CLAUDE_PROJECTS_PATH/<project root with each non-alphanumeric character replaced by '-'>/<session_id>.jsonl`, so the header root must be the directory Claude Code was started in, and the service path must equal the host path (no `HATFIELD_PATH_MAPPINGS` translation; very long roots that Claude Code truncates with a hash suffix are not found). `session_id` must be a lowercase UUID or the request is rejected. Sidechain (subagent), meta and compaction-summary records are not observed. Recall evidence is the matched transcript lines' `message` reduced to role, text, tool calls and tool-result text (images and other blocks become type markers; a line over 1 MiB is reported as omitted); a removed transcript (deleted, or expired by Claude's `cleanupPeriodDays`) returns `session_deleted`.
+
+Sources are never rescanned from the top. After the Observer's coverage reaches a seq, Librarian records a source checkpoint: the seq, the byte offset just past its line, and a hash of the bytes before that offset. Later observe and recall reads seek to the nearest checkpoint before the seqs they need and read in bounded chunks (the technique of Hatfield's `JsonlRunEventLog::locatedLines()`). If the hash no longer matches the file, the checkpoint is ignored and that read scans from the top. One Observer job reads at most 8 MiB of in-range lines; a longer backlog (a first observe of a long session) continues in follow-up jobs. Lines over 16 MiB (Hatfield's own record limit) are skipped by the Observer.
 
 | Method | Path | Behavior |
 |---|---|---|

@@ -85,6 +85,10 @@ final readonly class ObserveMemorySessionMessageHandler
         if ($result['observation_count'] > 0) {
             $this->projectIndexManager->queueId($session['project_id']);
         }
+        if ($result['more']) {
+            // The read budget stopped this job short of the requested end; continue from the new coverage.
+            $this->bus->dispatch(new ObserveMemorySessionMessage($message->sessionPk, $message->terminalEndSeq, $message->terminalStatus));
+        }
     }
 
     private function maybeDispatchThresholdReflection(int $sessionPk, string $runId): void

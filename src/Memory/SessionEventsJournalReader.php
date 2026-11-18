@@ -15,6 +15,8 @@ use App\ObservationalMemory\Observer\SessionEventDTO;
 final class SessionEventsJournalReader implements SessionSourceReader
 {
     private const string EVENTS_BASENAME = 'events.jsonl';
+    private const string PENDING_APPEND_SUFFIX = '.append.pending.json';
+    private const int MAX_MANIFEST_BYTES = 4096;
     private const int MAX_LINE_BYTES = 1_048_576;
     private const int MAX_SCANNED_BYTES = 67_108_864;
     private const int MAX_EVIDENCE_BYTES = 1_048_576;
@@ -29,6 +31,7 @@ final class SessionEventsJournalReader implements SessionSourceReader
         string $sessionId,
         array $seqs,
         ?callable $checkpoint = null,
+        ?SourceCheckpoint $from = null,
     ): array {
         if ([] === $seqs) {
             return [];
@@ -66,7 +69,20 @@ final class SessionEventsJournalReader implements SessionSourceReader
         $scannedBytes = 0;
         $evidenceBytes = 0;
         try {
-            while (true) {
+            try {
+                $cut = $this->committedCut($journalPath, JsonlLines::size($handle));
+                $from = JsonlLines::usable($handle, $from, $cut, min(array_keys($wanted)));
+                $start = $from->offset ?? 0;
+            } catch (\RuntimeException $e) {
+                return [
+                    'ok' => false,
+                    'error' => MemoryErrorCode::EventsUnreadable->value,
+                    'message' => $e->getMessage(),
+                ];
+            }
+            // The scan cap counts from the checkpoint, so long journals stay recallable.
+            $position = $start;
+            foreach (JsonlLines::lines($handle, $start, $cut, self::MAX_LINE_BYTES) as $read) {
                 if (null !== $checkpoint) {
                     $interrupt = $checkpoint();
                     if (\is_array($interrupt)) {
@@ -74,13 +90,8 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     }
                 }
 
-                $line = fgets($handle, self::MAX_LINE_BYTES + 1);
-                if (false === $line) {
-                    break;
-                }
-
-                $lineBytes = \strlen($line);
-                $scannedBytes += $lineBytes;
+                $scannedBytes += $read['end'] - $position;
+                $position = $read['end'];
                 if ($scannedBytes > self::MAX_SCANNED_BYTES) {
                     return [
                         'ok' => false,
@@ -89,9 +100,8 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     ];
                 }
 
-                // fgets($length) returns at most length-1 bytes; an unterminated
-                // max-size read means the physical line continues past the cap.
-                if (!str_ends_with($line, "\n") && self::MAX_LINE_BYTES === $lineBytes) {
+                $line = $read['line'];
+                if (null === $line) {
                     return [
                         'ok' => false,
                         'error' => MemoryErrorCode::ResourceLimitExceeded->value,
@@ -206,14 +216,12 @@ final class SessionEventsJournalReader implements SessionSourceReader
     /**
      * Read-only range read for the Observer (port of Hatfield SessionEventReader::readRange).
      *
-     * Streams the whole journal without recall's scan cap because live journals can be
-     * 50-100 MB; only events inside [startSeq, endSeq] are decoded and kept.
-     *
-     * @return list<SessionEventDTO>
+     * Starts at a verified checkpoint when one precedes the range, reads at most the
+     * per-job byte budget of in-range events, and never past Hatfield's committed cut.
      *
      * @throws \RuntimeException when the journal is missing, unreadable, or malformed in range
      */
-    public function readRange(string $sessionsPath, string $sessionId, int $startSeq, int $endSeq): array
+    public function readRange(string $sessionsPath, string $sessionId, int $startSeq, int $endSeq, ?SourceCheckpoint $from = null): SessionSourceRange
     {
         if ($startSeq < 1 || $endSeq < $startSeq) {
             throw new \InvalidArgumentException('Journal range requires 1 <= start_seq <= end_seq.');
@@ -229,10 +237,16 @@ final class SessionEventsJournalReader implements SessionSourceReader
         }
 
         $events = [];
+        $last = null;
+        $truncated = false;
+        $budget = JsonlLines::RANGE_BUDGET_BYTES;
         try {
-            while (false !== ($line = fgets($handle))) {
+            $cut = $this->committedCut($pathOrError['path'], JsonlLines::size($handle));
+            $from = JsonlLines::usable($handle, $from, $cut, $startSeq);
+            foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, JsonlLines::MAX_RECORD_BYTES) as $read) {
+                $line = $read['line'];
                 // Cheap pre-filter: skip lines of other runs without decoding large payloads.
-                if (!str_contains($line, $sessionId)) {
+                if (null === $line || !str_contains($line, $sessionId)) {
                     continue;
                 }
                 $line = trim($line);
@@ -273,14 +287,54 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     payload: $payload,
                     createdAt: $createdAt,
                 );
+                $last = ['seq' => $seq, 'end' => $read['end']];
+                $budget -= \strlen($line);
+                if ($budget <= 0 && $seq < $endSeq) {
+                    $truncated = true;
+                    break;
+                }
             }
+
+            ksort($events);
+
+            return new SessionSourceRange(
+                array_values($events),
+                $last['seq'] ?? null,
+                null === $last ? null : JsonlLines::checkpoint($handle, $last['seq'], $last['end']),
+                $truncated,
+            );
         } finally {
             fclose($handle);
         }
+    }
 
-        ksort($events);
+    /**
+     * Readable end of the journal. While Hatfield has an append pending, bytes past the
+     * manifest offset are not committed yet (Hatfield JsonlAppendJournal::readableOffset()).
+     */
+    private function committedCut(string $journalPath, int $size): int
+    {
+        $manifestPath = $journalPath.self::PENDING_APPEND_SUFFIX;
+        clearstatcache(true, $manifestPath);
+        if (!is_file($manifestPath)) {
+            return $size;
+        }
+        $bytes = @file_get_contents($manifestPath, false, null, 0, self::MAX_MANIFEST_BYTES + 1);
+        if (false === $bytes) {
+            // Finalized and removed between the check and the read: the whole file is committed.
+            return $size;
+        }
+        try {
+            $manifest = json_decode($bytes, true, 16, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new \RuntimeException('Session event journal has an unreadable pending-append manifest.', previous: $e);
+        }
+        $offset = \is_array($manifest) ? ($manifest['offset'] ?? null) : null;
+        if (!\is_int($offset) || $offset < 0 || $offset > $size) {
+            throw new \RuntimeException('Session event journal pending-append manifest is inconsistent.');
+        }
 
-        return array_values($events);
+        return $offset;
     }
 
     /**
