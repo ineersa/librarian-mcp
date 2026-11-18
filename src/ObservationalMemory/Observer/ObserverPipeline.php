@@ -10,6 +10,7 @@ use App\ObservationalMemory\Agent\MemoryAgentTool;
 use App\ObservationalMemory\MemorySettings;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\ObservationRepository;
+use App\ObservationalMemory\Storage\SourceCheckpointRepository;
 use App\ObservationalMemory\Support\OmCanonicalJson;
 use App\ObservationalMemory\Support\OmIdentity;
 use Psr\Log\LoggerInterface;
@@ -29,6 +30,7 @@ final readonly class ObserverPipeline
         private MemoryAgentRunner $agentRunner,
         private ObservationRepository $repository,
         private MemoryGenerationRepository $generationRepository,
+        private SourceCheckpointRepository $checkpoints,
         private MemorySettings $settings,
         private ClockInterface $clock,
         private LoggerInterface $logger,
@@ -43,8 +45,12 @@ final readonly class ObserverPipeline
      *   observation_count: int,
      *   chunks_processed: int,
      *   source_start_seq: int,
-     *   source_end_seq: int
+     *   source_end_seq: int,
+     *   more: bool
      * }
+     *
+     * `more` is true when the per-job read budget stopped short of terminalEndSeq; the caller
+     * continues in a follow-up job
      */
     public function observeThrough(
         int $sessionPk,
@@ -83,6 +89,7 @@ final readonly class ObserverPipeline
                 'chunks_processed' => 0,
                 'source_start_seq' => $sourceStartSeq,
                 'source_end_seq' => $terminalEndSeq,
+                'more' => false,
             ];
         }
 
@@ -96,8 +103,15 @@ final readonly class ObserverPipeline
         $memoryReflections = $this->memoryReflectionLines($sessionPk);
         $memoryObservations = $this->memoryObservationLines($sessionPk);
 
-        $events = $sourceReader->readRange($sourceRoot, $runId, $sourceStartSeq, $terminalEndSeq);
-        if ([] === $events) {
+        $range = $sourceReader->readRange(
+            $sourceRoot,
+            $runId,
+            $sourceStartSeq,
+            $terminalEndSeq,
+            $this->checkpoints->latestBefore($sessionPk, $sourceStartSeq),
+        );
+        $events = $range->events;
+        if (null === $range->lastSeq) {
             // end_seq comes from the client; the journal holds nothing past coverage yet.
             $this->logger->info('om.observe.journal_behind_signal', [
                 'component' => 'observational_memory',
@@ -113,12 +127,13 @@ final readonly class ObserverPipeline
                 'chunks_processed' => 0,
                 'source_start_seq' => $sourceStartSeq,
                 'source_end_seq' => $terminalEndSeq,
+                'more' => false,
             ];
         }
-        // Never mark seqs the journal does not hold yet.
-        $terminalEndSeq = min($terminalEndSeq, $events[array_key_last($events)]->seq);
+        // Never mark seqs the source does not hold yet, or that this job's read budget did not reach.
+        $terminalEndSeq = min($terminalEndSeq, $range->lastSeq);
 
-        $blocks = (new OmSourceBlockBuilder())->build($events);
+        $blocks = (new OmSourceBlockBuilder())->build($events, $range->carried);
         if ([] === $blocks) {
             // No content blocks — still advance coverage for the range with a synthetic empty part.
             $blocks = [[
@@ -268,12 +283,18 @@ final readonly class ObserverPipeline
             ]);
         }
 
+        // Every part through terminalEndSeq is durable, so later reads may start past it.
+        if (null !== $range->end && $range->end->seq === $terminalEndSeq) {
+            $this->checkpoints->record($sessionPk, $range->end);
+        }
+
         return [
             'status' => $processed > 0 ? 'inserted' : 'noop',
             'observation_count' => $totalObservations,
             'chunks_processed' => $processed,
             'source_start_seq' => $firstStart,
             'source_end_seq' => $lastEnd,
+            'more' => $range->truncated,
         ];
     }
 

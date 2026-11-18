@@ -9,6 +9,7 @@ use App\Entity\Project;
 use App\Index\Source\MemoryKind;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\ObservationRepository;
+use App\ObservationalMemory\Storage\SourceCheckpointRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
@@ -37,6 +38,7 @@ final class MemoryRecall
         private readonly MemoryGenerationRepository $generations,
         private readonly Connection $connection,
         private readonly MemorySourceReaders $sources,
+        private readonly SourceCheckpointRepository $checkpoints,
         private readonly ClockInterface $clock,
     ) {
     }
@@ -115,6 +117,7 @@ final class MemoryRecall
                 }
 
                 $observation = $obsMatches[0];
+                $targetSessionPk = $observation['session_pk'];
                 $targetRunId = $observation['run_id'];
                 $targetSourceKind = $observation['source_kind'];
                 $refs = $this->sourceRefsForRun(
@@ -140,6 +143,7 @@ final class MemoryRecall
                 }
 
                 $reflection = $refMatches[0];
+                $targetSessionPk = $reflection['session_pk'];
                 $targetRunId = $reflection['run_id'];
                 $targetSourceKind = $reflection['source_kind'];
                 $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
@@ -207,7 +211,7 @@ final class MemoryRecall
             return $this->error(MemoryErrorCode::SessionsUnavailable, 'Registered project has no available session source for this memory.');
         }
 
-        $events = $this->loadEventsForRefs($this->sources->reader($sourceKind), $sourceRoot, $targetRunId, $pendingEvents['refs'], $deadline);
+        $events = $this->loadEventsForRefs($this->sources->reader($sourceKind), $sourceRoot, $targetSessionPk, $targetRunId, $pendingEvents['refs'], $deadline);
         if ($this->isFailureResult($events)) {
             return $events;
         }
@@ -271,7 +275,7 @@ final class MemoryRecall
      *
      * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function loadEventsForRefs(SessionSourceReader $reader, string $sourceRoot, string $currentRunId, array $refs, \DateTimeImmutable $deadline): array
+    private function loadEventsForRefs(SessionSourceReader $reader, string $sourceRoot, int $sessionPk, string $currentRunId, array $refs, \DateTimeImmutable $deadline): array
     {
         if ([] === $refs) {
             return [];
@@ -306,6 +310,7 @@ final class MemoryRecall
             function () use ($deadline): ?array {
                 return $this->timeoutMap($deadline, 'Timed out while reading session events.');
             },
+            $this->checkpoints->latestBefore($sessionPk, min($seqs)),
         );
     }
 
