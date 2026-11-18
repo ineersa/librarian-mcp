@@ -39,11 +39,12 @@ final class OmSourceReader
 
             try {
                 $applied = $this->validateSchema($pdo);
+                $hasSourceRevisions = \in_array(OmExtensionIds::SOURCE_REVISIONS_SCHEMA_VERSION, $applied, true);
 
                 $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
                 $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
-                $sourceRevision = $this->fetchSourceRevision($pdo);
-                $sourceChangeCount = (int) $pdo->query('SELECT COUNT(*) FROM om_source_change')->fetchColumn();
+                $sourceRevision = $hasSourceRevisions ? $this->fetchSourceRevision($pdo) : null;
+                $sourceChangeCount = $hasSourceRevisions ? (int) $pdo->query('SELECT COUNT(*) FROM om_source_change')->fetchColumn() : 0;
 
                 $pdo->commit();
             } catch (ProjectSourceException $exception) {
@@ -61,7 +62,7 @@ final class OmSourceReader
             }
 
             return [
-                'schemaVersion' => OmExtensionIds::LATEST_SCHEMA_VERSION,
+                'schemaVersion' => $hasSourceRevisions ? OmExtensionIds::LATEST_SCHEMA_VERSION : (string) end($applied),
                 'appliedVersions' => $applied,
                 'observationCount' => $observationCount,
                 'reflectionCount' => $reflectionCount,
@@ -96,8 +97,8 @@ final class OmSourceReader
     public function validateSchema(\PDO $pdo): array
     {
         $applied = $this->readAppliedVersions($pdo);
-        $this->assertSupportedSchema($applied);
-        $this->assertRequiredTables($pdo);
+        $hasSourceRevisions = $this->assertSupportedSchema($applied);
+        $this->assertRequiredTables($pdo, $hasSourceRevisions);
 
         return $applied;
     }
@@ -159,7 +160,7 @@ final class OmSourceReader
     /**
      * @param list<string> $applied
      */
-    private function assertSupportedSchema(array $applied): void
+    private function assertSupportedSchema(array $applied): bool
     {
         $required = OmExtensionIds::REQUIRED_SCHEMA_VERSIONS;
         $unknown = array_values(array_diff($applied, $required));
@@ -168,19 +169,26 @@ final class OmSourceReader
         }
 
         $missing = array_values(array_diff($required, $applied));
+        if ([OmExtensionIds::SOURCE_REVISIONS_SCHEMA_VERSION] === $missing) {
+            return false;
+        }
         if ([] !== $missing) {
             throw new ProjectSourceException(ProjectSourceIssueCode::OmSchemaUnsupported, 'Observational memory schema is missing required version(s).');
         }
+
+        return true;
     }
 
-    private function assertRequiredTables(\PDO $pdo): void
+    private function assertRequiredTables(\PDO $pdo, bool $hasSourceRevisions): void
     {
         $requiredColumns = [
             'om_observation' => ['observation_id', 'run_id', 'content', 'relevance', 'timestamp'],
             'om_reflection' => ['reflection_id', 'run_id', 'content', 'created_at'],
-            'om_source_revision' => ['id', 'revision'],
-            'om_source_change' => ['kind', 'source_id', 'revision'],
         ];
+        if ($hasSourceRevisions) {
+            $requiredColumns['om_source_revision'] = ['id', 'revision'];
+            $requiredColumns['om_source_change'] = ['kind', 'source_id', 'revision'];
+        }
 
         foreach ($requiredColumns as $table => $columns) {
             $existing = $this->tableColumns($pdo, $table);

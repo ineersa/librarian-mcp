@@ -26,4 +26,11 @@ final class OmExtensionIds
     ];
 
     public const string LATEST_SCHEMA_VERSION = '20261021_006_semantic_source_revisions';
+
+    /**
+     * Adds only om_source_revision/om_source_change/om_semantic_progress; observation, reflection,
+     * coverage and generation tables are identical without it, so a database that stopped at the
+     * previous version (Hatfield no longer migrates OM) is still importable, without revision metadata.
+     */
+    public const string SOURCE_REVISIONS_SCHEMA_VERSION = '20261021_006_semantic_source_revisions';
 }
