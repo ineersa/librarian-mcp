@@ -35,6 +35,7 @@ final readonly class DailyBackupTask implements CronJobTask
     public const string PREFIX_HATFIELD = 'hatfield/';
     public const string PREFIX_CLAUDE = 'claude/';
     private const string STAMP_FORMAT = 'Y_m_d_H_i_s';
+    private const string HATFIELD_DIR = '.hatfield';
 
     public function __construct(
         private ProjectRepository $projectRepository,
@@ -82,7 +83,9 @@ final readonly class DailyBackupTask implements CronJobTask
             $key = '' !== $slug ? $project->id.'-'.$slug : (string) $project->id;
 
             $this->backup('Hatfield '.$project->name, self::PREFIX_HATFIELD.$key.'/', 'hatfield_'.$key.'_'.$stamp.'.tar.gz',
-                fn (string $file): bool => $this->hatfieldArchiver->archive($root, $this->sourceDiscovery->resolveSessionsDirectory($root), $file, $this->workDir), $uploaded, $errors);
+                // Claude-only projects (no `.hatfield`) need no Hatfield settings or user home.
+                fn (string $file): bool => is_dir($root.'/'.self::HATFIELD_DIR)
+                    && $this->hatfieldArchiver->archive($root, $this->sourceDiscovery->resolveSessionsDirectory($root), $file, $this->workDir), $uploaded, $errors);
             $heartbeat();
 
             $this->backup('Claude '.$project->name, self::PREFIX_CLAUDE.$key.'/', 'claude_'.$key.'_'.$stamp.'.tar.gz',

@@ -111,15 +111,20 @@ final readonly class HatfieldArchiver
             return null;
         }
         $sessions = rtrim($sessionsPath, '/');
-        if (!is_dir($sessions)) {
-            return null; // no session history exists yet
-        }
         if (!str_starts_with($sessions.'/', $root.'/') || $sessions === $root) {
             throw new \RuntimeException(\sprintf('Sessions directory %s is outside the project root %s; backup does not support it.', $sessions, $root));
         }
         $relative = substr($sessions, \strlen($root) + 1);
+        if (self::DEFAULT_SESSIONS_DIR === $relative) {
+            return null; // archived with .hatfield; a missing default directory means no sessions yet
+        }
+        // An explicitly configured location must exist: a vanished directory or unavailable mount
+        // would otherwise yield a "successful" backup without session history.
+        if (!is_dir($sessions) || !is_readable($sessions)) {
+            throw new \RuntimeException(\sprintf('Configured sessions directory %s is missing or unreadable.', $sessions));
+        }
 
-        return self::DEFAULT_SESSIONS_DIR === $relative ? null : $relative;
+        return $relative;
     }
 
     private function snapshotState(string $source, string $target): void
