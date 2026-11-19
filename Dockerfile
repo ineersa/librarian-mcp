@@ -14,6 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Backups: pg_dump must match the PostgreSQL 17 server, newer than Debian bookworm's client,
+# so install it from the official PostgreSQL apt repository (PGDG) via postgresql-common.
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-common \
+    && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
+    && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN install-php-extensions \
         @composer \
         bcmath \

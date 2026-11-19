@@ -23,6 +23,15 @@ framework:
                     max_retries: 5
                     delay: 30000
                     multiplier: 2
+            # Cron jobs (daily backup). Redispatched by the `cron` schedule or queued by the admin
+            # "Run now" action. Failures are recorded on the cron run and retried by the next
+            # schedule tick, so Messenger does not retry.
+            cron:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    queue_name: cron
+                retry_strategy:
+                    max_retries: 0
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 
@@ -41,3 +50,4 @@ framework:
             'App\Message\IndexProjectMessage': async
             'App\Message\ObserveMemorySessionMessage': om
             'App\Message\ReflectMemoryGenerationMessage': om
+            'App\Message\RunCronJobMessage': cron

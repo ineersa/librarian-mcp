@@ -110,8 +110,15 @@ services:
         read_only: true
         bind:
           create_host_path: false
-    # Indexing consumer: discovery/import/embeddings and the scheduler. Generation runs in om-worker.
-    command: ['php', 'bin/console', 'messenger:consume', 'async', 'scheduler_default', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
+      # GCS backup service-account key, read-only at the host path (GOOGLE_SERVICE_ACCOUNT_JSON_PATH); unset mounts an empty placeholder.
+      - type: bind
+        source: '${GOOGLE_SERVICE_ACCOUNT_JSON_PATH:-./docker/gcs-service-account-placeholder.json}'
+        target: '${GOOGLE_SERVICE_ACCOUNT_JSON_PATH:-/run/gcs-service-account-placeholder.json}'
+        read_only: true
+        bind:
+          create_host_path: false
+    # Indexing consumer: discovery/import/embeddings, the schedulers and cron jobs (daily backup). Generation runs in om-worker.
+    command: ['php', 'bin/console', 'messenger:consume', 'async', 'scheduler_default', 'scheduler_cron', 'cron', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
     healthcheck:
       disable: true
     depends_on:

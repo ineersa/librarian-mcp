@@ -202,6 +202,7 @@ Summary:
 
 - Shared PostgreSQL + pgvector database for app metadata and generation-scoped store tables
 - Scheduler freshness via Messenger `scheduler_default` (`INDEX_INTERVAL`, default 60s)
+- Daily Google Cloud Storage backups of PostgreSQL, Hatfield and Claude data, tracked in admin **Cron runs** ([docs/backups.md](docs/backups.md))
 - Registered project sources stay on the mounted project tree (`/projects` and optional `compose.sources.yaml` overlays)
 - Do not commit private project settings, OM databases, or session journals as fixtures
 

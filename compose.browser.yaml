@@ -46,6 +46,9 @@ services:
       MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       INDEX_STORAGE_DIR: var/browser-live/indexes
       INDEX_INTERVAL: '2'
+      # Backups write into the browser-owned tree; the test env stores them in a local directory, not GCS.
+      BACKUP_WORK_DIR: var/browser-live/backup-work
+      BACKUP_LOCAL_STORAGE_DIR: var/browser-live/backup-storage
       POSTGRES_DB: '${POSTGRES_DB}'
       POSTGRES_USER: '${POSTGRES_USER}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
