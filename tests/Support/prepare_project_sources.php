@@ -127,6 +127,25 @@ YAML);
     $db = $path.'/.hatfield/extensions-data/observational-memory/om.sqlite';
     createSupportedOmDatabase($db, observationCount: 2, reflectionCount: 1, sourceRevision: 4, sourceChangeCount: 3);
     writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 1);
+    // Backup inputs: Hatfield application state (WAL mode, like Hatfield) and a log the backup skips.
+    createHatfieldStateDatabase($path.'/.hatfield/state.sqlite', '108');
+    writeFile($path.'/.hatfield/logs/agent.log', "synthetic log line\n");
+}
+
+function createHatfieldStateDatabase(string $dbPath, string $sessionId): void
+{
+    if (is_file($dbPath)) {
+        unlink($dbPath);
+    }
+    $db = new SQLite3($dbPath);
+    $db->enableExceptions(true);
+    $db->exec('PRAGMA journal_mode=WAL');
+    $db->exec('CREATE TABLE hatfield_session (id INTEGER PRIMARY KEY, name TEXT NOT NULL)');
+    $statement = $db->prepare('INSERT INTO hatfield_session (id, name) VALUES (:id, :name)');
+    $statement->bindValue(':id', (int) $sessionId, \SQLITE3_INTEGER);
+    $statement->bindValue(':name', 'Synthetic session '.$sessionId, \SQLITE3_TEXT);
+    $statement->execute();
+    $db->close();
 }
 
 function buildCustomRelativeProject(string $path): void

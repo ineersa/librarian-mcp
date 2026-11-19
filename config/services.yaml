@@ -55,6 +55,13 @@ services:
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
 
+    # Daily backups (cron-run system): GCS in dev/prod, a local directory stand-in under test.
+    App\Backup\BackupStorage: '@App\Backup\GoogleCloudBackupStorage'
+    App\Backup\LocalDirectoryBackupStorage:
+        arguments:
+            $directory: '%kernel.project_dir%/%env(BACKUP_LOCAL_STORAGE_DIR)%'
+    App\Scheduler\CronSchedule: ~
+
 when@dev: &fixtures
     services:
         App\DataFixtures\:
@@ -62,5 +69,11 @@ when@dev: &fixtures
             autowire: true
             autoconfigure: true
 
-when@test: *fixtures
+when@test:
+    services:
+        App\DataFixtures\:
+            resource: '../src/DataFixtures/'
+            autowire: true
+            autoconfigure: true
+        App\Backup\BackupStorage: '@App\Backup\LocalDirectoryBackupStorage'
 

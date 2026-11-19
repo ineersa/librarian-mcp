@@ -75,6 +75,9 @@ class DashboardController extends AbstractDashboardController
         yield MenuItem::section('Projects');
         yield MenuItem::linkTo(ProjectCrudController::class, 'Projects', 'fas fa-folder-open');
 
+        yield MenuItem::section('Operations');
+        yield MenuItem::linkTo(CronRunCrudController::class, 'Cron runs', 'fas fa-clock-rotate-left');
+
         yield MenuItem::section();
         yield MenuItem::linkToLogout('Logout', 'fa fa-sign-out');
         yield MenuItem::linkToRoute('Back to site', 'fas fa-arrow-left', 'app_home');

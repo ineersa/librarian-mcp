@@ -119,4 +119,4 @@ Keep screenshots, traces, profiles, cookies, reports, MCP tokens, OM databases, 
 
 - Finance-project provider cassettes, ChatGPT OAuth, tenant finance databases, and external task boards
 - Speculative Symfony AI backends beyond the approved CodeRank + official Postgres store + local BGE baseline
-- Remote deployments, data backup, and Hatfield semantic removal (plans 06–07 remain TODO). Plan 05 MCP journey proof is recorded above; full-suite result is not claimed here
+- Remote deployments and Hatfield semantic removal (plans 06–07 remain TODO). Plan 05 MCP journey proof is recorded above; full-suite result is not claimed here

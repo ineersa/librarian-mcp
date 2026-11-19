@@ -13,7 +13,7 @@ Core runtime pieces:
 
 - **Web/admin:** Symfony + EasyAdmin
 - **Persistence + store:** Doctrine ORM + main-based Symfony AI Postgres fork **`dev-development`** with AI platform/store **1.0.0-BETA1**, on shared PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`)
-- **Async pipeline:** Symfony Messenger (`async` for discovery/indexing, `om` for memory generation) + Scheduler (`scheduler_default`)
+- **Async pipeline:** Symfony Messenger (`async` for discovery/indexing, `om` for memory generation) + Scheduler (`scheduler_default`; `scheduler_cron` + `cron` for [daily backups](backups.md))
 - **Models:** local CodeRankEmbed (explicit 768-dim vectors) + local BGE reranker
 - **Source discovery:** read-only Hatfield settings / OM / session inspection
 - **MCP transport:** Symfony MCP bundle HTTP endpoint
@@ -119,7 +119,7 @@ Do not commit private project settings, OM databases, session journals, or deriv
 
 ## 7) Operational model
 
-- Long-running discovery/indexing is async (Messenger workers required: one consumes `async` + `scheduler_default`, a second consumes `om` for memory generation)
+- Long-running discovery/indexing is async (Messenger workers required: one consumes `scheduler_cron` + `cron` (backups, prioritized) then `async` + `scheduler_default`, a second consumes `om` for memory generation)
 - Source tables, journals and transcripts are read-only; mounts are read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport at `/_mcp`; project selection uses `X-Librarian-Project`, search retains OM's schema, and recall takes only `id` with the session derived from the matched record (see [MCP.md](MCP.md))
