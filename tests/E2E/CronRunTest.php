@@ -49,10 +49,11 @@ final class CronRunTest extends LibrarianNetworkBrowserTest
         $this->page->waitForURL('**/admin/cron-runs/**');
         $detail = $this->page->locator('body');
         Expect::locator($detail)->toContainText(DailyBackupTask::PREFIX_POSTGRES.'postgres_');
-        Expect::locator($detail)->toContainText(DailyBackupTask::PREFIX_HATFIELD.'backup-fixture/hatfield_backup-fixture_');
+        // Project prefixes are `<id>-<slug>`, so equal slugs of different projects never collide.
+        Expect::locator($detail)->toContainText('-backup-fixture/hatfield_');
 
         self::assertNotEmpty(glob(self::STORAGE_ROOT.'/'.DailyBackupTask::PREFIX_POSTGRES.'postgres_*.dump'));
-        $archives = glob(self::STORAGE_ROOT.'/'.DailyBackupTask::PREFIX_HATFIELD.'backup-fixture/*.tar.gz');
+        $archives = glob(self::STORAGE_ROOT.'/'.DailyBackupTask::PREFIX_HATFIELD.'*-backup-fixture/hatfield_*-backup-fixture_*.tar.gz');
         self::assertNotFalse($archives);
         self::assertNotEmpty($archives);
         $members = $this->archiveMembers((string) end($archives));

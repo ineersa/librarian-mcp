@@ -118,7 +118,7 @@ services:
         bind:
           create_host_path: false
     # Indexing consumer: discovery/import/embeddings, the schedulers and cron jobs (daily backup). Generation runs in om-worker.
-    command: ['php', 'bin/console', 'messenger:consume', 'async', 'scheduler_default', 'scheduler_cron', 'cron', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
+    command: ['php', 'bin/console', 'messenger:consume', 'scheduler_cron', 'cron', 'async', 'scheduler_default', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
     healthcheck:
       disable: true
     depends_on:

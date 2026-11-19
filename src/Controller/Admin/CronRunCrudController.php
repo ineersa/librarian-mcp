@@ -22,9 +22,12 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\DateTimeField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\IdField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
+use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGeneratorInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
+use Symfony\Component\Security\Http\Attribute\IsCsrfTokenValid;
 
 /**
  * Read-only cron run history with a "Run backup now" action that queues a forced run.
@@ -35,9 +38,14 @@ use Symfony\Component\Messenger\MessageBusInterface;
 class CronRunCrudController extends AbstractCrudController
 {
     private const string ACTION_RUN_BACKUP = 'runBackup';
+    /** Session-backed CSRF token ID (not stateless): EasyAdmin action forms carry no hidden fields. */
+    private const string CSRF_RUN_BACKUP = 'cron-run-backup';
+    private const string CSRF_TOKEN_KEY = '_token';
 
     public function __construct(
         private readonly MessageBusInterface $messageBus,
+        private readonly CsrfTokenManagerInterface $csrfTokenManager,
+        private readonly AdminUrlGeneratorInterface $adminUrlGenerator,
     ) {
     }
 
@@ -97,7 +105,13 @@ class CronRunCrudController extends AbstractCrudController
     public function configureActions(Actions $actions): Actions
     {
         $runBackup = Action::new(self::ACTION_RUN_BACKUP, 'Run backup now', 'fa fa-play')
-            ->linkToCrudAction(self::ACTION_RUN_BACKUP)
+            // The token travels in the form's action URL; renderAsForm() renders no hidden fields.
+            ->linkToUrl(fn (): string => $this->adminUrlGenerator
+                ->unsetAll()
+                ->setController(self::class)
+                ->setAction(self::ACTION_RUN_BACKUP)
+                ->set(self::CSRF_TOKEN_KEY, $this->csrfTokenManager->getToken(self::CSRF_RUN_BACKUP)->getValue())
+                ->generateUrl())
             ->createAsGlobalAction()
             ->renderAsForm()
             ->addCssClass('btn btn-primary');
@@ -119,11 +133,12 @@ class CronRunCrudController extends AbstractCrudController
 
     /** Queues a forced run on the `cron` transport; it bypasses the once-per-day check. */
     #[AdminRoute(path: '/run-backup', name: 'run-backup', options: ['methods' => [Request::METHOD_POST]])]
+    #[IsCsrfTokenValid(self::CSRF_RUN_BACKUP, tokenKey: self::CSRF_TOKEN_KEY, tokenSource: IsCsrfTokenValid::SOURCE_QUERY)]
     public function runBackup(AdminUrlGenerator $urlGenerator): Response
     {
         $this->messageBus->dispatch(new RunCronJobMessage(CronJob::Backup, true));
         $this->addFlash('success', 'Backup queued. Refresh to see its run.');
 
-        return $this->redirect($urlGenerator->setController(self::class)->setAction(Action::INDEX)->generateUrl());
+        return $this->redirect($urlGenerator->unsetAll()->setController(self::class)->setAction(Action::INDEX)->generateUrl());
     }
 }

@@ -76,7 +76,7 @@ services:
     environment:
       APP_ENV: prod
     # Indexing consumer: discovery/import/embeddings, the schedulers and cron jobs (daily backup). Generation runs in messenger-om.
-    command: ["php", "bin/console", "messenger:consume", "async", "scheduler_default", "scheduler_cron", "cron"]
+    command: ["php", "bin/console", "messenger:consume", "scheduler_cron", "cron", "async", "scheduler_default"]
     healthcheck:
       disable: true
     depends_on:

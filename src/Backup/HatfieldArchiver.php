@@ -15,6 +15,11 @@ use Symfony\Component\Filesystem\Filesystem;
  * `quick_check`, and an online backup of it is appended to the archive at its original path.
  * A live Hatfield session can still race the copy; stopping Hatfield gives an exact snapshot.
  * Source files are only read.
+ *
+ * A custom `sessions.path` (the project's discovered sessions directory) inside the project root
+ * is archived too, at its path relative to the root, with the same per-session exclusions.
+ * A sessions directory outside the project root has no restorable place in the archive and
+ * fails the backup instead of silently omitting the session history.
  */
 final readonly class HatfieldArchiver
 {
@@ -23,6 +28,11 @@ final readonly class HatfieldArchiver
     private const string WAL_SUFFIX = '-wal';
     private const string QUICK_CHECK_OK = 'ok';
     private const int SNAPSHOT_ATTEMPTS = 3;
+
+    private const string DEFAULT_SESSIONS_DIR = '.hatfield/sessions';
+
+    /** Per-session disposable entries, relative to a sessions directory. */
+    private const array SESSION_EXCLUDES = ['*/runtime', '*/messenger-queue.sqlite*', '*/history-index.sqlite*'];
 
     /** GNU tar exclude patterns (unanchored, wildcards match '/'). */
     private const array EXCLUDES = [
@@ -33,9 +43,6 @@ final readonly class HatfieldArchiver
         '.hatfield/extensions',
         '.hatfield/extensions-data/observational-memory',
         '.hatfield/state.sqlite*',
-        '.hatfield/sessions/*/runtime',
-        '.hatfield/sessions/*/messenger-queue.sqlite*',
-        '.hatfield/sessions/*/history-index.sqlite*',
         '*.lock',
     ];
 
@@ -45,12 +52,24 @@ final readonly class HatfieldArchiver
     }
 
     /**
-     * @return bool false when the project has no `.hatfield` directory
+     * @param string|null $sessionsPath discovered sessions directory; null uses the default
+     *
+     * @return bool false when the project has neither `.hatfield` nor a custom sessions directory
      */
-    public function archive(string $projectRoot, string $target, string $workDir): bool
+    public function archive(string $projectRoot, ?string $sessionsPath, string $target, string $workDir): bool
     {
         $root = rtrim($projectRoot, '/');
-        if (!is_dir($root.'/'.self::HATFIELD_DIR)) {
+        $members = is_dir($root.'/'.self::HATFIELD_DIR) ? [self::HATFIELD_DIR] : [];
+        $sessionDirs = [self::DEFAULT_SESSIONS_DIR];
+
+        $customSessions = $this->customSessionsDirectory($root, $sessionsPath);
+        if (null !== $customSessions) {
+            $sessionDirs[] = $customSessions;
+            if (!str_starts_with($customSessions.'/', self::HATFIELD_DIR.'/')) {
+                $members[] = $customSessions;
+            }
+        }
+        if ([] === $members) {
             return false;
         }
 
@@ -61,7 +80,13 @@ final readonly class HatfieldArchiver
             foreach (self::EXCLUDES as $pattern) {
                 $command[] = '--exclude='.$pattern;
             }
-            $command[] = self::HATFIELD_DIR;
+            foreach ($sessionDirs as $sessionDir) {
+                foreach (self::SESSION_EXCLUDES as $pattern) {
+                    $command[] = '--exclude='.$sessionDir.'/'.$pattern;
+                }
+            }
+            $command[] = '--';
+            array_push($command, ...$members);
             ArchiveCommand::run($command, acceptedExitCodes: [0, ArchiveCommand::TAR_FILES_CHANGED]);
 
             if (is_file($root.'/'.self::STATE_DATABASE)) {
@@ -75,6 +100,23 @@ final readonly class HatfieldArchiver
         }
 
         return true;
+    }
+
+    /**
+     * @return string|null the custom sessions directory relative to the root; null for the default
+     */
+    private function customSessionsDirectory(string $root, ?string $sessionsPath): ?string
+    {
+        if (null === $sessionsPath || '' === $sessionsPath) {
+            return null;
+        }
+        $sessions = rtrim($sessionsPath, '/');
+        if (!str_starts_with($sessions.'/', $root.'/') || $sessions === $root) {
+            throw new \RuntimeException(\sprintf('Sessions directory %s is outside the project root %s; backup does not support it.', $sessions, $root));
+        }
+        $relative = substr($sessions, \strlen($root) + 1);
+
+        return self::DEFAULT_SESSIONS_DIR === $relative ? null : $relative;
     }
 
     private function snapshotState(string $source, string $target): void

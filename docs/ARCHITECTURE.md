@@ -119,7 +119,7 @@ Do not commit private project settings, OM databases, session journals, or deriv
 
 ## 7) Operational model
 
-- Long-running discovery/indexing is async (Messenger workers required: one consumes `async` + `scheduler_default` + `scheduler_cron` + `cron`, a second consumes `om` for memory generation)
+- Long-running discovery/indexing is async (Messenger workers required: one consumes `scheduler_cron` + `cron` (backups, prioritized) then `async` + `scheduler_default`, a second consumes `om` for memory generation)
 - Source tables, journals and transcripts are read-only; mounts are read-only
 - Models remain external local endpoints (`CODERANK_*`, `BGE_*`)
 - MCP transport at `/_mcp`; project selection uses `X-Librarian-Project`, search retains OM's schema, and recall takes only `id` with the session derived from the matched record (see [MCP.md](MCP.md))

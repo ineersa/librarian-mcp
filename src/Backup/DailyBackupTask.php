@@ -21,6 +21,10 @@ use Symfony\Component\String\Slugger\AsciiSlugger;
  * Claude Code transcripts. Each archive is uploaded under its own prefix and that prefix
  * keeps its newest three objects. One success email lists every upload.
  *
+ * Per-project prefixes start with the project's stable ID (`<id>-<slug>`), so different names
+ * with the same slug never share objects or retention. A registered root that is missing or
+ * unreadable fails the run instead of being treated as a project without data.
+ *
  * A failing source does not stop the others; the run then fails without an email and the
  * next schedule tick retries.
  */
@@ -66,16 +70,20 @@ final readonly class DailyBackupTask implements CronJobTask
         $slugger = new AsciiSlugger();
         foreach ($this->projectRepository->findBy([], ['id' => 'ASC']) as $project) {
             $root = $this->projectRoot($project);
-            $slug = $slugger->slug($project->name)->lower()->toString();
-            if ('' === $slug) {
-                $slug = 'project-'.$project->id;
+            if (!is_dir($root) || !is_readable($root)) {
+                $this->logger->error('Backup of project {project} failed: root {root} is unavailable.', ['project' => $project->name, 'root' => $root]);
+                $errors[] = \sprintf('Project %s: root %s is missing or unreadable.', $project->name, $root);
+                continue;
             }
 
-            $this->backup('Hatfield '.$project->name, self::PREFIX_HATFIELD.$slug.'/', 'hatfield_'.$slug.'_'.$stamp.'.tar.gz',
-                fn (string $file): bool => $this->hatfieldArchiver->archive($root, $file, $this->workDir), $uploaded, $errors);
+            $slug = $slugger->slug($project->name)->lower()->toString();
+            $key = '' !== $slug ? $project->id.'-'.$slug : (string) $project->id;
+
+            $this->backup('Hatfield '.$project->name, self::PREFIX_HATFIELD.$key.'/', 'hatfield_'.$key.'_'.$stamp.'.tar.gz',
+                fn (string $file): bool => $this->hatfieldArchiver->archive($root, $project->sessionsPath, $file, $this->workDir), $uploaded, $errors);
             $heartbeat();
 
-            $this->backup('Claude '.$project->name, self::PREFIX_CLAUDE.$slug.'/', 'claude_'.$slug.'_'.$stamp.'.tar.gz',
+            $this->backup('Claude '.$project->name, self::PREFIX_CLAUDE.$key.'/', 'claude_'.$key.'_'.$stamp.'.tar.gz',
                 fn (string $file): bool => $this->archiveClaude($root, $file), $uploaded, $errors);
             $heartbeat();
         }
