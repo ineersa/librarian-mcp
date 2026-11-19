@@ -41,6 +41,7 @@ if (file_exists($targetRoot)) {
     assertExactNonSymlinkedPath($targetRoot);
     assertPreparedProjectSources($targetRoot);
     prepareMemoryToolProjects($targetRoot);
+    prepareBackupFixtures($targetRoot);
     echo "Synthetic project sources already prepared at {$targetRoot}\n";
     exit(0);
 }
@@ -67,6 +68,7 @@ buildCustomRelativeProject($projectsRoot.'/custom-relative');
 writeFile($targetRoot.'/'.PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME, PROJECT_SOURCES_OWNERSHIP_MARKER);
 assertPreparedProjectSources($targetRoot);
 prepareMemoryToolProjects($targetRoot);
+prepareBackupFixtures($targetRoot);
 echo "Prepared synthetic project sources at {$targetRoot}\n";
 echo "Visible mount: /project-sources\n";
 echo "HATFIELD_USER_HOME=/synthetic-home -> /project-sources/context-home\n";
@@ -127,9 +129,20 @@ YAML);
     $db = $path.'/.hatfield/extensions-data/observational-memory/om.sqlite';
     createSupportedOmDatabase($db, observationCount: 2, reflectionCount: 1, sourceRevision: 4, sourceChangeCount: 3);
     writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 1);
-    // Backup inputs: Hatfield application state (WAL mode, like Hatfield) and a log the backup skips.
-    createHatfieldStateDatabase($path.'/.hatfield/state.sqlite', '108');
-    writeFile($path.'/.hatfield/logs/agent.log', "synthetic log line\n");
+}
+
+function prepareBackupFixtures(string $targetRoot): void
+{
+    // Backup inputs for default-om: Hatfield application state (WAL mode, like Hatfield) and a log
+    // the backup skips. Add only missing files so trees prepared before these fixtures still match.
+    $hatfield = $targetRoot.'/projects/default-om/.hatfield';
+    assertExactNonSymlinkedPath($hatfield);
+    if (!file_exists($hatfield.'/state.sqlite')) {
+        createHatfieldStateDatabase($hatfield.'/state.sqlite', '108');
+    }
+    if (!file_exists($hatfield.'/logs/agent.log')) {
+        writeFile($hatfield.'/logs/agent.log', "synthetic log line\n");
+    }
 }
 
 function createHatfieldStateDatabase(string $dbPath, string $sessionId): void
