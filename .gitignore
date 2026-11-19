@@ -35,7 +35,8 @@
 /config/schema.json
 /compose.sources.yaml
 /.castor.stub.php
-/.hatfield/
+/.hatfield/*
+!/.hatfield/task-hooks/
 
 # Generated code-analysis artifacts
 *.toon
