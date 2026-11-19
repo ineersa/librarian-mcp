@@ -16,7 +16,7 @@ use Symfony\Component\Filesystem\Filesystem;
  * A live Hatfield session can still race the copy; stopping Hatfield gives an exact snapshot.
  * Source files are only read.
  *
- * A custom `sessions.path` (the project's discovered sessions directory) inside the project root
+ * A custom `sessions.path` (resolved from current settings at backup time) inside the project root
  * is archived too, at its path relative to the root, with the same per-session exclusions.
  * A sessions directory outside the project root has no restorable place in the archive and
  * fails the backup instead of silently omitting the session history.
@@ -52,7 +52,7 @@ final readonly class HatfieldArchiver
     }
 
     /**
-     * @param string|null $sessionsPath discovered sessions directory; null uses the default
+     * @param string|null $sessionsPath effective sessions directory; null uses the default
      *
      * @return bool false when the project has neither `.hatfield` nor a custom sessions directory
      */
@@ -111,6 +111,9 @@ final readonly class HatfieldArchiver
             return null;
         }
         $sessions = rtrim($sessionsPath, '/');
+        if (!is_dir($sessions)) {
+            return null; // no session history exists yet
+        }
         if (!str_starts_with($sessions.'/', $root.'/') || $sessions === $root) {
             throw new \RuntimeException(\sprintf('Sessions directory %s is outside the project root %s; backup does not support it.', $sessions, $root));
         }

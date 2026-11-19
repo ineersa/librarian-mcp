@@ -60,6 +60,26 @@ final class HatfieldSourceDiscovery
         return $this->claudeOnlyResult($claudeTranscripts, $hatfield);
     }
 
+    /**
+     * Resolves the effective Hatfield sessions directory from the current user and project
+     * settings, independent of OM readiness and of cached discovery results (backups use it).
+     *
+     * @throws ProjectSourceException when the location cannot be resolved
+     */
+    public function resolveSessionsDirectory(string $projectRoot): string
+    {
+        $logicalUserHome = trim($this->hatfieldUserHome);
+        $userHome = '' === $logicalUserHome ? '' : $this->canonicalizeExistingPath($this->pathMapper->map($logicalUserHome));
+        if ('' === $userHome || !is_dir($userHome) || !is_readable($userHome)) {
+            throw new ProjectSourceException(ProjectSourceIssueCode::UserHomeUnavailable, 'HATFIELD_USER_HOME is unavailable, so the effective sessions.path cannot be resolved.');
+        }
+
+        $details = [];
+        $settings = $this->loadEffectiveSettings($projectRoot, $details);
+
+        return $this->canonicalizeExistingPath($this->pathMapper->map($this->resolveSessionsPath($settings, $projectRoot)));
+    }
+
     private function discoverHatfield(string $projectRoot): ProjectDiscoveryResult
     {
         $details = [

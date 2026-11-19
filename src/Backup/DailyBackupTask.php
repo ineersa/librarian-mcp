@@ -9,6 +9,7 @@ use App\Cron\CronJobTask;
 use App\Entity\CronJob;
 use App\Entity\Project;
 use App\Memory\ClaudeTranscriptReader;
+use App\Project\HatfieldSourceDiscovery;
 use App\Repository\ProjectRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -39,6 +40,7 @@ final readonly class DailyBackupTask implements CronJobTask
         private ProjectRepository $projectRepository,
         private PostgresDumper $postgresDumper,
         private HatfieldArchiver $hatfieldArchiver,
+        private HatfieldSourceDiscovery $sourceDiscovery,
         private ClaudeTranscriptReader $claudeTranscripts,
         private BackupStorage $storage,
         private BackupRetention $retention,
@@ -80,7 +82,7 @@ final readonly class DailyBackupTask implements CronJobTask
             $key = '' !== $slug ? $project->id.'-'.$slug : (string) $project->id;
 
             $this->backup('Hatfield '.$project->name, self::PREFIX_HATFIELD.$key.'/', 'hatfield_'.$key.'_'.$stamp.'.tar.gz',
-                fn (string $file): bool => $this->hatfieldArchiver->archive($root, $project->sessionsPath, $file, $this->workDir), $uploaded, $errors);
+                fn (string $file): bool => $this->hatfieldArchiver->archive($root, $this->sourceDiscovery->resolveSessionsDirectory($root), $file, $this->workDir), $uploaded, $errors);
             $heartbeat();
 
             $this->backup('Claude '.$project->name, self::PREFIX_CLAUDE.$key.'/', 'claude_'.$key.'_'.$stamp.'.tar.gz',

@@ -20,7 +20,7 @@ These paths are excluded from the Hatfield archive:
 - `extensions-data/observational-memory/` (replaced by Librarian OM)
 - in each session, `runtime/`, `messenger-queue.sqlite` and `history-index.sqlite`
 
-Session journals (`sessions/*/events.jsonl`), child runs, artifacts and attachments are kept. A custom `sessions.path` inside the project root (the directory discovery stored for the project) is archived too, at its path relative to the root and with the same per-session exclusions. A sessions directory outside the project root has no restorable place in the archive, so it fails the backup.
+Session journals (`sessions/*/events.jsonl`), child runs, artifacts and attachments are kept. A custom `sessions.path` inside the project root is archived too. It is resolved from the current user and project settings at backup time, independent of OM state or earlier discovery; the run fails if it cannot be resolved (for example, `HATFIELD_USER_HOME` unavailable). It is stored at its path relative to the root and with the same per-session exclusions. A sessions directory outside the project root has no restorable place in the archive, so it fails the backup.
 
 A registered project whose root is missing or unreadable fails the run. A readable project with neither `.hatfield` nor a Claude transcript directory is skipped.
 
