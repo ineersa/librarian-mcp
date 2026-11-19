@@ -46,6 +46,9 @@ final readonly class HatfieldArchiver
         '*.lock',
     ];
 
+    /** Provider credentials at the top level of .hatfield; matched with '*' not crossing '/' so session files stay. */
+    private const array CREDENTIAL_EXCLUDES = ['.hatfield/auth.json', '.hatfield/*-auth.json'];
+
     public function __construct(
         private Filesystem $filesystem = new Filesystem(),
     ) {
@@ -84,6 +87,10 @@ final readonly class HatfieldArchiver
                 foreach (self::SESSION_EXCLUDES as $pattern) {
                     $command[] = '--exclude='.$sessionDir.'/'.$pattern;
                 }
+            }
+            $command[] = '--no-wildcards-match-slash';
+            foreach (self::CREDENTIAL_EXCLUDES as $pattern) {
+                $command[] = '--exclude='.$pattern;
             }
             $command[] = '--';
             array_push($command, ...$members);

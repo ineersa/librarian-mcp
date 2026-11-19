@@ -133,8 +133,8 @@ YAML);
 
 function prepareBackupFixtures(string $targetRoot): void
 {
-    // Backup inputs for default-om: Hatfield application state (WAL mode, like Hatfield) and a log
-    // the backup skips. Add only missing files so trees prepared before these fixtures still match.
+    // Backup inputs for default-om: Hatfield application state (WAL mode, like Hatfield), plus a log
+    // and synthetic credential files the backup skips. Add only missing files so trees prepared before these fixtures still match.
     $hatfield = $targetRoot.'/projects/default-om/.hatfield';
     assertExactNonSymlinkedPath($hatfield);
     if (!file_exists($hatfield.'/state.sqlite')) {
@@ -142,6 +142,11 @@ function prepareBackupFixtures(string $targetRoot): void
     }
     if (!file_exists($hatfield.'/logs/agent.log')) {
         writeFile($hatfield.'/logs/agent.log', "synthetic log line\n");
+    }
+    foreach (['auth.json', 'chatgpt-auth.json'] as $credentials) {
+        if (!file_exists($hatfield.'/'.$credentials)) {
+            writeFile($hatfield.'/'.$credentials, "{\"synthetic\": true}\n");
+        }
     }
 }
 

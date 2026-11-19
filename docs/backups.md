@@ -17,6 +17,7 @@ Each run creates one archive per source, under its own prefix:
 These paths are excluded from the Hatfield archive:
 - `cache/`, `logs/`, `tmp/`, `locks/` and `*.lock`
 - `extensions/` (vendor code)
+- `auth.json` and `*-auth.json` directly in `.hatfield/` (provider credentials, e.g. `chatgpt-auth.json` in the Hatfield user home); files with similar names inside sessions are kept
 - `extensions-data/observational-memory/` (replaced by Librarian OM)
 - in each session, `runtime/`, `messenger-queue.sqlite` and `history-index.sqlite`
 
