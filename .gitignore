@@ -46,3 +46,4 @@ callgraph.html
 
 # Claude Code local overrides
 /.claude/settings.local.json
+google_service_account.json
