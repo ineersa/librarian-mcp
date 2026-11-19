@@ -61,6 +61,8 @@ final class CronRunTest extends LibrarianNetworkBrowserTest
         self::assertContains('.hatfield/state.sqlite', $members);
         self::assertNotContains('.hatfield/logs/agent.log', $members);
         self::assertNotContains('.hatfield/extensions-data/observational-memory/om.sqlite', $members);
+        self::assertNotContains('.hatfield/auth.json', $members);
+        self::assertNotContains('.hatfield/chatgpt-auth.json', $members);
         $this->assertStateSnapshotReadable((string) end($archives));
 
         ProjectSourceFixture::assertUnchanged($before, ProjectSourceFixture::hashTree($builderPath), 'default-om after backup');
