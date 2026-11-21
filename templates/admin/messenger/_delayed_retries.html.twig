@@ -1,0 +1,26 @@
+<details class="card mb-3">
+    <summary class="card-header">Delayed retry details</summary>
+    <div class="card-body">
+        <p class="text-muted">Recorded retries whose scheduled time had not passed when this page loaded. The live queue cards show the current counts.</p>
+        {% if delayedRetryDetails is empty %}
+            <p class="mb-0">No delayed retry details recorded for this page load.</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table table-striped mb-0" aria-label="Delayed retry details">
+                    <thead><tr><th scope="col">Transport</th><th scope="col">Job class</th><th scope="col">Attempt</th><th scope="col">Last error</th><th scope="col">Scheduled attempt</th></tr></thead>
+                    <tbody>
+                        {% for entry in delayedRetryDetails %}
+                            <tr>
+                                <td>{{ entry.retry.transport }}</td>
+                                <td class="text-break"><code>{{ entry.retry.job }}</code></td>
+                                <td>{{ entry.retry.attempt }}</td>
+                                <td class="text-break">{{ entry.summary }}</td>
+                                <td>{{ entry.retry.nextAt|date('Y-m-d H:i:s T') }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</details>
