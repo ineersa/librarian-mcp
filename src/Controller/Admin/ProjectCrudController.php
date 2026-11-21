@@ -263,17 +263,14 @@ class ProjectCrudController extends AbstractCrudController
         $query = $this->requests->getCurrentRequest()?->query;
         $session = $query?->getInt(ObserverCoverageReader::SESSION_QUERY) ?? 0;
         $before = $query?->getInt(ObserverCoverageReader::BEFORE_QUERY) ?? 0;
+        $failureId = $query?->getInt(ObserverCoverageReader::FAILURE_QUERY) ?? 0;
         $coverage = $this->coverage->forProject($project->id, $session, $before);
-        $jobs = [];
-        if ([] !== $coverage['sessions']) {
-            foreach ($this->messengerStats->recentFailuresForDisplay() ?? [] as $job) {
-                if ($project->id === $job['projectId'] && null !== $job['sessionId'] && null !== $job['target'] && isset($coverage['sessions'][$job['sessionId']])) {
-                    $jobs[$job['sessionId']][] = $job;
-                }
-            }
-        }
+        // Scope the session to the project before looking up the single linked job.
+        $target = $failureId > 0 && $session > 0 && isset($coverage['sessions'][$session])
+            ? $this->messengerStats->observerTargetForFailure($failureId, $session)
+            : null;
         $responseParameters->set('coverage', $coverage);
-        $responseParameters->set('coverageJobs', $jobs);
+        $responseParameters->set('coverageFailure', null === $target ? null : ['id' => $failureId, 'target' => $target]);
         $responseParameters->set('coverageFocused', $session > 0 || $before > 0);
         $responseParameters->set('statusTopics', [
             'list' => ProjectStatusTopics::LIST_STATUS,

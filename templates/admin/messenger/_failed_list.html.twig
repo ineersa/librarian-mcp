@@ -6,6 +6,7 @@
     {% else %}
         {% set routes = constant('App\\Controller\\Admin\\DashboardController::MESSENGER_ROUTES') %}
         {% set sessionQuery = constant('App\\ObservationalMemory\\Storage\\ObserverCoverageReader::SESSION_QUERY') %}
+        {% set failureQuery = constant('App\\ObservationalMemory\\Storage\\ObserverCoverageReader::FAILURE_QUERY') %}
         <p class="text-muted">Showing {{ stats.failures|length }} of {{ stats.failedTotal ?? 'unknown' }}.</p>
         <div class="table-responsive">
             <table class="table table-striped mb-0" aria-label="Failed messages">
@@ -31,6 +32,7 @@
                                 {% if message.projectId is not null %}
                                     {% set projectParams = {entityId: message.projectId} %}
                                     {% if message.sessionId is not null %}{% set projectParams = projectParams|merge({(sessionQuery): message.sessionId}) %}{% endif %}
+                                    {% if message.target is not null %}{% set projectParams = projectParams|merge({(failureQuery): message.id}) %}{% endif %}
                                     <a href="{{ path(constant('App\\Controller\\Admin\\ProjectCrudController::DETAIL_ROUTE'), projectParams) }}{% if message.sessionId is not null %}#observer-coverage{% endif %}">{{ message.projectName }}</a>
                                 {% else %}
                                     Project unavailable

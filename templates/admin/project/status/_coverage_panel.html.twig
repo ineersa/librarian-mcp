@@ -12,9 +12,10 @@
         {% if coverage.sessions is empty %}
             <p class="mb-0">No sessions to display.</p>
         {% else %}
+            {% set showFailure = coverageFailure is not null %}
             <div class="table-responsive">
                 <table class="table align-middle" aria-label="Observer coverage">
-                    <thead><tr><th scope="col">Session</th><th scope="col">Gap-free through</th><th scope="col">Latest complete chunk ends at</th><th scope="col">Internal gaps</th><th scope="col">Recent failed Observer jobs</th></tr></thead>
+                    <thead><tr><th scope="col">Session</th><th scope="col">Gap-free through</th><th scope="col">Latest complete chunk ends at</th><th scope="col">Internal gaps</th>{% if showFailure %}<th scope="col">Linked Observer failure</th>{% endif %}</tr></thead>
                     <tbody>
                         {% for id, session in coverage.sessions %}
                             <tr>
@@ -30,26 +31,25 @@
                                         {% if session.gapCount > session.gaps|length %}<small>Showing the first {{ session.gaps|length }} gaps.</small>{% endif %}
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% for job in coverageJobs[id] ?? [] %}
-                                        <div>#{{ job.id }} · Target {{ job.target|number_format }} ·
-                                            {% if session.covers(job.target) %}
-                                                <span class="badge text-bg-success">Already covered</span>
-                                            {% else %}
-                                                <span class="badge text-bg-warning">Not fully covered</span>
-                                                {% if job.target > session.latestEnd %}<small>Pending through target: {{ (session.latestEnd + 1)|number_format }}–{{ job.target|number_format }}</small>{% endif %}
-                                            {% endif %}
-                                        </div>
-                                    {% else %}
-                                        —
-                                    {% endfor %}
-                                </td>
+                                {% if showFailure %}
+                                    <td>
+                                        #{{ coverageFailure.id }} · Target {{ coverageFailure.target|number_format }} ·
+                                        {% if session.covers(coverageFailure.target) %}
+                                            <span class="badge text-bg-success">Already covered</span>
+                                        {% else %}
+                                            <span class="badge text-bg-warning">Not fully covered</span>
+                                            {% if coverageFailure.target > session.latestEnd %}<small>Pending through target: {{ (session.latestEnd + 1)|number_format }}–{{ coverageFailure.target|number_format }}</small>{% endif %}
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <p class="small text-muted mb-0">Failed-job details reflect the dashboard’s recent list. Already covered means no replay is needed for Observer coverage; it does not remove the job.</p>
+            {% if showFailure %}
+                <p class="small text-muted mb-0">Already covered means no replay is needed for Observer coverage; it does not remove the job.</p>
+            {% endif %}
         {% endif %}
         {% if coverage.next is not null %}
             <a href="{{ path(projectRoute, projectParams|merge({(beforeQuery): coverage.next})) }}#observer-coverage">Older sessions</a>

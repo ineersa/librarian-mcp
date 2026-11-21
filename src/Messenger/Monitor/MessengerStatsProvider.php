@@ -81,11 +81,14 @@ final readonly class MessengerStatsProvider
         return new MessengerStats($queues, $this->failed->count(), $includeFailures ? $this->newestFailures() : null);
     }
 
-    /** @return list<FailedJobRow>|null */
-    public function recentFailuresForDisplay(): ?array
+    public function observerTargetForFailure(int $id, int $sessionId): ?int
     {
         try {
-            return $this->newestFailures();
+            $message = $this->failed->find($id, MessengerTransport::Failed->value)?->getMessage();
+
+            return $message instanceof ObserveMemorySessionMessage && $sessionId === $message->sessionPk
+                ? $message->terminalEndSeq
+                : null;
         } catch (\Throwable $exception) {
             $this->logger->warning('Messenger dashboard stats are unavailable.', ['exception' => $exception]);
 

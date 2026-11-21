@@ -12,6 +12,7 @@ final readonly class ObserverCoverageReader
 {
     public const string SESSION_QUERY = 'coverageSession';
     public const string BEFORE_QUERY = 'coverageBefore';
+    public const string FAILURE_QUERY = 'coverageFailure';
     private const int PAGE_SIZE = 25;
 
     public function __construct(
