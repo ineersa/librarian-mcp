@@ -2,7 +2,21 @@ monolog:
     channels:
         - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
         - mcp
+        - !php/const App\Operations\RetryLogSubscriber::CHANNEL
     handlers:
+        operations:
+            # The admin feed must never break an HTTP request or a worker job.
+            type: whatfailuregroup
+            members: [operations_file]
+            channels: ["!deprecation", "!mcp", "!doctrine", "!event"]
+        operations_file:
+            type: rotating_file
+            level: warning
+            path: '%app.operations_log_dir%/%env(APP_OPERATIONS_SOURCE)%.log'
+            max_files: !php/const App\Operations\OperationsLogReader::RETAINED_FILES
+            use_locking: true
+            file_permission: 0640
+            formatter: App\Operations\OperationsLogFormatter
         mcp:
             # The SDK logs tools/call arguments at debug; never retain that payload.
             type: stream

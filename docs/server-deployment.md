@@ -147,6 +147,7 @@ Then publish host 443 with a local compose override.
 - Web, Messenger and PostgreSQL use `restart: unless-stopped`. The Messenger-only container disables the image's Caddy HTTP health check because it does not run an HTTP server; a running worker is not an HTTP health-check result.
 - Scheduler uses `CallbackMessageProvider` for automatic source discovery followed by incremental indexing (`INDEX_INTERVAL`, default 60s). Check timestamps advance even when unchanged memories do not need rebuilding.
 - Live admin status uses private Mercure + Turbo Streams with native topic-scoped authorization cookies; anonymous hub subscriptions are disabled. Use the configured `MERCURE_PUBLIC_URL` origin for admin access so the app and hub can share the cookie. If a reverse proxy is added, preserve long-lived, unbuffered event-stream responses.
+- **Operations → Logs** shows a curated, admin-only view of recent application diagnostics. Production stderr is unchanged. The shared `data-prod/operations/` directory retains up to three daily files per source; the UI reads only bounded tails. Delayed retry details are a snapshot on dashboard load based on retry events captured since deployment; the live cards remain the source of truth for queue counts.
 - Registration deletion removes owned derived indexes only; never source trees.
 - `data-prod/` and private production settings are ignored; preserve them across builds and checkout changes.
 - Do not exercise migrations against the real application database for tests; use isolated storage for validation.

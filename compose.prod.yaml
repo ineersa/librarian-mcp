@@ -73,8 +73,9 @@ services:
     image: ${APP_IMAGE:-librarian-mcp-php:prod}
     restart: unless-stopped
     <<: [*prod-env-file, *host-gateway, *json-logging]
-    environment:
+    environment: &prod-messenger-environment
       APP_ENV: prod
+      APP_OPERATIONS_SOURCE: worker
     # Indexing consumer: discovery/import/embeddings, the schedulers and cron jobs (daily backup). Generation runs in messenger-om.
     command: ["php", "bin/console", "messenger:consume", "scheduler_cron", "cron", "async", "scheduler_default"]
     healthcheck:
@@ -115,6 +116,9 @@ services:
   # Observational memory generation consumer (Observer, Reflector + Dropper), one LLM job at a time.
   messenger-om:
     <<: *messenger
+    environment:
+      <<: *prod-messenger-environment
+      APP_OPERATIONS_SOURCE: om-worker
     command: ["php", "bin/console", "messenger:consume", "om"]
 
   postgres:

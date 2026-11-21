@@ -25,6 +25,15 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         }
         $failedCard = $stats->locator('.card:has(h3:text-is("failed"))');
         self::assertMatchesRegularExpression('/Total:\s*\d+/', $failedCard->innerText());
+        $page->getByText('Delayed retry details', ['exact' => true])->click();
+        self::assertTrue($page->getByText('The live queue cards show the current counts.', ['exact' => false])->isVisible());
+        $page->getByRole('link', ['name' => 'Logs'])->click();
+        $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
+        $source = $page->getByLabel('Source', ['exact' => true]);
+        $source->selectOption('om-worker');
+        $page->getByRole('button', ['name' => 'Filter', 'exact' => true])->click();
+        $page->waitForURL('**/operations/logs?source=om-worker');
+        self::assertSame('om-worker', $source->inputValue());
         $page->locator('.user-menu-wrapper:visible .user-details')->click();
         $page->getByRole('link', ['name' => 'Sign out', 'exact' => true])->click();
         $page->waitForURL('**/');

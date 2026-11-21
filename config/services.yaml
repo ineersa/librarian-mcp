@@ -14,6 +14,8 @@ imports:
 parameters:
     # Presentation only; PHP and database timestamps remain UTC.
     app.display_timezone: 'America/New_York'
+    env(APP_OPERATIONS_SOURCE): !php/enum App\Operations\LogSource::Web->value
+    app.operations_log_dir: '%kernel.logs_dir%/operations'
     app.hatfield_user_home: '%env(HATFIELD_USER_HOME)%'
     app.hatfield_app_root: '%env(HATFIELD_APP_ROOT)%'
     app.hatfield_path_mappings: '%env(json:HATFIELD_PATH_MAPPINGS)%'
@@ -77,4 +79,8 @@ when@test:
             autowire: true
             autoconfigure: true
         App\Backup\BackupStorage: '@App\Backup\LocalDirectoryBackupStorage'
+
+when@prod:
+    parameters:
+        app.operations_log_dir: '%kernel.project_dir%/data-prod/operations'
 

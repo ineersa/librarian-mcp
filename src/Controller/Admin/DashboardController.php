@@ -10,6 +10,7 @@ use App\Messenger\Monitor\MessengerStatsProvider;
 use App\Messenger\Monitor\MessengerStatsPublisher;
 use App\Messenger\Monitor\MessengerStatsTopics;
 use App\ObservationalMemory\Storage\ActiveMemoryCounter;
+use App\Operations\OperationsLogReader;
 use App\Repository\ProjectRepository;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminRoute;
@@ -44,8 +45,8 @@ class DashboardController extends AbstractDashboardController
         'removeAll' => self::ROUTE_PREFIX.self::REMOVE_ALL_ROUTE,
     ];
     public const array MESSENGER_RETRY_ROUTES = [self::MESSENGER_ROUTES['retry'], self::MESSENGER_ROUTES['retryAll']];
+    public const string ROUTE_PREFIX = self::DASHBOARD_ROUTE.'_';
     private const string DASHBOARD_ROUTE = 'admin';
-    private const string ROUTE_PREFIX = self::DASHBOARD_ROUTE.'_';
     private const string RETRY_ROUTE = 'messenger_retry';
     private const string RETRY_ALL_ROUTE = 'messenger_retry_all';
     private const string REMOVE_ROUTE = 'messenger_remove';
@@ -54,6 +55,7 @@ class DashboardController extends AbstractDashboardController
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly ActiveMemoryCounter $activeMemoryCounter,
+        private readonly OperationsLogReader $operationsLogs,
         private readonly MessengerStatsProvider $messengerStats,
         private readonly MessengerStatsPublisher $messengerPublisher,
         private readonly FailedMessageRepository $failed,
@@ -88,6 +90,7 @@ class DashboardController extends AbstractDashboardController
             'activeMemoryCounts' => $activeCounts,
             'stats' => $this->messengerStats->forDashboard(),
             'messengerTopic' => MessengerStatsTopics::DASHBOARD,
+            'delayedRetryDetails' => $this->operationsLogs->recent(waitingForRetry: true),
         ]);
     }
 
@@ -152,6 +155,7 @@ class DashboardController extends AbstractDashboardController
 
         yield MenuItem::section('Operations');
         yield MenuItem::linkTo(CronRunCrudController::class, 'Cron runs', 'fas fa-clock-rotate-left');
+        yield MenuItem::linkToRoute('Logs', 'fas fa-file-lines', OperationsLogController::ROUTE);
 
         yield MenuItem::section();
         yield MenuItem::linkToLogout('Logout', 'fa fa-sign-out');

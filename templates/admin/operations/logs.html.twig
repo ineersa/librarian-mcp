@@ -1,0 +1,39 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% block content_title %}Operations logs{% endblock %}
+
+{% block main %}
+    <p class="text-muted">Recent application warnings and errors. Only safe summaries are shown; production stderr remains separate.</p>
+    <form method="get" class="d-flex align-items-end gap-2 mb-3">
+        <div>
+            <label for="operations-source" class="form-label">Source</label>
+            <select id="operations-source" name="source" class="form-select">
+                <option value="">All sources</option>
+                {% for source in sources %}
+                    <option value="{{ source.value }}"{{ source == selected ? ' selected' }}>{{ source.label() }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="btn btn-secondary" type="submit">Filter</button>
+    </form>
+    {% if entries is empty %}
+        <p>No recent log entries for this selection.</p>
+    {% else %}
+        <div class="table-responsive">
+            <table class="table table-striped" aria-label="Operations log entries">
+                <thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Channel</th><th scope="col">Summary</th></tr></thead>
+                <tbody>
+                {% for entry in entries %}
+                    <tr>
+                        <td>{{ entry.at|date('Y-m-d H:i:s T') }}</td>
+                        <td>{{ entry.level }}</td>
+                        <td>{{ entry.source }}</td>
+                        <td>{{ entry.channel }}</td>
+                        <td class="text-break">{{ entry.summary }}{% if entry.retry %} — {{ entry.retry.job }} (attempt {{ entry.retry.attempt }}, {{ entry.retry.transport }}){% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endblock %}

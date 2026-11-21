@@ -80,9 +80,10 @@ services:
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     init: true
     restart: unless-stopped
-    environment:
+    environment: &dev-worker-environment
       APP_ENV: dev
       APP_DEBUG: "1"
+      APP_OPERATIONS_SOURCE: worker
       MERCURE_URL: http://php:8080/.well-known/mercure
       MERCURE_PUBLIC_URL: /.well-known/mercure
       MERCURE_JWT_SECRET: '${MERCURE_JWT_SECRET}'
@@ -139,6 +140,9 @@ services:
   # Observational memory generation consumer (Observer, Reflector + Dropper), one LLM job at a time.
   om-worker:
     <<: *dev-worker
+    environment:
+      <<: *dev-worker-environment
+      APP_OPERATIONS_SOURCE: om-worker
     command: ['php', 'bin/console', 'messenger:consume', 'om', '--memory-limit=256M', '--time-limit=3600', '--no-interaction']
   postgres:
     environment:
