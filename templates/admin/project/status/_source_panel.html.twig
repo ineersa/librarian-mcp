@@ -17,10 +17,10 @@
         <dl class="row mb-2 small">
             <dt class="col-sm-4">Last source check</dt>
             <dd class="col-sm-8" data-source-last-check>{{ project.lastScanAt ? project.lastScanAt|date('Y-m-d H:i:s T') : 'Not checked yet' }}</dd>
-            <dt class="col-sm-4">Observations</dt>
-            <dd class="col-sm-8" data-source-count="observations">{{ project.observationCount }}</dd>
-            <dt class="col-sm-4">Reflections</dt>
-            <dd class="col-sm-8" data-source-count="reflections">{{ project.reflectionCount }}</dd>
+            <dt class="col-sm-4">Active observations</dt>
+            <dd class="col-sm-8" data-source-count="observations">{{ indexStatus.activeObservationCount }}</dd>
+            <dt class="col-sm-4">Active reflections</dt>
+            <dd class="col-sm-8" data-source-count="reflections">{{ indexStatus.activeReflectionCount }}</dd>
             <dt class="col-sm-4">Sessions</dt>
             <dd class="col-sm-8" data-source-count="sessions">{{ project.sessionCount }}</dd>
         </dl>

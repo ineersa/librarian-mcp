@@ -86,7 +86,7 @@ final readonly class ObserveMemorySessionMessageHandler
             $this->projectIndexManager->queueId($session['project_id']);
         }
         if ($result['more']) {
-            // The read budget stopped this job short of the requested end; continue from the new coverage.
+            // The per-job rendered-event budget stopped short of the requested end; continue from the new coverage.
             $this->bus->dispatch(new ObserveMemorySessionMessage($message->sessionPk, $message->terminalEndSeq, $message->terminalStatus));
         }
     }

@@ -23,7 +23,6 @@ enum MemoryErrorCode: string
     case EventsUnreadable = 'events_unreadable';
     /** The matched memory's source session no longer exists: the client deleted it. */
     case SessionDeleted = 'session_deleted';
-    case ResourceLimitExceeded = 'resource_limit_exceeded';
     case IndexUnavailable = 'index_unavailable';
     case EmbeddingFailed = 'embedding_failed';
     case RetrievalFailed = 'retrieval_failed';

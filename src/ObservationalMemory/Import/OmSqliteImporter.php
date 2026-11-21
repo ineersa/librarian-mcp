@@ -9,6 +9,8 @@ use App\Entity\MemorySourceKind;
 use App\Entity\Project;
 use App\ObservationalMemory\Storage\MemoryRevision;
 use App\Project\OmSourceReader;
+use App\Project\ProjectSourceException;
+use App\Project\ProjectSourceIssueCode;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\Clock\ClockInterface;
@@ -47,11 +49,21 @@ final readonly class OmSqliteImporter
             return false;
         }
 
-        $this->import($project);
-        $this->connection->executeStatement(
-            'UPDATE projects SET legacy_imported_at = ? WHERE id = ? AND legacy_imported_at IS NULL',
-            [$this->clock->now()->format('Y-m-d H:i:s'), $project->id],
-        );
+        try {
+            $this->import($project);
+        } catch (ProjectSourceException $exception) {
+            // A missing legacy file is normal after the thin-client cutover: record the
+            // attempt so later scans do not keep probing a path that will never appear.
+            if (ProjectSourceIssueCode::OmDatabaseMissing === $exception->issueCode) {
+                $this->markImported($project->id);
+
+                return false;
+            }
+
+            throw $exception;
+        }
+
+        $this->markImported($project->id);
 
         return true;
     }
@@ -78,6 +90,14 @@ final readonly class OmSqliteImporter
         }
 
         return $totals;
+    }
+
+    private function markImported(int $projectId): void
+    {
+        $this->connection->executeStatement(
+            'UPDATE projects SET legacy_imported_at = ? WHERE id = ? AND legacy_imported_at IS NULL',
+            [$this->clock->now()->format('Y-m-d H:i:s'), $projectId],
+        );
     }
 
     /** @return array<string, true> */

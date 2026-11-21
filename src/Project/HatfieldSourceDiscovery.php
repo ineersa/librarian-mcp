@@ -33,7 +33,6 @@ final class HatfieldSourceDiscovery
         private readonly string $hatfieldUserHome,
         private readonly string $hatfieldAppRoot,
         private readonly HatfieldSettingsOverlay $overlay,
-        private readonly OmSourceReader $omSourceReader,
         private readonly ServicePathMapper $pathMapper,
         private readonly HatfieldPathResolver $pathResolver,
         private readonly GitOriginNormalizer $gitOriginNormalizer,
@@ -188,38 +187,16 @@ final class HatfieldSourceDiscovery
         }
 
         // Librarian owns memory in Postgres and reads journals directly; om.sqlite is only
-        // a legacy source for the transition import, so its absence or damage never blocks
-        // readiness. A present but unusable file is reported and skipped, not imported.
-        try {
-            $om = $this->omSourceReader->inspect($databasePath);
-        } catch (ProjectSourceException $exception) {
-            return ProjectDiscoveryResult::ready(
-                databasePath: null,
-                sessionsPath: $sessionsPath,
-                schemaVersion: null,
-                observationCount: 0,
-                reflectionCount: 0,
-                sessionCount: $sessionCount,
-                sourceRevision: null,
-                sourceChangeCount: 0,
-                details: $details,
-                issues: ProjectSourceIssueCode::OmDatabaseMissing === $exception->issueCode
-                    ? []
-                    : [$this->issue($exception->issueCode, $exception->getMessage().' Legacy import skipped.')],
-            );
-        }
-
-        $details['appliedSchemaVersions'] = $om['appliedVersions'];
-
+        // a legacy source for the one-time importer. Discovery never opens or probes it.
         return ProjectDiscoveryResult::ready(
             databasePath: $databasePath,
             sessionsPath: $sessionsPath,
-            schemaVersion: $om['schemaVersion'],
-            observationCount: $om['observationCount'],
-            reflectionCount: $om['reflectionCount'],
+            schemaVersion: null,
+            observationCount: 0,
+            reflectionCount: 0,
             sessionCount: $sessionCount,
-            sourceRevision: $om['sourceRevision'],
-            sourceChangeCount: $om['sourceChangeCount'],
+            sourceRevision: null,
+            sourceChangeCount: 0,
             details: $details,
         );
     }

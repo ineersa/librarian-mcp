@@ -38,7 +38,9 @@ Associative maps merge recursively; lists/scalars/null replace. Missing optional
 
 Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory, or, for a project without Hatfield OM, a readable Claude Code transcript directory under `CLAUDE_PROJECTS_PATH` (Claude-only projects have no sessions path; their session count is the number of transcripts). Hatfield-ready projects also record the Claude transcript directory in source details when present. The OM database is **optional**: Librarian owns memory in PostgreSQL (plan 09) and reads `om.sqlite` only for a **one-time** legacy import: the first successful discovery that finds it imports it and records `legacy_imported_at` on the project; later scans and deploys never re-import, so memory deleted in Librarian stays deleted. Hatfield no longer writes `om.sqlite` after the thin-client cutover; use `app:om:import <project-id>` to re-run an import deliberately. A missing file is normal; a present but unreadable or unsupported file is reported as a source issue and its import is skipped, without blocking readiness or indexing.
 
-Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. A database that stopped at `20260922_005_semantic_health` (Hatfield no longer migrates OM) is still discovered and imported: 006 only adds revision/change/semantic-progress tables, so such a database reports no source revision. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
+Scheduled discovery never opens or inspects `om.sqlite`. It resolves the configured path for the importer, counts session journals, and leaves memory counters to Librarian-owned PostgreSQL. The Projects row and detail status show **active** observations/reflections using current OM selection semantics (retained observations plus observations after the active generation end seq; reflections linked to the active generation), separately from indexed totals. Live Mercure updates replace those counts with the same read model.
+
+Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. A database that stopped at `20260922_005_semantic_health` (Hatfield no longer migrates OM) is still accepted by the one-time importer: 006 only adds revision/change/semantic-progress tables. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary Librarian memory-revision advance is the canonical change signal.
 
 ## Derived indexing (plan 04)
 
@@ -58,7 +60,7 @@ Notes:
 - All derived index data and checkpoints share PostgreSQL; there is no cross-store recovery protocol.
 - Journals support exact recall later; they are not embedded in the initial corpus.
 
-Admin list and detail show human indexing status, indexed-memory counts, and last successful index time, distinct from discovered source counts. Pending/stale status is honest: discovery is not indexing. Live Mercure + Turbo Streams replace only the source/index status sections; EasyAdmin keeps Turbo Drive disabled for native form/confirmation scripts.
+Admin list and detail show human indexing status, indexed-memory counts, active observational-memory counts, and last successful index time. Pending/stale status is honest: discovery is not indexing. Live Mercure + Turbo Streams replace only the source/index status sections; EasyAdmin keeps Turbo Drive disabled for native form/confirmation scripts.
 
 Config surface:
 

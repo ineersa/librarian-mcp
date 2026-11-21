@@ -150,6 +150,8 @@ final class ScanProjectMessageHandler
 
         try {
             $this->omImporter->importOnce($project);
+            // Import can create active memory before indexing finishes; refresh live counts.
+            $this->projectStatusPublisher->publish($projectId);
         } catch (\Throwable $exception) {
             // Not recorded as imported, so the next scan retries; indexing runs on existing rows.
             $this->logger->error('Legacy observational memory import from om.sqlite failed.', [

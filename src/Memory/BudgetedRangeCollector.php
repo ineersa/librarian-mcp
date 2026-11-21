@@ -49,7 +49,7 @@ final class BudgetedRangeCollector
     }
 
     /**
-     * One in-range source line (or skipped oversized line) at bytes [$start, $end).
+     * One in-range source line at bytes [$start, $end).
      *
      * @param list<SessionEventDTO> $events
      *
@@ -153,7 +153,8 @@ final class BudgetedRangeCollector
     }
 
     /**
-     * Earliest open calls first, bounded so re-reading them stays within one job's budget.
+     * Earliest open calls first. Every outstanding call is preserved so a
+     * continuation can re-read its source line and pair it with its result.
      *
      * @return list<OpenToolCallRef>
      */
@@ -161,21 +162,8 @@ final class BudgetedRangeCollector
     {
         $calls = array_values($this->openCalls);
         usort($calls, static fn (OpenToolCallRef $a, OpenToolCallRef $b): int => $a->offset <=> $b->offset);
-        $carried = [];
-        $lines = [];
-        $bytes = 0;
-        foreach ($calls as $call) {
-            if (!isset($lines[$call->offset])) {
-                if (\count($lines) >= JsonlLines::MAX_CARRIED_LINES || $bytes + $call->length > $this->budgetBytes) {
-                    break;
-                }
-                $lines[$call->offset] = true;
-                $bytes += $call->length;
-            }
-            $carried[] = $call;
-        }
 
-        return $carried;
+        return $calls;
     }
 
     private function track(SessionEventDTO $event, int $start, int $end): void

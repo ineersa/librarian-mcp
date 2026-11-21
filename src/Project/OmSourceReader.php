@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Project;
 
 /**
- * Opens OM SQLite sources read-only and inspects schema/counts.
+ * Opens legacy OM SQLite sources read-only for the one-time importer.
  *
  * Uses PDO SQLite readonly URI so WAL sidecars remain visible. Never migrates,
  * checkpoints, creates databases, or writes source tables.
@@ -75,7 +75,7 @@ final class OmSourceReader
     }
 
     /**
-     * Shared read-only PDO opener for indexing and discovery.
+     * Shared read-only PDO opener for the legacy importer.
      *
      * Callers own short read transactions and must close the connection before
      * model or derived-store work. Never migrates or writes source tables.

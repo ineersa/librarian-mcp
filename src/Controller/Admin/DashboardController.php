@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Entity\ProjectHealth;
+use App\ObservationalMemory\Storage\ActiveMemoryCounter;
 use App\Repository\ProjectRepository;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
@@ -22,6 +23,7 @@ class DashboardController extends AbstractDashboardController
 {
     public function __construct(
         private readonly ProjectRepository $projectRepository,
+        private readonly ActiveMemoryCounter $activeMemoryCounter,
         #[Autowire(param: 'app.display_timezone')]
         private readonly string $displayTimezone,
     ) {
@@ -30,6 +32,13 @@ class DashboardController extends AbstractDashboardController
     public function index(): Response
     {
         $projects = $this->projectRepository->findBy([], ['id' => 'DESC'], 10);
+        $projectIds = [];
+        foreach ($projects as $project) {
+            if (null !== $project->id) {
+                $projectIds[] = $project->id;
+            }
+        }
+        $activeCounts = $this->activeMemoryCounter->forProjects($projectIds);
         $counts = [
             'total' => $this->projectRepository->count([]),
             'pending' => $this->projectRepository->count(['health' => ProjectHealth::Pending]),
@@ -41,6 +50,7 @@ class DashboardController extends AbstractDashboardController
         return $this->render('admin/dashboard.html.twig', [
             'projectCounts' => $counts,
             'recentProjects' => $projects,
+            'activeMemoryCounts' => $activeCounts,
         ]);
     }
 

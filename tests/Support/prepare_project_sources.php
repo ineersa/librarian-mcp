@@ -282,6 +282,43 @@ CREATE TABLE om_reflection (
 SQL);
     $pdo->exec('CREATE TABLE om_source_revision (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL)');
     $pdo->exec('CREATE TABLE om_source_change (kind TEXT NOT NULL, source_id TEXT NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY (kind, source_id))');
+    $pdo->exec(<<<'SQL'
+CREATE TABLE om_memory_generation (
+    generation_id TEXT PRIMARY KEY NOT NULL,
+    run_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    observation_set_hash TEXT NOT NULL,
+    reflector_model TEXT NOT NULL,
+    reflector_schema_version TEXT NOT NULL,
+    required_start_seq INTEGER,
+    required_end_seq INTEGER,
+    failure_code TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+)
+SQL);
+    $pdo->exec(<<<'SQL'
+CREATE TABLE om_generation_reflection (
+    generation_id TEXT NOT NULL,
+    reflection_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (generation_id, reflection_id)
+)
+SQL);
+    $pdo->exec(<<<'SQL'
+CREATE TABLE om_generation_retained_observation (
+    generation_id TEXT NOT NULL,
+    observation_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (generation_id, observation_id)
+)
+SQL);
+    $pdo->exec(<<<'SQL'
+CREATE TABLE om_active_generation (
+    run_id TEXT PRIMARY KEY NOT NULL,
+    generation_id TEXT NOT NULL
+)
+SQL);
 
     $appliedAt = '2026-01-01T00:00:00+00:00';
     $insertVersion = $pdo->prepare('INSERT INTO om_schema_version (version, description, checksum, applied_at) VALUES (?, ?, ?, ?)');
@@ -336,6 +373,44 @@ SQL);
             '1',
             $appliedAt,
         ]);
+    }
+
+    if ($reflectionCount > 0 || $observationCount > 0) {
+        $generationId = sprintf('%s-gen-1', $idPrefix);
+        $pdo->prepare(<<<'SQL'
+INSERT INTO om_memory_generation (
+    generation_id, run_id, status, observation_set_hash, reflector_model, reflector_schema_version,
+    required_start_seq, required_end_seq, failure_code, created_at, completed_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+SQL)->execute([
+            $generationId,
+            $runId,
+            'succeeded',
+            hash('sha256', $idPrefix.'-active-set'),
+            'fixture-model',
+            '1',
+            1,
+            max(1, $observationCount),
+            $appliedAt,
+            $appliedAt,
+        ]);
+        $insertGenerationReflection = $pdo->prepare('INSERT INTO om_generation_reflection (generation_id, reflection_id, position) VALUES (?, ?, ?)');
+        for ($i = 1; $i <= $reflectionCount; ++$i) {
+            $insertGenerationReflection->execute([
+                $generationId,
+                $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Reflection, $i) : sprintf('%s-ref-%d', $idPrefix, $i),
+                $i,
+            ]);
+        }
+        $insertRetained = $pdo->prepare('INSERT INTO om_generation_retained_observation (generation_id, observation_id, position) VALUES (?, ?, ?)');
+        for ($i = 1; $i <= $observationCount; ++$i) {
+            $insertRetained->execute([
+                $generationId,
+                $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Observation, $i) : sprintf('%s-obs-%d', $idPrefix, $i),
+                $i,
+            ]);
+        }
+        $pdo->prepare('INSERT INTO om_active_generation (run_id, generation_id) VALUES (?, ?)')->execute([$runId, $generationId]);
     }
 
     $pdo->exec(sprintf('INSERT INTO om_source_revision (id, revision) VALUES (1, %d)', $sourceRevision));

@@ -44,7 +44,6 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $details = $this->page->locator('body');
             Expect::locator($details)->toContainText('.hatfield/extensions-data/observational-memory/om.sqlite');
             Expect::locator($details)->toContainText('.hatfield/sessions');
-            Expect::locator($details)->toContainText('20261021_006_semantic_source_revisions');
             $this->assertSourceCount('Observations', 2);
             $this->assertSourceCount('Reflections', 1);
             $this->assertSourceCount('Sessions', 1);
@@ -75,6 +74,8 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
             Expect::locator($indexCell)->toHaveAttribute('data-index-parent-count', '0', new AssertionOptions(timeoutMs: 60_000));
             Expect::locator($indexCell->locator('[data-index-summary-label]'))->toHaveText('0 indexed memories');
+            Expect::locator($indexCell->locator('[data-source-count="observations"]'))->toHaveText('0');
+            Expect::locator($indexCell->locator('[data-source-count="reflections"]'))->toHaveText('0');
             // The legacy om.sqlite import is one-time: two later scans (serial on one worker)
             // must not resurrect the deleted session from the unchanged source file.
             for ($scan = 0; $scan < 2; ++$scan) {
