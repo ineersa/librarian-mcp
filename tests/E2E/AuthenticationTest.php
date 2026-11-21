@@ -18,6 +18,13 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $page->getByRole('heading', ['name' => 'Projects dashboard', 'exact' => true])->waitFor();
         self::assertTrue($page->getByRole('heading', ['name' => 'Projects dashboard', 'exact' => true])->isVisible());
         $this->assertPageContains('Librarian MCP');
+        $stats = $page->locator('#messenger-stats');
+        foreach (['async', 'om', 'cron'] as $transport) {
+            $card = $stats->locator(\sprintf('.card:has(h3:text-is("%s"))', $transport));
+            self::assertMatchesRegularExpression('/Queued:\s*\d+.*Delayed retries:\s*\d+/s', $card->innerText());
+        }
+        $failedCard = $stats->locator('.card:has(h3:text-is("failed"))');
+        self::assertMatchesRegularExpression('/Total:\s*\d+/', $failedCard->innerText());
         $page->locator('.user-menu-wrapper:visible .user-details')->click();
         $page->getByRole('link', ['name' => 'Sign out', 'exact' => true])->click();
         $page->waitForURL('**/');

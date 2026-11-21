@@ -1,0 +1,47 @@
+<div id="messenger-failed">
+    {% if stats.failures is null %}
+        <p class="text-muted mb-0">Failed messages are unavailable.</p>
+    {% elseif stats.failures is empty %}
+        <p class="text-muted mb-0">No failed messages to display.</p>
+    {% else %}
+        {% set routes = constant('App\\Controller\\Admin\\DashboardController::MESSENGER_ROUTES') %}
+        <p class="text-muted">Showing {{ stats.failures|length }} of {{ stats.failedTotal ?? 'unknown' }}.</p>
+        <div class="table-responsive">
+            <table class="table table-striped mb-0" aria-label="Failed messages">
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Message class</th>
+                        <th scope="col">Transport</th>
+                        <th scope="col">Failed at</th>
+                        <th scope="col">Retries</th>
+                        <th scope="col">Last error</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for message in stats.failures %}
+                        <tr>
+                            <td>{{ message.id }}</td>
+                            <td><code class="text-break">{{ message.class }}</code></td>
+                            <td>{{ message.transport ?? 'Unknown' }}</td>
+                            <td>{{ message.failedAt ? message.failedAt|date('Y-m-d H:i:s T') : 'Unknown' }}</td>
+                            <td>{{ message.retries }}</td>
+                            <td class="text-break">
+                                {% if message.errorClass %}<strong>{{ message.errorClass }}</strong>{% endif %}
+                                {{ message.error ?? 'No error details' }}
+                            </td>
+                            <td>
+                                <form method="post" action="{{ path(routes.retry, {id: message.id}) }}" data-turbo="true" class="d-flex gap-2">
+                                    {{ include('admin/messenger/_csrf.html.twig') }}
+                                    <button class="btn btn-sm btn-secondary" type="submit">Retry</button>
+                                    <button class="btn btn-sm btn-danger" type="submit" formaction="{{ path(routes.remove, {id: message.id}) }}" data-turbo-confirm="Permanently remove this failed message?">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>

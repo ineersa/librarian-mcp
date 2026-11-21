@@ -1,0 +1,21 @@
+<div id="messenger-stats" class="row g-3 mb-3">
+    {% for transport, counts in stats.queues %}
+        <div class="col-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="h6 card-title">{{ transport }}</h3>
+                    <div>Queued: <strong>{{ counts.queued ?? 'Unavailable' }}</strong></div>
+                    <div>Delayed retries: <strong>{{ counts.delayed ?? 'Unavailable' }}</strong></div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h3 class="h6 card-title">{{ enum('App\\Messenger\\MessengerTransport').Failed.value }}</h3>
+                <div>Total: <strong>{{ stats.failedTotal ?? 'Unavailable' }}</strong></div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,8 @@
+<turbo-stream action="replace" target="messenger-stats">
+    <template>{{ include('admin/messenger/_stats.html.twig') }}</template>
+</turbo-stream>
+{% if stats.failures is not null %}
+    <turbo-stream action="replace" target="messenger-failed">
+        <template>{{ include('admin/messenger/_failed_list.html.twig') }}</template>
+    </turbo-stream>
+{% endif %}
