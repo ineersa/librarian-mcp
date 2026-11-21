@@ -5,6 +5,8 @@
         <p class="text-muted mb-0">No failed messages to display.</p>
     {% else %}
         {% set routes = constant('App\\Controller\\Admin\\DashboardController::MESSENGER_ROUTES') %}
+        {% set sessionQuery = constant('App\\ObservationalMemory\\Storage\\ObserverCoverageReader::SESSION_QUERY') %}
+        {% set failureQuery = constant('App\\ObservationalMemory\\Storage\\ObserverCoverageReader::FAILURE_QUERY') %}
         <p class="text-muted">Showing {{ stats.failures|length }} of {{ stats.failedTotal ?? 'unknown' }}.</p>
         <div class="table-responsive">
             <table class="table table-striped mb-0" aria-label="Failed messages">
@@ -12,6 +14,8 @@
                     <tr>
                         <th scope="col">ID</th>
                         <th scope="col">Message class</th>
+                        <th scope="col">Project</th>
+                        <th scope="col">Observer coverage</th>
                         <th scope="col">Transport</th>
                         <th scope="col">Failed at</th>
                         <th scope="col">Retries</th>
@@ -24,6 +28,32 @@
                         <tr>
                             <td>{{ message.id }}</td>
                             <td><code class="text-break">{{ message.class }}</code></td>
+                            <td>
+                                {% if message.projectId is not null %}
+                                    {% set projectParams = {entityId: message.projectId} %}
+                                    {% if message.sessionId is not null %}{% set projectParams = projectParams|merge({(sessionQuery): message.sessionId}) %}{% endif %}
+                                    {% if message.target is not null %}{% set projectParams = projectParams|merge({(failureQuery): message.id}) %}{% endif %}
+                                    <a href="{{ path(constant('App\\Controller\\Admin\\ProjectCrudController::DETAIL_ROUTE'), projectParams) }}{% if message.sessionId is not null %}#observer-coverage{% endif %}">{{ message.projectName }}</a>
+                                {% else %}
+                                    Project unavailable
+                                {% endif %}
+                                {% if message.sessionId is not null %}<div class="small text-muted">Session #{{ message.sessionId }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if message.target is not null %}
+                                    <div>Target {{ message.target|number_format }}</div>
+                                    {% if message.covered is same as(true) %}
+                                        <span class="badge text-bg-success">Already covered</span>
+                                    {% elseif message.covered is same as(false) %}
+                                        <span class="badge text-bg-warning">Not fully covered</span>
+                                    {% else %}
+                                        <span class="text-muted">Coverage unavailable</span>
+                                    {% endif %}
+                                    {% if message.contiguousEnd > 0 %}<div class="small">Gap-free through {{ message.contiguousEnd|number_format }}</div>{% endif %}
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                             <td>{{ message.transport ?? 'Unknown' }}</td>
                             <td>{{ message.failedAt ? message.failedAt|date('Y-m-d H:i:s T') : 'Unknown' }}</td>
                             <td>{{ message.retries }}</td>

@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace App\Messenger\Monitor;
 
+use App\Message\IndexProjectMessage;
+use App\Message\ObserveMemorySessionMessage;
+use App\Message\ReflectMemoryGenerationMessage;
+use App\Message\ScanProjectMessage;
 use App\Messenger\MessengerTransport;
+use App\ObservationalMemory\Storage\ObserverCoverageReader;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Types\Types;
@@ -18,6 +23,7 @@ use Symfony\Component\Messenger\Stamp\RedeliveryStamp;
 use Symfony\Component\Messenger\Stamp\SentToFailureTransportStamp;
 use Symfony\Component\Messenger\Transport\Receiver\MessageCountAwareInterface;
 
+/** @phpstan-import-type FailedJobRow from MessengerStats */
 final readonly class MessengerStatsProvider
 {
     private const string TABLE = 'messenger_messages';
@@ -30,6 +36,7 @@ final readonly class MessengerStatsProvider
         private Connection $connection,
         private ClockInterface $clock,
         private LoggerInterface $logger,
+        private ObserverCoverageReader $coverage,
     ) {
     }
 
@@ -74,9 +81,25 @@ final readonly class MessengerStatsProvider
         return new MessengerStats($queues, $this->failed->count(), $includeFailures ? $this->newestFailures() : null);
     }
 
-    /** @return list<array{id: string, class: string, transport: string|null, failedAt: \DateTimeInterface|null, retries: int, errorClass: string|null, error: string|null}> */
+    public function observerTargetForFailure(int $id, int $sessionId): ?int
+    {
+        try {
+            $message = $this->failed->find($id, MessengerTransport::Failed->value)?->getMessage();
+
+            return $message instanceof ObserveMemorySessionMessage && $sessionId === $message->sessionPk
+                ? $message->terminalEndSeq
+                : null;
+        } catch (\Throwable $exception) {
+            $this->logger->warning('Messenger dashboard stats are unavailable.', ['exception' => $exception]);
+
+            return null;
+        }
+    }
+
+    /** @return list<FailedJobRow> */
     private function newestFailures(): array
     {
+        /** @var list<FailedJobRow> $failures */
         $failures = [];
         // The Doctrine receiver streams batches with no limit. A limited read does not select the newest rows.
         foreach ($this->failed->all() as $envelope) {
@@ -95,6 +118,12 @@ final readonly class MessengerStatsProvider
             $failures[] = [
                 'id' => (string) $id,
                 'class' => $message::class,
+                'sessionId' => $message instanceof ObserveMemorySessionMessage || $message instanceof ReflectMemoryGenerationMessage ? $message->sessionPk : null,
+                'target' => $message instanceof ObserveMemorySessionMessage ? $message->terminalEndSeq : null,
+                'projectId' => $message instanceof ScanProjectMessage || $message instanceof IndexProjectMessage ? $message->projectId : null,
+                'projectName' => null,
+                'covered' => null,
+                'contiguousEnd' => null,
                 'transport' => $envelope->last(SentToFailureTransportStamp::class)?->getOriginalReceiverName(),
                 'failedAt' => $failure?->getRedeliveredAt(),
                 'retries' => 0 === $lastRetryCount ? ($previous?->getRetryCount() ?? 0) : $lastRetryCount,
@@ -106,7 +135,44 @@ final readonly class MessengerStatsProvider
             }
         }
 
-        return $this->trimFailures($failures);
+        $failures = $this->trimFailures($failures);
+        $sessionIds = [];
+        $observerIds = [];
+        foreach ($failures as $job) {
+            if (null !== $job['sessionId']) {
+                $sessionIds[$job['sessionId']] = $job['sessionId'];
+                if (null !== $job['target']) {
+                    $observerIds[$job['sessionId']] = $job['sessionId'];
+                }
+            }
+        }
+        $owners = $this->coverage->projectIdsForSessions(array_values($sessionIds));
+        $coverage = $this->coverage->forSessions(array_values(array_intersect_key($observerIds, $owners)));
+        $projectIds = $owners;
+        foreach ($failures as $projectJob) {
+            if (null !== $projectJob['projectId']) {
+                $projectIds[] = $projectJob['projectId'];
+            }
+        }
+        $names = [] === $projectIds ? [] : $this->connection->fetchAllKeyValue(
+            'SELECT id, name FROM projects WHERE id IN (?)',
+            [array_values(array_unique($projectIds))],
+            [ArrayParameterType::INTEGER],
+        );
+        foreach ($failures as &$row) {
+            $sessionId = $row['sessionId'];
+            $projectId = null === $sessionId ? $row['projectId'] : ($owners[$sessionId] ?? null);
+            $name = null === $projectId ? null : ($names[$projectId] ?? null);
+            $row['projectId'] = null === $name ? null : $projectId;
+            $row['projectName'] = \is_string($name) ? $name : null;
+            if (null !== $sessionId && null !== $row['target'] && isset($coverage[$sessionId]) && null !== $row['projectId']) {
+                $row['covered'] = $coverage[$sessionId]->covers($row['target']);
+                $row['contiguousEnd'] = $coverage[$sessionId]->contiguousEnd;
+            }
+        }
+        unset($row);
+
+        return $failures;
     }
 
     /**

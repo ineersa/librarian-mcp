@@ -27,8 +27,16 @@
             <p class="mb-2 text-muted small" data-index-auto-help>
                 {{ indexStatus.automaticIndexingHelp }}
             </p>
+            <dl class="row mb-0 small">
+                <dt class="col-sm-4">Current memory revision</dt>
+                <dd class="col-sm-8" data-index-memory-revision>{{ project.memoryRevision }}</dd>
+            </dl>
             {% if indexStatus.latest %}
                 <dl class="row mb-0 small">
+                    <dt class="col-sm-4">Active generation</dt>
+                    <dd class="col-sm-8" data-index-active-id>{{ indexStatus.active.id ?? 'None' }}</dd>
+                    <dt class="col-sm-4">Active committed revision</dt>
+                    <dd class="col-sm-8">{{ indexStatus.active.committedRevision ?? 'Not committed' }}</dd>
                     <dt class="col-sm-4">Indexed memories</dt>
                     <dd class="col-sm-8">
                         <span data-index-parent-count-value>{{ indexStatus.indexedMemoryCount }}</span>
@@ -55,14 +63,10 @@
                 <details class="small mt-2">
                     <summary>Technical index details</summary>
                     <dl class="row mb-0 mt-2">
-                        <dt class="col-sm-4">Active generation</dt>
-                        <dd class="col-sm-8" data-index-active-id>{{ indexStatus.active ? indexStatus.active.id : 'None' }}</dd>
-                        <dt class="col-sm-4">Committed revision</dt>
+                        <dt class="col-sm-4">Latest generation’s committed revision</dt>
                         <dd class="col-sm-8" data-index-committed-revision-value>{{ indexStatus.latest.committedRevision ?? 'Not committed' }}</dd>
                         <dt class="col-sm-4">Source revision at last discovery</dt>
                         <dd class="col-sm-8" data-index-source-revision>{{ project.sourceRevision ?? 'Unknown' }}</dd>
-                        <dt class="col-sm-4">Memory revision</dt>
-                        <dd class="col-sm-8" data-index-memory-revision>{{ project.memoryRevision }}</dd>
                     </dl>
                 </details>
             {% else %}

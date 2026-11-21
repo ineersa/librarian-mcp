@@ -1,0 +1,58 @@
+{% set sessionQuery = constant('App\\ObservationalMemory\\Storage\\ObserverCoverageReader::SESSION_QUERY') %}
+{% set beforeQuery = constant('App\\ObservationalMemory\\Storage\\ObserverCoverageReader::BEFORE_QUERY') %}
+{% set projectRoute = app.request.attributes.get('_route') %}
+{% set projectParams = app.request.attributes.get('_route_params') %}
+<section id="observer-coverage" class="card mb-3" aria-labelledby="observer-coverage-heading">
+    <div class="card-body">
+        <h2 id="observer-coverage-heading" class="h5">Observer coverage</h2>
+        <p class="small text-muted">Snapshot at page load. Only complete chunks under the current renderer and schema count. The current source end is unknown here; a failed-job target is not necessarily the end of its session.</p>
+        {% if coverageFocused %}
+            <a href="{{ path(projectRoute, projectParams) }}#observer-coverage">Back to latest sessions</a>
+        {% endif %}
+        {% if coverage.sessions is empty %}
+            <p class="mb-0">No sessions to display.</p>
+        {% else %}
+            {% set showFailure = coverageFailure is not null %}
+            <div class="table-responsive">
+                <table class="table align-middle" aria-label="Observer coverage">
+                    <thead><tr><th scope="col">Session</th><th scope="col">Gap-free through</th><th scope="col">Latest complete chunk ends at</th><th scope="col">Internal gaps</th>{% if showFailure %}<th scope="col">Linked Observer failure</th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for id, session in coverage.sessions %}
+                            <tr>
+                                <th scope="row"><a href="{{ path(projectRoute, projectParams|merge({(sessionQuery): id})) }}#observer-coverage">#{{ id }}</a></th>
+                                <td>{{ session.contiguousEnd > 0 ? session.contiguousEnd|number_format : 'None' }}</td>
+                                <td>{{ session.latestEnd > 0 ? session.latestEnd|number_format : 'None' }}</td>
+                                <td>
+                                    {% if session.latestEnd == 0 %}No complete chunks{% elseif session.gapCount == 0 %}None through latest complete chunk{% else %}
+                                        <span class="badge text-bg-warning">{{ session.gapCount }}</span>
+                                        {% for gap in session.gaps %}
+                                            <div>{{ gap.start|number_format }}–{{ gap.end|number_format }}</div>
+                                        {% endfor %}
+                                        {% if session.gapCount > session.gaps|length %}<small>Showing the first {{ session.gaps|length }} gaps.</small>{% endif %}
+                                    {% endif %}
+                                </td>
+                                {% if showFailure %}
+                                    <td>
+                                        #{{ coverageFailure.id }} · Target {{ coverageFailure.target|number_format }} ·
+                                        {% if session.covers(coverageFailure.target) %}
+                                            <span class="badge text-bg-success">Already covered</span>
+                                        {% else %}
+                                            <span class="badge text-bg-warning">Not fully covered</span>
+                                            {% if coverageFailure.target > session.latestEnd %}<small>Pending through target: {{ (session.latestEnd + 1)|number_format }}–{{ coverageFailure.target|number_format }}</small>{% endif %}
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if showFailure %}
+                <p class="small text-muted mb-0">Already covered means no replay is needed for Observer coverage; it does not remove the job.</p>
+            {% endif %}
+        {% endif %}
+        {% if coverage.next is not null %}
+            <a href="{{ path(projectRoute, projectParams|merge({(beforeQuery): coverage.next})) }}#observer-coverage">Older sessions</a>
+        {% endif %}
+    </div>
+</section>

@@ -7,6 +7,7 @@ namespace App\ObservationalMemory\Storage;
 use App\Entity\MemoryGenerationStatus;
 use App\ObservationalMemory\Observer\OmTokenEstimator;
 use App\ObservationalMemory\Support\OmIdentity;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 
@@ -49,25 +50,7 @@ final readonly class ObservationRepository
      */
     public function contiguousCoveredEndSeq(int $sessionPk, string $rendererVersion, string $observerSchemaVersion): ?int
     {
-        $intervals = $this->connection->iterateAssociative(
-            'SELECT chunk_key, MIN(source_start_seq) AS source_start_seq, MIN(source_end_seq) AS source_end_seq
-             FROM om_observer_coverage
-             WHERE memory_session_id = ? AND renderer_version = ? AND observer_schema_version = ?
-               AND chunk_key <> \'\'
-             GROUP BY chunk_key
-             HAVING MIN(part_count) >= 1
-                AND MIN(part_count) = MAX(part_count)
-                AND MIN(source_start_seq) >= 1
-                AND MIN(source_start_seq) = MAX(source_start_seq)
-                AND MIN(source_end_seq) >= MIN(source_start_seq)
-                AND MIN(source_end_seq) = MAX(source_end_seq)
-                AND MIN(source_digest) <> \'\' AND MIN(source_digest) = MAX(source_digest)
-                AND MIN(part_index) = 1
-                AND MAX(part_index) = MIN(part_count)
-                AND COUNT(DISTINCT part_index) = MIN(part_count)
-             ORDER BY source_start_seq ASC, source_end_seq DESC, chunk_key ASC',
-            [$sessionPk, $rendererVersion, $observerSchemaVersion],
-        );
+        $intervals = $this->completeCoverageChunks([$sessionPk], $rendererVersion, $observerSchemaVersion);
 
         $expected = 1;
         foreach ($intervals as $interval) {
@@ -83,6 +66,35 @@ final readonly class ObservationRepository
         }
 
         return 1 === $expected ? null : $expected - 1;
+    }
+
+    /**
+     * @param non-empty-list<int> $sessionPks
+     *
+     * @return iterable<array<string, mixed>>
+     */
+    public function completeCoverageChunks(array $sessionPks, string $rendererVersion, string $observerSchemaVersion): iterable
+    {
+        return $this->connection->iterateAssociative(
+            'SELECT memory_session_id, chunk_key, MIN(source_start_seq) AS source_start_seq, MIN(source_end_seq) AS source_end_seq
+             FROM om_observer_coverage
+             WHERE memory_session_id IN (?) AND renderer_version = ? AND observer_schema_version = ?
+               AND chunk_key <> \'\'
+             GROUP BY memory_session_id, chunk_key
+             HAVING MIN(part_count) >= 1
+                AND MIN(part_count) = MAX(part_count)
+                AND MIN(source_start_seq) >= 1
+                AND MIN(source_start_seq) = MAX(source_start_seq)
+                AND MIN(source_end_seq) >= MIN(source_start_seq)
+                AND MIN(source_end_seq) = MAX(source_end_seq)
+                AND MIN(source_digest) <> \'\' AND MIN(source_digest) = MAX(source_digest)
+                AND MIN(part_index) = 1
+                AND MAX(part_index) = MIN(part_count)
+                AND COUNT(DISTINCT part_index) = MIN(part_count)
+             ORDER BY memory_session_id, source_start_seq ASC, source_end_seq DESC, chunk_key ASC',
+            [$sessionPks, $rendererVersion, $observerSchemaVersion],
+            [ArrayParameterType::INTEGER],
+        );
     }
 
     /**

@@ -59,6 +59,11 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
                 ->toContainText('Index status', new AssertionOptions(timeoutMs: 10_000));
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Automatic indexing', new AssertionOptions(timeoutMs: 10_000));
+            Expect::locator($this->page->locator('#project-index-status'))->toContainText('Active committed revision');
+            $coverage = $this->page->locator('#observer-coverage');
+            Expect::locator($coverage)->toContainText('Gap-free through');
+            $coverage->getByRole('link', ['name' => '#', 'exact' => false])->click();
+            Expect::locator($coverage)->toContainText('Back to latest sessions');
 
             $committedBefore = trim((string) $this->page->locator('[data-index-committed-revision-value]')->textContent());
 
