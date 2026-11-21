@@ -138,6 +138,9 @@ Then publish host 443 with a local compose override.
 
 ## Runtime notes
 
+- On the `om` queue, retryable observe/reflect failures get up to ten native Messenger retries: 30 seconds initially, doubling with 10% jitter and a nine-minute cap per delay. The nominal schedule spans about an hour, not a hard deadline. A busy per-session lock instead defers the message for a fresh random 60–120 seconds without sleeping in the worker or changing its failure count.
+
+
 - `compose.prod.yaml` loads `.env.prod.local` with `env_file` and Castor passes `--env-file .env.prod.local`.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
 - Symfony environment is baked by `composer dump-env prod` during image build.

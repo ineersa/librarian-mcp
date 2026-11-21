@@ -16,13 +16,14 @@ framework:
                 dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
                 options:
                     queue_name: om
-                # No ordering with discovery on `async`: an observe for a just-registered project
-                # retries until its journal root is discovered (30s, 1m, 2m, 4m, 8m), which also
-                # rides out short LLM endpoint outages.
+                # Discovery and model availability failures use native Messenger retries.
+                # Session lock contention is deferred separately without a retry stamp.
                 retry_strategy:
-                    max_retries: 5
+                    max_retries: 10
                     delay: 30000
                     multiplier: 2
+                    max_delay: 540000
+                    jitter: 0.1
             # Cron jobs (daily backup). Redispatched by the `cron` schedule or queued by the admin
             # "Run now" action. Failures are recorded on the cron run and retried by the next
             # schedule tick, so Messenger does not retry.
