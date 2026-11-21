@@ -110,11 +110,13 @@ final readonly class MemoryTools
 
             return $this->recall->recall($project, $id)
                 + ['project' => MemoryContextResolver::provenance($project)];
-        });
+        }, enforcePayloadLimit: false);
     }
 
-    /** @param callable(): array<string, mixed> $action */
-    private function run(string $operation, callable $action): CallToolResult
+    /**
+     * @param callable(): array<string, mixed> $action
+     */
+    private function run(string $operation, callable $action, bool $enforcePayloadLimit = true): CallToolResult
     {
         try {
             $payload = $action();
@@ -136,7 +138,7 @@ final readonly class MemoryTools
         } catch (\JsonException) {
             return $this->failure(MemoryErrorCode::SourceUnavailable, 'Source content cannot be represented as a JSON memory result.');
         }
-        if (\strlen($json) > self::MAX_RESULT_BYTES) {
+        if ($enforcePayloadLimit && \strlen($json) > self::MAX_RESULT_BYTES) {
             return $this->failure(MemoryErrorCode::ResponseTooLarge, 'The memory response exceeds the 1 MiB payload limit. Narrow the search or recall a smaller memory.');
         }
 

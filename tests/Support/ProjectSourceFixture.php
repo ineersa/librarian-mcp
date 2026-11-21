@@ -41,6 +41,7 @@ final class ProjectSourceFixture
 
     public static function defaultOmDatabasePath(string $slug = 'default-om'): string
     {
+        // PHPUnit/console import runs in the tooling process, which writes/reads the builder tree.
         return self::builderProjectPath($slug).'/.hatfield/extensions-data/observational-memory/om.sqlite';
     }
 

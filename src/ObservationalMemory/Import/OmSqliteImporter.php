@@ -8,12 +8,16 @@ use App\Entity\MemoryGenerationStatus;
 use App\Entity\MemorySourceKind;
 use App\Entity\Project;
 use App\ObservationalMemory\Storage\MemoryRevision;
+use App\Project\HatfieldSettingsOverlay;
 use App\Project\OmSourceReader;
 use App\Project\ProjectSourceException;
 use App\Project\ProjectSourceIssueCode;
+use App\Project\ServicePathMapper;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * One-way 1:1 copy of a Hatfield project's OM SQLite memory into Librarian tables.
@@ -25,58 +29,41 @@ use Symfony\Component\Clock\ClockInterface;
  */
 final readonly class OmSqliteImporter
 {
-    /** Same minimum as discovery; coverage/generation tables are copied when present. */
+    /** Coverage/generation tables are copied when present. */
     public const array REQUIRED_TABLES = ['om_observation', 'om_reflection'];
+    private const string DEFAULT_OM_DATABASE_PATH = '.hatfield/extensions-data/observational-memory/om.sqlite';
 
     public function __construct(
         private OmSourceReader $sourceReader,
         private Connection $connection,
         private ClockInterface $clock,
+        private HatfieldSettingsOverlay $overlay,
+        private ServicePathMapper $pathMapper,
+        private string $hatfieldUserHome,
     ) {
     }
 
     /**
-     * One-time legacy import: copy a project's om.sqlite memory the first time discovery
-     * finds it, then never again. Hatfield no longer writes om.sqlite after the thin-client
-     * cutover, and re-importing would resurrect sessions Librarian has since deleted.
-     * A failed import is not recorded, so the next scan retries it.
+     * Explicit one-time legacy import. Resolves the OM database independently of discovery
+     * results. A missing file is not marked imported. After a successful import,
+     * `legacy_imported_at` blocks another import so Librarian-deleted memory stays deleted.
      *
-     * @return bool whether an import ran
-     */
-    public function importOnce(Project $project): bool
-    {
-        if (null === $project->id || null === $project->databasePath || null !== $project->legacyImportedAt) {
-            return false;
-        }
-
-        try {
-            $this->import($project);
-        } catch (ProjectSourceException $exception) {
-            // A missing legacy file is normal after the thin-client cutover: record the
-            // attempt so later scans do not keep probing a path that will never appear.
-            if (ProjectSourceIssueCode::OmDatabaseMissing === $exception->issueCode) {
-                $this->markImported($project->id);
-
-                return false;
-            }
-
-            throw $exception;
-        }
-
-        $this->markImported($project->id);
-
-        return true;
-    }
-
-    /**
+     * @param ?string $databasePath optional absolute or project-relative source path override
+     *
      * @return array<string, array{source: int, inserted: int}> per-table totals across sessions
      */
-    public function import(Project $project, ?string $onlyRunId = null): array
+    public function import(Project $project, ?string $onlyRunId = null, ?string $databasePath = null): array
     {
         $projectId = $project->id ?? throw new \InvalidArgumentException('Project is not persisted.');
-        $databasePath = $project->databasePath ?? throw new \InvalidArgumentException('Project OM database path is not discovered yet.');
+        if (null !== $project->legacyImportedAt) {
+            throw new \RuntimeException('Legacy OM import already completed for this project; re-import is blocked so deleted Librarian memory stays deleted.');
+        }
 
-        $pdo = $this->sourceReader->openReadonlyConnection($databasePath);
+        $root = '' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath;
+        $resolvedPath = $this->resolveDatabasePath($root, $databasePath);
+
+        $pdo = $this->sourceReader->openReadonlyConnection($resolvedPath);
+        $this->sourceReader->validateSchema($pdo);
         $tables = $this->existingTables($pdo);
 
         $totals = [];
@@ -89,15 +76,84 @@ final readonly class OmSqliteImporter
             }
         }
 
+        $this->markImported($projectId, $resolvedPath);
+
         return $totals;
     }
 
-    private function markImported(int $projectId): void
+    private function markImported(int $projectId, string $databasePath): void
     {
         $this->connection->executeStatement(
-            'UPDATE projects SET legacy_imported_at = ? WHERE id = ? AND legacy_imported_at IS NULL',
-            [$this->clock->now()->format('Y-m-d H:i:s'), $projectId],
+            'UPDATE projects SET database_path = ?, legacy_imported_at = ? WHERE id = ? AND legacy_imported_at IS NULL',
+            [$databasePath, $this->clock->now()->format('Y-m-d H:i:s'), $projectId],
         );
+    }
+
+    /**
+     * Resolve the legacy OM database without discovery. Explicit --database wins;
+     * otherwise use extensions.settings.observational_memory.storage.database or the default path.
+     */
+    private function resolveDatabasePath(string $projectRoot, ?string $databasePath): string
+    {
+        $logical = null !== $databasePath && '' !== trim($databasePath)
+            ? trim($databasePath)
+            : $this->configuredDatabasePath($projectRoot);
+
+        if (!str_starts_with($logical, '/')) {
+            $logical = rtrim($projectRoot, '/').'/'.ltrim($logical, '/');
+        }
+
+        $mapped = $this->pathMapper->mapSourcePath($logical);
+        $resolved = realpath($mapped);
+
+        return false === $resolved ? $mapped : $resolved;
+    }
+
+    private function configuredDatabasePath(string $projectRoot): string
+    {
+        $settings = [];
+        $userHome = trim($this->hatfieldUserHome);
+        if ('' !== $userHome) {
+            $userSettings = $this->pathMapper->map(rtrim($userHome, '/').'/.hatfield/settings.yaml');
+            $settings = $this->overlay->overlay($settings, $this->loadYamlFile($userSettings));
+        }
+        $projectSettings = rtrim($projectRoot, '/').'/.hatfield/settings.yaml';
+        $settings = $this->overlay->overlay($settings, $this->loadYamlFile($projectSettings));
+
+        $extensions = $settings['extensions'] ?? null;
+        $extensionSettings = \is_array($extensions) ? ($extensions['settings'] ?? null) : null;
+        $om = \is_array($extensionSettings) ? ($extensionSettings['observational_memory'] ?? null) : null;
+        if (\is_array($om)) {
+            $storage = $om['storage'] ?? null;
+            if (\is_array($storage) && isset($storage['database']) && \is_string($storage['database']) && '' !== $storage['database']) {
+                return $storage['database'];
+            }
+        }
+
+        return self::DEFAULT_OM_DATABASE_PATH;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadYamlFile(string $path): array
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            return [];
+        }
+
+        $content = file_get_contents($path);
+        if (false === $content) {
+            return [];
+        }
+
+        try {
+            $parsed = Yaml::parse($content);
+        } catch (ParseException) {
+            throw new ProjectSourceException(ProjectSourceIssueCode::SettingsMalformed, 'Hatfield settings YAML is malformed.');
+        }
+
+        return \is_array($parsed) ? $parsed : [];
     }
 
     /** @return array<string, true> */

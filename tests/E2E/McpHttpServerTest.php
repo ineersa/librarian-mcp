@@ -59,10 +59,12 @@ final class McpHttpServerTest extends LibrarianNetworkBrowserTest
 
             $this->openProjectDetail($projectA);
             $this->waitForProjectHealth(ProjectHealth::Ready);
+            $this->importLegacyOm($projectA, ProjectSourceFixture::defaultOmDatabasePath('mcp-a'));
             $this->waitForCommittedIndex(3);
             $projectB = $this->registerProject('MCP beta', ProjectSourceFixture::visibleProjectPath('mcp-b'));
             $this->openProjectDetail($projectB);
             $this->waitForProjectHealth(ProjectHealth::Ready);
+            $this->importLegacyOm($projectB, ProjectSourceFixture::defaultOmDatabasePath('mcp-b'));
             $this->waitForCommittedIndex(3);
 
             $search = $this->payload($first->callTool(MemoryTools::SEARCH, ['query' => 'synthetic']));

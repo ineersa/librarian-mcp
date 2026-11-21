@@ -8,7 +8,6 @@ use App\Entity\Project;
 use App\Index\ProjectIndexManager;
 use App\Index\Status\ProjectStatusPublisher;
 use App\Message\ScanProjectMessage;
-use App\ObservationalMemory\Import\OmSqliteImporter;
 use App\Project\HatfieldSourceDiscovery;
 use App\Project\ProjectDiscoveryResult;
 use App\Project\ProjectSourceIssueCode;
@@ -30,7 +29,6 @@ final class ScanProjectMessageHandler
         private readonly LoggerInterface $logger,
         private readonly ProjectIndexManager $projectIndexManager,
         private readonly ProjectStatusPublisher $projectStatusPublisher,
-        private readonly OmSqliteImporter $omImporter,
     ) {
     }
 
@@ -96,7 +94,6 @@ final class ScanProjectMessageHandler
         $this->projectStatusPublisher->publish($projectId);
 
         if ($queuedIndexing) {
-            $this->syncObservationalMemory($projectId);
             $this->projectIndexManager->queueId($projectId);
         }
     }
@@ -112,7 +109,8 @@ final class ScanProjectMessageHandler
         if ($result->successful) {
             $project->markReady(
                 now: $now,
-                databasePath: $result->databasePath,
+                // Discovery never resolves om.sqlite; keep an explicit-import path when present.
+                databasePath: $result->databasePath ?? $project->databasePath,
                 sessionsPath: $result->sessionsPath,
                 schemaVersion: $result->schemaVersion,
                 observationCount: $result->observationCount,
@@ -127,7 +125,7 @@ final class ScanProjectMessageHandler
                 now: $now,
                 error: $result->error ?? 'Discovery failed.',
                 sourceDetails: $details,
-                databasePath: $result->databasePath,
+                databasePath: $result->databasePath ?? $project->databasePath,
                 sessionsPath: $result->sessionsPath,
                 schemaVersion: $result->schemaVersion,
                 observationCount: $result->observationCount,
@@ -136,28 +134,6 @@ final class ScanProjectMessageHandler
                 sourceRevision: $result->sourceRevision,
                 sourceChangeCount: $result->sourceChangeCount,
             );
-        }
-    }
-
-    /** One-time legacy om.sqlite import into Librarian memory, after the scan write committed. */
-    private function syncObservationalMemory(int $projectId): void
-    {
-        $this->entityManager->clear();
-        $project = $this->projectRepository->find($projectId);
-        if (null === $project) {
-            return;
-        }
-
-        try {
-            $this->omImporter->importOnce($project);
-            // Import can create active memory before indexing finishes; refresh live counts.
-            $this->projectStatusPublisher->publish($projectId);
-        } catch (\Throwable $exception) {
-            // Not recorded as imported, so the next scan retries; indexing runs on existing rows.
-            $this->logger->error('Legacy observational memory import from om.sqlite failed.', [
-                'projectId' => $projectId,
-                'error' => $exception->getMessage(),
-            ]);
         }
     }
 }

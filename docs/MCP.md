@@ -135,7 +135,7 @@ Domain failure payload: `{ok: false, error, message, retryable}` with `isError: 
 
 Limits (honest):
 
-- Response payload max **1 MiB** (JSON text + identical `structuredContent` means the wire duplicates the object).
+- Search response payload max **1 MiB** (JSON text + identical `structuredContent` means the wire duplicates the object). Exact `recall` does not apply that wrapper rejection.
 - Recall checks a cooperative clock deadline only when the caller supplies one — not a hard I/O timeout on every read, and there is no implicit default deadline.
 - Hatfield and Claude exact recall hydrate every requested source ref / supporting observation without a fixed count ceiling. Complete committed journal/transcript lines are returned in full for the inclusive requested seq window; there is no per-line omit placeholder or cumulative evidence-byte refusal on those reads.
 - Search provider HTTP `max_duration` **30s** per model request. BGE batches of 8 mean there is **no** aggregate hard deadline or cancellation claim beyond that.

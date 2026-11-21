@@ -93,8 +93,8 @@ class Project
     public private(set) int $memoryRevision = 0;
 
     /**
-     * When the one-time legacy om.sqlite import completed. Null means not imported yet;
-     * once set, discovery never re-imports, so memory Librarian deleted stays deleted.
+     * When the explicit one-time legacy om.sqlite import completed. Null means not imported yet;
+     * once set, `app:om:import` refuses another import so memory Librarian deleted stays deleted.
      * Set by SQL in the importer; never set through the ORM.
      */
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
