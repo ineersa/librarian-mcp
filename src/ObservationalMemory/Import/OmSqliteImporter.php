@@ -52,7 +52,7 @@ final readonly class OmSqliteImporter
      *
      * @return array<string, array{source: int, inserted: int}> per-table totals across sessions
      */
-    public function import(Project $project, ?string $onlyRunId = null, ?string $databasePath = null): array
+    public function import(Project $project, ?string $databasePath = null): array
     {
         $projectId = $project->id ?? throw new \InvalidArgumentException('Project is not persisted.');
         if (null !== $project->legacyImportedAt) {
@@ -67,7 +67,7 @@ final readonly class OmSqliteImporter
         $tables = $this->existingTables($pdo);
 
         $totals = [];
-        foreach ($this->runIds($pdo, $tables, $onlyRunId) as $runId) {
+        foreach ($this->runIds($pdo, $tables) as $runId) {
             $rows = $this->readRun($pdo, $tables, $runId);
             $counts = $this->connection->transactional(fn (Connection $connection): array => $this->writeRun($connection, $projectId, $runId, $rows));
             foreach ($counts as $table => $count) {
@@ -173,7 +173,7 @@ final readonly class OmSqliteImporter
      *
      * @return list<string>
      */
-    private function runIds(\PDO $pdo, array $tables, ?string $onlyRunId): array
+    private function runIds(\PDO $pdo, array $tables): array
     {
         $selects = [];
         foreach (['om_observation', 'om_coverage', 'om_reflection', 'om_memory_generation'] as $table) {
@@ -181,9 +181,8 @@ final readonly class OmSqliteImporter
                 $selects[] = 'SELECT run_id FROM '.$table;
             }
         }
-        $runIds = $this->fetchColumn($pdo, implode(' UNION ', $selects).' ORDER BY run_id');
 
-        return null === $onlyRunId ? $runIds : array_values(array_filter($runIds, static fn (string $id): bool => $id === $onlyRunId));
+        return $this->fetchColumn($pdo, implode(' UNION ', $selects).' ORDER BY run_id');
     }
 
     /** @return list<string> */

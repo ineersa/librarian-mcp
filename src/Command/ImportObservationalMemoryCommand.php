@@ -36,7 +36,6 @@ final class ImportObservationalMemoryCommand extends Command
     {
         $this
             ->addArgument('projectId', InputArgument::REQUIRED, 'Registered project ID')
-            ->addOption('session', null, InputOption::VALUE_REQUIRED, 'Import only this OM run/session id')
             ->addOption('database', null, InputOption::VALUE_REQUIRED, 'Absolute or project-relative legacy OM SQLite path (defaults to settings/default path)');
     }
 
@@ -57,13 +56,11 @@ final class ImportObservationalMemoryCommand extends Command
             return Command::FAILURE;
         }
 
-        $session = $input->getOption('session');
         $database = $input->getOption('database');
 
         try {
             $totals = $this->importer->import(
                 $project,
-                \is_string($session) && '' !== $session ? $session : null,
                 \is_string($database) && '' !== $database ? $database : null,
             );
         } catch (ProjectSourceException $exception) {
