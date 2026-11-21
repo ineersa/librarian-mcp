@@ -3,6 +3,29 @@
 {% block content_title %}Projects dashboard{% endblock %}
 
 {% block main %}
+    {{ turbo_stream_from(messengerTopic, private: true) }}
+    <section class="mb-4" aria-labelledby="messenger-heading">
+        <h2 id="messenger-heading" class="h5">Background jobs</h2>
+        {{ include('admin/messenger/_stats.html.twig') }}
+        <div class="card">
+            <div class="card-body">
+                <h3 class="h6 card-title">Failed messages</h3>
+                {{ include('admin/messenger/_failed_list.html.twig') }}
+                <details class="mt-3">
+                    <summary>Bulk actions</summary>
+                    <form method="post" action="{{ path('admin_messenger_retry_all') }}" data-turbo="true" class="mt-2">
+                        {{ include('admin/messenger/_csrf.html.twig') }}
+                        <label for="messenger-message-class" class="form-label">Message class (optional)</label>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <input class="form-control w-auto" id="messenger-message-class" name="class" placeholder="Exact class name">
+                            <button class="btn btn-secondary" type="submit" data-turbo-confirm="Retry all failed messages matching the class filter? A blank filter includes every failed message.">Retry all</button>
+                            <button class="btn btn-danger" type="submit" formaction="{{ path('admin_messenger_remove_all') }}" data-turbo-confirm="Permanently remove all failed messages matching the class filter? A blank filter includes every failed message.">Remove all</button>
+                        </div>
+                    </form>
+                </details>
+            </div>
+        </div>
+    </section>
     <div class="content-panel">
         <p class="text-muted mb-4">
             Register local Hatfield projects, discover OM/session sources, and inspect project health.
