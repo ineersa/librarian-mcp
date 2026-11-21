@@ -25,20 +25,22 @@ Librarian registers **local directories**. It discovers Hatfield OM/session meta
 
 Discovery resolves settings with Hatfield YAML overlay semantics:
 
-1. Source defaults: `.hatfield/extensions-data/observational-memory/om.sqlite` and `.hatfield/sessions` under the selected project.
+1. Source default for sessions: `.hatfield/sessions` under the selected project. Legacy OM SQLite defaults remain available only to the explicit importer (`app:om:import`).
 2. Explicit Hatfield user-home `.hatfield/settings.yaml`.
 3. Project `.hatfield/settings.yaml`.
 
 Associative maps merge recursively; lists/scalars/null replace. Missing optional settings files are valid; malformed YAML is not. OM must be enabled as `Ineersa\HatfieldExt\ObservationalMemory\ObservationalMemoryExtension`.
 
-- OM override: `extensions.settings.observational_memory.storage.database`. The obsolete top-level `observational_memory` block is not read. Absolute database paths remain absolute; relative paths are joined to the selected project root, then canonicalized/path-mapped under the existing source rules. There is no fallback to the default database when a configured custom path is unavailable.
+- Legacy import path override (importer only): `extensions.settings.observational_memory.storage.database`. The obsolete top-level `observational_memory` block is not read. Absolute database paths remain absolute; relative paths are joined to the selected project root, then path-mapped. Discovery does not read this setting.
 - Session override: `sessions.path` with `~` / `%kernel.project_dir%` expansion only.
 - `HATFIELD_USER_HOME` is required; `HATFIELD_APP_ROOT` when `%kernel.project_dir%` is used; optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix maps.
 - Enter an absolute directory path visible to the Librarian service, e.g. `/projects/my-project`. There is no directory picker or security root allowlist for this local single-admin utility.
 
-Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory, or, for a project without Hatfield OM, a readable Claude Code transcript directory under `CLAUDE_PROJECTS_PATH` (Claude-only projects have no sessions path; their session count is the number of transcripts). Hatfield-ready projects also record the Claude transcript directory in source details when present. The OM database is **optional**: Librarian owns memory in PostgreSQL (plan 09) and reads `om.sqlite` only for a **one-time** legacy import: the first successful discovery that finds it imports it and records `legacy_imported_at` on the project; later scans and deploys never re-import, so memory deleted in Librarian stays deleted. Hatfield no longer writes `om.sqlite` after the thin-client cutover; use `app:om:import <project-id>` to re-run an import deliberately. A missing file is normal; a present but unreadable or unsupported file is reported as a source issue and its import is skipped, without blocking readiness or indexing.
+Readiness requires the project root, `.hatfield`, valid settings with OM enabled, and a readable sessions directory, or, for a project without Hatfield OM, a readable Claude Code transcript directory under `CLAUDE_PROJECTS_PATH` (Claude-only projects have no sessions path; their session count is the number of transcripts). Hatfield-ready projects also record the Claude transcript directory in source details when present. The OM database is **not part of discovery**: Librarian owns memory in PostgreSQL (plan 09). Use `app:om:import <project-id>` as the only explicit one-time read-only migration entry point. That command imports the full OM database (no session filter), resolves the default or configured legacy path independently of discovery (optional `--database` for a custom path), validates the schema, and records `legacy_imported_at` only after a successful import. A missing file is not marked imported. After a successful import, another import is refused so memory deleted in Librarian stays deleted. Scheduled discovery never resolves, opens, or probes `om.sqlite`.
 
-Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. A database that stopped at `20260922_005_semantic_health` (Hatfield no longer migrates OM) is still discovered and imported: 006 only adds revision/change/semantic-progress tables, so such a database reports no source revision. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary metadata revision advance is the canonical change signal.
+Scheduled discovery counts session journals and leaves memory counters to Librarian-owned PostgreSQL. The Projects row and detail status show **active** observations/reflections using current OM selection semantics (retained observations plus observations after the active generation end seq; reflections linked to the active generation), separately from indexed totals. Live Mercure updates replace those counts with the same read model.
+
+Supported OM schema versions remain through `20261021_006_semantic_source_revisions`. A database that stopped at `20260922_005_semantic_health` (Hatfield no longer migrates OM) is still accepted by the one-time importer: 006 only adds revision/change/semantic-progress tables. Source change journal rows are **hints**, not a durable independent consumer feed, and are never consumed. Ordinary Librarian memory-revision advance is the canonical change signal.
 
 ## Derived indexing (plan 04)
 
@@ -58,7 +60,7 @@ Notes:
 - All derived index data and checkpoints share PostgreSQL; there is no cross-store recovery protocol.
 - Journals support exact recall later; they are not embedded in the initial corpus.
 
-Admin list and detail show human indexing status, indexed-memory counts, and last successful index time, distinct from discovered source counts. Pending/stale status is honest: discovery is not indexing. Live Mercure + Turbo Streams replace only the source/index status sections; EasyAdmin keeps Turbo Drive disabled for native form/confirmation scripts.
+Admin list and detail show human indexing status, indexed-memory counts, active observational-memory counts, and last successful index time. Pending/stale status is honest: discovery is not indexing. Live Mercure + Turbo Streams replace only the source/index status sections; EasyAdmin keeps Turbo Drive disabled for native form/confirmation scripts.
 
 Config surface:
 
@@ -71,7 +73,7 @@ The `worker` consumes Messenger `async` and `scheduler_default` (plus `scheduler
 
 ## Docker source mounts
 
-`PROJECTS_HOST_PATH` is bound **read-only** at `PROJECTS_CONTAINER_PATH` in development and production (defaults `/tmp` → `/projects`, which only keep a fresh checkout bootable). Clients send host paths in `X-Librarian-Project` and Librarian resolves them as-is, so set both to the same absolute host path: in `.env.local` for dev (Castor passes it to Compose) or `.env.prod.local` for prod. `HATFIELD_USER_HOME` is set the same way. Web and Messenger consumer need identical source mounts/env. Mounts are read-only and SQLite connections remain `mode=ro`; the one-time legacy import reads without sidecar writes (a WAL-mode `om.sqlite` that cannot be opened read-only is reported as a source issue and its import skipped). Source journals must not be modified. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack. Production consumer service names are `messenger` and `messenger-om` (not `worker` / `om-worker`); both need the same mounts.
+`PROJECTS_HOST_PATH` is bound **read-only** at `PROJECTS_CONTAINER_PATH` in development and production (defaults `/tmp` → `/projects`, which only keep a fresh checkout bootable). Clients send host paths in `X-Librarian-Project` and Librarian resolves them as-is, so set both to the same absolute host path: in `.env.local` for dev (Castor passes it to Compose) or `.env.prod.local` for prod. `HATFIELD_USER_HOME` is set the same way. Web and Messenger consumer need identical source mounts/env. Mounts are read-only and SQLite connections remain `mode=ro`; the explicit legacy import reads without sidecar writes (a WAL-mode `om.sqlite` that cannot be opened read-only fails the import command). Source journals must not be modified. Optional ignored `compose.sources.yaml` is layered by Castor for **dev/prod only**, never for the isolated browser stack. Production consumer service names are `messenger` and `messenger-om` (not `worker` / `om-worker`); both need the same mounts.
 
 `CLAUDE_PROJECTS_PATH` (host `~/.claude/projects`) is bound **read-only** at the same path into web and consumers by `compose.override.yaml` / `compose.prod.yaml`; leave it empty to disable Claude transcripts (the empty `docker/claude-projects-placeholder` directory is mounted instead). A project with Claude transcripts stays ready when Hatfield prerequisites (user home, `.hatfield`, settings, OM, sessions) are missing or broken; those are kept as diagnostics. Root, Git-metadata and linked-worktree failures still block it. Transcripts are plain JSONL, so no write access is needed.
 
@@ -79,6 +81,6 @@ EasyAdmin uses full-page navigation and the separate `admin` AssetMapper entry s
 
 ## Validation evidence
 
-Saved coverage remains **one** Projects journey: register → row-click details → wait for live automatic discovery/index status → per-row search of a public synthetic observation → delete the fixture session through `DELETE /api/om/v1/sessions/hatfield/{id}` → scheduler-only reindex to zero memories, unchanged across later scans (no legacy re-import) → empty search → delete with source-hash checks. Sources are never mutated, by the harness or app code.
+Saved coverage remains **one** Projects journey: register → wait for discovery ready → explicit `app:om:import` of the fixture `om.sqlite` → live index/status → per-row search of a public synthetic observation → delete the fixture session through `DELETE /api/om/v1/sessions/hatfield/{id}` → scheduler-only reindex to zero memories, unchanged across later scans (no legacy re-import) → empty search → delete with source-hash checks. Sources are never mutated, by the harness or app code.
 
 Do not claim plan 04 acceptance from docs alone. Prefer [indexing-design.md](indexing-design.md), [indexing-validation.md](indexing-validation.md), and [TESTING.md](../TESTING.md).

@@ -27,13 +27,10 @@ final class HatfieldSourceDiscovery
         ProjectSourceIssueCode::UnexpectedFailure->value,
     ];
 
-    private const string DEFAULT_OM_DATABASE_PATH = '.hatfield/extensions-data/observational-memory/om.sqlite';
-
     public function __construct(
         private readonly string $hatfieldUserHome,
         private readonly string $hatfieldAppRoot,
         private readonly HatfieldSettingsOverlay $overlay,
-        private readonly OmSourceReader $omSourceReader,
         private readonly ServicePathMapper $pathMapper,
         private readonly HatfieldPathResolver $pathResolver,
         private readonly GitOriginNormalizer $gitOriginNormalizer,
@@ -160,11 +157,8 @@ final class HatfieldSourceDiscovery
 
         try {
             $logicalSessionsPath = $this->resolveSessionsPath($effective, $projectRoot);
-            $logicalDatabasePath = $this->resolveOmDatabasePath($effective, $projectRoot);
             $details['logicalSessionsPath'] = $logicalSessionsPath;
-            $details['logicalDatabasePath'] = $logicalDatabasePath;
             $sessionsPath = $this->canonicalizeExistingPath($this->pathMapper->map($logicalSessionsPath));
-            $databasePath = $this->canonicalizeExistingPath($this->pathMapper->mapSourcePath($logicalDatabasePath));
         } catch (ProjectSourceException $exception) {
             return ProjectDiscoveryResult::error(
                 $exception->getMessage(),
@@ -174,7 +168,6 @@ final class HatfieldSourceDiscovery
         }
 
         $details['sessionsPath'] = $sessionsPath;
-        $details['databasePath'] = $databasePath;
 
         try {
             $sessionCount = $this->countSessions($sessionsPath);
@@ -187,39 +180,17 @@ final class HatfieldSourceDiscovery
             );
         }
 
-        // Librarian owns memory in Postgres and reads journals directly; om.sqlite is only
-        // a legacy source for the transition import, so its absence or damage never blocks
-        // readiness. A present but unusable file is reported and skipped, not imported.
-        try {
-            $om = $this->omSourceReader->inspect($databasePath);
-        } catch (ProjectSourceException $exception) {
-            return ProjectDiscoveryResult::ready(
-                databasePath: null,
-                sessionsPath: $sessionsPath,
-                schemaVersion: null,
-                observationCount: 0,
-                reflectionCount: 0,
-                sessionCount: $sessionCount,
-                sourceRevision: null,
-                sourceChangeCount: 0,
-                details: $details,
-                issues: ProjectSourceIssueCode::OmDatabaseMissing === $exception->issueCode
-                    ? []
-                    : [$this->issue($exception->issueCode, $exception->getMessage().' Legacy import skipped.')],
-            );
-        }
-
-        $details['appliedSchemaVersions'] = $om['appliedVersions'];
-
+        // Librarian owns memory in Postgres and reads journals directly. Legacy om.sqlite
+        // is never resolved or probed here; use app:om:import for an explicit one-time copy.
         return ProjectDiscoveryResult::ready(
-            databasePath: $databasePath,
+            databasePath: null,
             sessionsPath: $sessionsPath,
-            schemaVersion: $om['schemaVersion'],
-            observationCount: $om['observationCount'],
-            reflectionCount: $om['reflectionCount'],
+            schemaVersion: null,
+            observationCount: 0,
+            reflectionCount: 0,
             sessionCount: $sessionCount,
-            sourceRevision: $om['sourceRevision'],
-            sourceChangeCount: $om['sourceChangeCount'],
+            sourceRevision: null,
+            sourceChangeCount: 0,
             details: $details,
         );
     }
@@ -364,30 +335,6 @@ final class HatfieldSourceDiscovery
         }
 
         return $this->pathResolver->resolve($path, $projectRoot);
-    }
-
-    /**
-     * @param array<string, mixed> $settings
-     */
-    private function resolveOmDatabasePath(array $settings, string $projectRoot): string
-    {
-        $path = self::DEFAULT_OM_DATABASE_PATH;
-        $extensions = $settings['extensions'] ?? null;
-        $extensionSettings = \is_array($extensions) ? ($extensions['settings'] ?? null) : null;
-        $om = \is_array($extensionSettings) ? ($extensionSettings['observational_memory'] ?? null) : null;
-        if (\is_array($om)) {
-            $storage = $om['storage'] ?? null;
-            if (\is_array($storage) && isset($storage['database']) && \is_string($storage['database']) && '' !== $storage['database']) {
-                $path = $storage['database'];
-            }
-        }
-
-        // OmPaths: absolute paths retained; relative paths joined to project CWD only.
-        if (str_starts_with($path, '/')) {
-            return $path;
-        }
-
-        return rtrim($projectRoot, '/').'/'.ltrim($path, '/');
     }
 
     private function countSessions(string $sessionsPath): int

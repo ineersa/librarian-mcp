@@ -136,12 +136,12 @@ class ProjectCrudController extends AbstractCrudController
         yield IntegerField::new('observationCount', 'Observations')
             ->hideOnForm()
             ->hideOnIndex()
-            ->setHelp('Discovered source observations, not indexed memories.');
+            ->setHelp('Legacy discovery counter; live status uses active observational-memory counts.');
 
         yield IntegerField::new('reflectionCount', 'Reflections')
             ->hideOnForm()
             ->hideOnIndex()
-            ->setHelp('Discovered source reflections, not indexed memories.');
+            ->setHelp('Legacy discovery counter; live status uses active observational-memory counts.');
 
         yield IntegerField::new('sessionCount', 'Sessions')
             ->hideOnForm()

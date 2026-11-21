@@ -18,8 +18,8 @@
         <div class="fw-semibold" data-index-status-label>{{ indexStatus.statusLabel }}</div>
         <div class="text-muted" data-index-summary-label>{{ indexStatus.indexedMemoryCount|number_format }} indexed memories</div>
         <div class="text-muted">
-            Sources: <span data-source-count="observations">{{ project.observationCount|number_format }}</span> observations,
-            <span data-source-count="reflections">{{ project.reflectionCount|number_format }}</span> reflections
+            Active: <span data-source-count="observations">{{ indexStatus.activeObservationCount|number_format }}</span> observations,
+            <span data-source-count="reflections">{{ indexStatus.activeReflectionCount|number_format }}</span> reflections
         </div>
         <div class="text-muted" data-source-last-check>
             Last source check: {{ project.lastScanAt ? project.lastScanAt|date('Y-m-d H:i:s T') : 'Not checked yet' }}

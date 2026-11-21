@@ -42,9 +42,6 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
     private const string EVENT_ASSISTANT = 'llm_step_completed';
     private const string EVENT_TOOL_RESULT = 'tool_execution_end';
 
-    private const int MAX_EVIDENCE_LINE_BYTES = 1_048_576;
-    private const int MAX_EVIDENCE_BYTES = 1_048_576;
-
     public function __construct(
         private string $claudeProjectsPath,
     ) {
@@ -121,7 +118,7 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
             // Line numbers are positions, so a checkpoint also fixes the numbering base.
             $lineNo = $from->seq ?? 0;
             // Unterminated last lines are still being written and are never yielded.
-            foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, JsonlLines::MAX_RECORD_BYTES) as $read) {
+            foreach (JsonlLines::completeLines($handle, $from->offset ?? 0, $cut) as $read) {
                 ++$lineNo;
                 if ($lineNo > $endSeq) {
                     break;
@@ -130,9 +127,9 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
                     continue;
                 }
                 $line = $read['line'];
-                $record = null === $line ? null : $this->decode($line);
+                $record = $this->decode($line);
                 $events = null === $record ? [] : $this->eventsFor($record, $sessionId, $lineNo, $toolNames);
-                if (!$collector->add($lineNo, $read['start'], $read['end'], null === $line ? 0 : \strlen($line), $events)) {
+                if (!$collector->add($lineNo, $read['start'], $read['end'], \strlen($line), $events)) {
                     break;
                 }
             }
@@ -167,12 +164,11 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         }
 
         $events = [];
-        $evidenceBytes = 0;
         try {
             $cut = JsonlLines::size($handle);
             $from = JsonlLines::usable($handle, $from, $cut, min(array_keys($wanted)));
             $lineNo = $from->seq ?? 0;
-            foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, self::MAX_EVIDENCE_LINE_BYTES) as $read) {
+            foreach (JsonlLines::completeLines($handle, $from->offset ?? 0, $cut) as $read) {
                 if (null !== $checkpoint && \is_array($interrupt = $checkpoint())) {
                     return $interrupt;
                 }
@@ -183,31 +179,22 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
                 if (!isset($wanted[$lineNo])) {
                     continue;
                 }
-                if (null === $read['line']) {
-                    $event = ['run_id' => $sessionId, 'seq' => $lineNo, 'type' => '', 'created_at' => '', 'payload' => ['omitted' => 'Transcript line exceeds the bounded evidence size.']];
-                } else {
-                    try {
-                        $record = $this->decode($read['line']);
-                    } catch (\RuntimeException $e) {
-                        return $this->failure(MemoryErrorCode::EventsUnreadable, $e->getMessage());
-                    }
-                    if (null === $record) {
-                        continue;
-                    }
-                    $message = \is_array($record['message'] ?? null) ? $record['message'] : null;
-                    $event = [
-                        'run_id' => $sessionId,
-                        'seq' => $lineNo,
-                        'type' => \is_string($record['type'] ?? null) ? $record['type'] : '',
-                        'created_at' => \is_string($record['timestamp'] ?? null) ? $record['timestamp'] : '',
-                        'payload' => null === $message ? [] : ['message' => $this->evidenceMessage($message)],
-                    ];
+                try {
+                    $record = $this->decode($read['line']);
+                } catch (\RuntimeException $e) {
+                    return $this->failure(MemoryErrorCode::EventsUnreadable, $e->getMessage());
                 }
-                $evidenceBytes += \strlen(json_encode($event, \JSON_THROW_ON_ERROR | \JSON_INVALID_UTF8_SUBSTITUTE));
-                if ($evidenceBytes > self::MAX_EVIDENCE_BYTES) {
-                    return $this->failure(MemoryErrorCode::ResourceLimitExceeded, 'Claude transcript evidence exceeded the bounded response byte limit.');
+                if (null === $record) {
+                    continue;
                 }
-                $events[] = $event;
+                $message = \is_array($record['message'] ?? null) ? $record['message'] : null;
+                $events[] = [
+                    'run_id' => $sessionId,
+                    'seq' => $lineNo,
+                    'type' => \is_string($record['type'] ?? null) ? $record['type'] : '',
+                    'created_at' => \is_string($record['timestamp'] ?? null) ? $record['timestamp'] : '',
+                    'payload' => null === $message ? [] : ['message' => $this->evidenceMessage($message)],
+                ];
             }
         } catch (\JsonException) {
             return $this->failure(MemoryErrorCode::EventsUnreadable, 'Claude transcript contains an unexpected record shape.');

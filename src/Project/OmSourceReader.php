@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Project;
 
 /**
- * Opens OM SQLite sources read-only and inspects schema/counts.
+ * Opens legacy OM SQLite sources read-only for the one-time importer.
  *
  * Uses PDO SQLite readonly URI so WAL sidecars remain visible. Never migrates,
  * checkpoints, creates databases, or writes source tables.
@@ -13,69 +13,7 @@ namespace App\Project;
 final class OmSourceReader
 {
     /**
-     * @return array{
-     *   schemaVersion: string,
-     *   appliedVersions: list<string>,
-     *   observationCount: int,
-     *   reflectionCount: int,
-     *   sourceRevision: ?int,
-     *   sourceChangeCount: int
-     * }
-     */
-    public function inspect(string $databasePath): array
-    {
-        if (!is_file($databasePath)) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseMissing, 'Observational memory database file is missing.');
-        }
-
-        if (!is_readable($databasePath)) {
-            throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Observational memory database file is unreadable.');
-        }
-
-        $pdo = $this->openReadonly($databasePath);
-
-        try {
-            $pdo->beginTransaction();
-
-            try {
-                $applied = $this->validateSchema($pdo);
-                $hasSourceRevisions = \in_array(OmExtensionIds::SOURCE_REVISIONS_SCHEMA_VERSION, $applied, true);
-
-                $observationCount = (int) $pdo->query('SELECT COUNT(*) FROM om_observation')->fetchColumn();
-                $reflectionCount = (int) $pdo->query('SELECT COUNT(*) FROM om_reflection')->fetchColumn();
-                $sourceRevision = $hasSourceRevisions ? $this->fetchSourceRevision($pdo) : null;
-                $sourceChangeCount = $hasSourceRevisions ? (int) $pdo->query('SELECT COUNT(*) FROM om_source_change')->fetchColumn() : 0;
-
-                $pdo->commit();
-            } catch (ProjectSourceException $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-
-                throw $exception;
-            } catch (\PDOException $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-
-                throw new ProjectSourceException(ProjectSourceIssueCode::OmDatabaseUnreadable, 'Unable to read observational memory database snapshot.', previous: $exception);
-            }
-
-            return [
-                'schemaVersion' => $hasSourceRevisions ? OmExtensionIds::LATEST_SCHEMA_VERSION : (string) end($applied),
-                'appliedVersions' => $applied,
-                'observationCount' => $observationCount,
-                'reflectionCount' => $reflectionCount,
-                'sourceRevision' => $sourceRevision,
-                'sourceChangeCount' => $sourceChangeCount,
-            ];
-        } finally {
-            $pdo = null;
-        }
-    }
-
-    /**
-     * Shared read-only PDO opener for indexing and discovery.
+     * Shared read-only PDO opener for the legacy importer.
      *
      * Callers own short read transactions and must close the connection before
      * model or derived-store work. Never migrates or writes source tables.
@@ -228,15 +166,5 @@ final class OmSourceReader
         }
 
         return $columns;
-    }
-
-    private function fetchSourceRevision(\PDO $pdo): ?int
-    {
-        $value = $pdo->query('SELECT revision FROM om_source_revision WHERE id = 1')->fetchColumn();
-        if (false === $value || null === $value) {
-            return null;
-        }
-
-        return (int) $value;
     }
 }

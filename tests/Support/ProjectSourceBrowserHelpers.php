@@ -8,6 +8,9 @@ use App\Entity\ProjectHealth;
 use Playwright\Assertions\AssertionOptions;
 use Playwright\Assertions\Expect;
 use Playwright\Page\PageInterface;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 /**
  * Shared Playwright helpers for project registration and indexing journeys.
@@ -65,6 +68,23 @@ trait ProjectSourceBrowserHelpers
         $this->registeredProjectIds[$id] = true;
 
         return $id;
+    }
+
+    /** Explicit one-time legacy OM SQLite import through the application console. */
+    protected function importLegacyOm(string $projectId, ?string $database = null): void
+    {
+        $application = new Application(self::$kernel);
+        $application->setAutoExit(false);
+        $input = [
+            'command' => 'app:om:import',
+            'projectId' => $projectId,
+        ];
+        if (null !== $database) {
+            $input['--database'] = $database;
+        }
+        $output = new BufferedOutput();
+        $code = $application->run(new ArrayInput($input), $output);
+        self::assertSame(0, $code, $output->fetch());
     }
 
     protected function openProjectDetail(string $projectId): PageInterface

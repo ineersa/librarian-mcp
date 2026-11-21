@@ -29,6 +29,11 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             self::assertTrue($page->getByRole('heading', ['name' => 'Projects', 'exact' => true])->isVisible());
 
             $projectId = $this->registerProject('Default OM Fixture', $visiblePath);
+            $this->openProjectDetail($projectId);
+            $this->waitForProjectHealth(ProjectHealth::Ready);
+            $this->importLegacyOm($projectId, ProjectSourceFixture::defaultOmDatabasePath($slug));
+
+            $this->openProjectsIndex();
             $indexCell = $this->page->locator('#project-index-list-'.$projectId);
             Expect::locator($indexCell->locator('[data-source-count="observations"]'))
                 ->toHaveText('2', new AssertionOptions(timeoutMs: 60_000));
@@ -44,12 +49,11 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $details = $this->page->locator('body');
             Expect::locator($details)->toContainText('.hatfield/extensions-data/observational-memory/om.sqlite');
             Expect::locator($details)->toContainText('.hatfield/sessions');
-            Expect::locator($details)->toContainText('20261021_006_semantic_source_revisions');
             $this->assertSourceCount('Observations', 2);
             $this->assertSourceCount('Reflections', 1);
             $this->assertSourceCount('Sessions', 1);
 
-            // Registration starts discovery and indexing automatically.
+            // Explicit legacy import queues indexing; discovery alone does not copy om.sqlite.
             $this->waitForCommittedIndex(3);
             Expect::locator($this->page->locator('#project-index-status'))
                 ->toContainText('Index status', new AssertionOptions(timeoutMs: 10_000));
@@ -75,8 +79,9 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
             Expect::locator($indexCell)->toHaveAttribute('data-index-parent-count', '0', new AssertionOptions(timeoutMs: 60_000));
             Expect::locator($indexCell->locator('[data-index-summary-label]'))->toHaveText('0 indexed memories');
-            // The legacy om.sqlite import is one-time: two later scans (serial on one worker)
-            // must not resurrect the deleted session from the unchanged source file.
+            Expect::locator($indexCell->locator('[data-source-count="observations"]'))->toHaveText('0');
+            Expect::locator($indexCell->locator('[data-source-count="reflections"]'))->toHaveText('0');
+            // Explicit import is one-time: later scans must not resurrect the deleted session.
             for ($scan = 0; $scan < 2; ++$scan) {
                 $lastCheck = trim((string) $indexCell->locator('[data-source-last-check]')->textContent());
                 Expect::locator($indexCell->locator('[data-source-last-check]'))

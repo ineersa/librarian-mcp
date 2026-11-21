@@ -111,7 +111,7 @@ final readonly class ObserverPipeline
             $this->checkpoints->latestBefore($sessionPk, $sourceStartSeq),
         );
         $events = $range->events;
-        if (null === $range->lastSeq) {
+        if (null === $range->lastSeq || (!$range->truncated && $range->lastSeq < $terminalEndSeq)) {
             // end_seq comes from the client; the journal holds nothing past coverage yet.
             $this->logger->info('om.observe.journal_behind_signal', [
                 'component' => 'observational_memory',
@@ -121,14 +121,9 @@ final readonly class ObserverPipeline
                 'source_end_seq' => $terminalEndSeq,
             ]);
 
-            return [
-                'status' => 'already_covered',
-                'observation_count' => 0,
-                'chunks_processed' => 0,
-                'source_start_seq' => $sourceStartSeq,
-                'source_end_seq' => $terminalEndSeq,
-                'more' => false,
-            ];
+            // Temporary: the client signalled a range that is not readable yet.
+            // Fail so Messenger's bounded `om` retry can try again; never mark covered.
+            throw new \RuntimeException(\sprintf('Session journal for %s is not yet readable through signalled sequence %d.', $runId, $terminalEndSeq));
         }
         // Never mark seqs the source does not hold yet, or that this job's read budget did not reach.
         $terminalEndSeq = min($terminalEndSeq, $range->lastSeq);

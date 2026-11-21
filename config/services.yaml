@@ -50,6 +50,7 @@ services:
             - '../src/ObservationalMemory/Observer/*ToolHandler.php'
             - '../src/ObservationalMemory/Compaction/*ToolHandler.php'
             - '../src/ObservationalMemory/Compaction/RequestLocalObservationIdMap.php'
+            - '../src/ObservationalMemory/Storage/ActiveMemoryCounts.php'
             - '../src/ObservationalMemory/**/*Exception.php'
 
     # add more service definitions when explicit configuration is needed

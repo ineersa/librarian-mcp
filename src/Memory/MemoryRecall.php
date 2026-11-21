@@ -29,9 +29,6 @@ final class MemoryRecall
     private const string ID_PATTERN = '/^[a-f0-9]{12,64}$/';
     private const int AMBIGUITY_LIST_LIMIT = 50;
     private const int SUPPORT_CHUNK_SIZE = 400;
-    private const int MAX_SUPPORT_IDS = 10_000;
-    private const int MAX_SOURCE_REFS = 10_000;
-    private const int DEFAULT_DEADLINE_SECONDS = 30;
 
     public function __construct(
         private readonly ObservationRepository $observations,
@@ -51,8 +48,6 @@ final class MemoryRecall
         string $id,
         ?\DateTimeImmutable $deadline = null,
     ): array {
-        $deadline ??= $this->clock->now()->modify('+'.self::DEFAULT_DEADLINE_SECONDS.' seconds');
-
         $id = strtolower(trim($id));
         if (1 !== preg_match(self::ID_PATTERN, $id)) {
             return $this->error(MemoryErrorCode::InvalidId, 'id must be a lowercase hex string of 12 to 64 characters.');
@@ -124,9 +119,6 @@ final class MemoryRecall
                     $targetRunId,
                     $this->decodeSourceRefs($observation['source_refs_json']),
                 );
-                if (\count($refs) > self::MAX_SOURCE_REFS) {
-                    return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Observation source refs exceeded the bounded recall limit.');
-                }
 
                 $pendingEvents = [
                     'kind' => MemoryKind::Observation,
@@ -147,9 +139,6 @@ final class MemoryRecall
                 $targetRunId = $reflection['run_id'];
                 $targetSourceKind = $reflection['source_kind'];
                 $requestedSupportIds = $this->decodeStringList($reflection['supporting_observation_ids_json']);
-                if (\count($requestedSupportIds) > self::MAX_SUPPORT_IDS) {
-                    return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Supporting observation ids exceeded the bounded recall limit.');
-                }
                 if (null !== ($interrupt = $this->timeoutMap($deadline, 'Timed out while hydrating supporting observations.'))) {
                     return $interrupt;
                 }
@@ -172,9 +161,6 @@ final class MemoryRecall
                     ) as $ref) {
                         $key = $ref['run_id'].':'.$ref['seq'];
                         $refs[$key] = $ref;
-                        if (\count($refs) > self::MAX_SOURCE_REFS) {
-                            return $this->error(MemoryErrorCode::ResourceLimitExceeded, 'Reflection source refs exceeded the bounded recall limit.');
-                        }
                     }
                 }
                 $refs = array_values($refs);
@@ -240,7 +226,7 @@ final class MemoryRecall
      *
      * @return array<string, string>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function supportReferences(int $sessionPk, array $ids, \DateTimeImmutable $deadline): array
+    private function supportReferences(int $sessionPk, array $ids, ?\DateTimeImmutable $deadline): array
     {
         $references = [];
         foreach (array_chunk(array_values(array_unique($ids)), self::SUPPORT_CHUNK_SIZE) as $page) {
@@ -275,7 +261,7 @@ final class MemoryRecall
      *
      * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string, timed_out?: true}
      */
-    private function loadEventsForRefs(SessionSourceReader $reader, string $sourceRoot, int $sessionPk, string $currentRunId, array $refs, \DateTimeImmutable $deadline): array
+    private function loadEventsForRefs(SessionSourceReader $reader, string $sourceRoot, int $sessionPk, string $currentRunId, array $refs, ?\DateTimeImmutable $deadline): array
     {
         if ([] === $refs) {
             return [];
@@ -419,9 +405,9 @@ final class MemoryRecall
      *
      * @return array{ok: false, error: string, message: string, timed_out: true}|null
      */
-    private function timeoutMap(\DateTimeImmutable $deadline, string $message): ?array
+    private function timeoutMap(?\DateTimeImmutable $deadline, string $message): ?array
     {
-        if ($this->clock->now() < $deadline) {
+        if (null === $deadline || $this->clock->now() < $deadline) {
             return null;
         }
 

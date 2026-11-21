@@ -5,18 +5,14 @@ declare(strict_types=1);
 namespace App\Memory;
 
 /**
- * Bounded forward reading of append-only JSONL sources, after Hatfield's
+ * Forward reading of append-only JSONL sources, after Hatfield's
  * JsonlRunEventLog::locatedLines(): seek to a byte offset, read in small fgets chunks so
- * memory never scales with a line or the file, and stop at the readable cut.
+ * memory never scales with the whole file, and stop at the readable cut.
  */
 final class JsonlLines
 {
-    /** Observer bytes per job; a longer backlog continues in a follow-up job. */
+    /** Observer rendered-event bytes per job; a longer backlog continues in a follow-up job. */
     public const int RANGE_BUDGET_BYTES = 8_388_608;
-    /** Hatfield's own per-record staging limit; longer lines are skipped by the Observer. */
-    public const int MAX_RECORD_BYTES = 16_777_216;
-    /** Distinct source lines of open tool calls one forced cut carries into its continuation. */
-    public const int MAX_CARRIED_LINES = 16;
 
     /** fgets(length) allocates the requested buffer even for short lines; keep it small. */
     private const int CHUNK_BYTES = 8193;
@@ -25,14 +21,15 @@ final class JsonlLines
 
     /**
      * Complete newline-terminated lines from $start up to $cut. An unterminated tail is
-     * still being written and is never yielded. Lines longer than $maxLineBytes are
-     * consumed without being kept and yield null content.
+     * still being written and is never yielded. Every complete line is returned in full.
+     *
+     * Exact Hatfield/Claude recall and Observer range reads must not silently omit records.
      *
      * @param resource $handle
      *
-     * @return \Generator<int, array{start: int, end: int, line: ?string}>
+     * @return \Generator<int, array{start: int, end: int, line: string}>
      */
-    public static function lines($handle, int $start, int $cut, int $maxLineBytes): \Generator
+    public static function completeLines($handle, int $start, int $cut): \Generator
     {
         if ($start < 0 || $start > $cut || 0 !== fseek($handle, $start)) {
             throw new \RuntimeException('Cannot seek session source to its read position.');
@@ -40,21 +37,13 @@ final class JsonlLines
         $position = $start;
         $lineStart = $start;
         $line = '';
-        $oversized = false;
         while ($position < $cut && false !== ($chunk = fgets($handle, min(self::CHUNK_BYTES, $cut - $position + 1)))) {
             $position += \strlen($chunk);
-            if (!$oversized) {
-                $line .= $chunk;
-                if (\strlen($line) > $maxLineBytes) {
-                    $oversized = true;
-                    $line = '';
-                }
-            }
+            $line .= $chunk;
             if (str_ends_with($chunk, "\n")) {
-                yield ['start' => $lineStart, 'end' => $position, 'line' => $oversized ? null : $line];
+                yield ['start' => $lineStart, 'end' => $position, 'line' => $line];
                 $lineStart = $position;
                 $line = '';
-                $oversized = false;
             }
         }
     }
@@ -66,10 +55,10 @@ final class JsonlLines
      */
     public static function lineAt($handle, int $offset, int $length, int $cut): ?string
     {
-        if ($offset < 0 || $length < 1 || $length > self::MAX_RECORD_BYTES || $offset + $length > $cut) {
+        if ($offset < 0 || $length < 1 || $offset + $length > $cut) {
             return null;
         }
-        foreach (self::lines($handle, $offset, $offset + $length, $length) as $read) {
+        foreach (self::completeLines($handle, $offset, $offset + $length) as $read) {
             return $read['end'] === $offset + $length ? $read['line'] : null;
         }
 

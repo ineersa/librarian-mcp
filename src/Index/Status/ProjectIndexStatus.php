@@ -33,12 +33,19 @@ final readonly class ProjectIndexStatus
         public ?string $error,
         public ?\DateTimeImmutable $lastIndexAt,
         public int $indexedMemoryCount,
+        public int $activeObservationCount = 0,
+        public int $activeReflectionCount = 0,
         public string $automaticIndexingHelp = self::AUTOMATIC_INDEXING_HELP,
     ) {
     }
 
-    public static function fromProject(Project $project, ?IndexGeneration $latest, ?IndexGeneration $active): self
-    {
+    public static function fromProject(
+        Project $project,
+        ?IndexGeneration $latest,
+        ?IndexGeneration $active,
+        int $activeObservationCount = 0,
+        int $activeReflectionCount = 0,
+    ): self {
         if (null === $project->id) {
             throw new \InvalidArgumentException('Project id is required for status presentation.');
         }
@@ -93,6 +100,8 @@ final readonly class ProjectIndexStatus
             error: $error,
             lastIndexAt: $project->lastSuccessfulIndexAt,
             indexedMemoryCount: $indexedMemoryCount,
+            activeObservationCount: $activeObservationCount,
+            activeReflectionCount: $activeReflectionCount,
         );
     }
 }

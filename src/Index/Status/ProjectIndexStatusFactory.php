@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Index\Status;
 
 use App\Entity\Project;
+use App\ObservationalMemory\Storage\ActiveMemoryCounter;
 use App\Repository\IndexGenerationRepository;
 
 /**
@@ -14,6 +15,7 @@ final class ProjectIndexStatusFactory
 {
     public function __construct(
         private readonly IndexGenerationRepository $indexGenerationRepository,
+        private readonly ActiveMemoryCounter $activeMemoryCounter,
     ) {
     }
 
@@ -25,8 +27,15 @@ final class ProjectIndexStatusFactory
 
         $latest = $this->indexGenerationRepository->findLatestForProject($project->id);
         $active = $this->indexGenerationRepository->findActiveForProject($project->id);
+        $counts = $this->activeMemoryCounter->forProject($project->id);
 
-        return ProjectIndexStatus::fromProject($project, $latest, $active);
+        return ProjectIndexStatus::fromProject(
+            $project,
+            $latest,
+            $active,
+            $counts->observations,
+            $counts->reflections,
+        );
     }
 
     /**
@@ -51,12 +60,16 @@ final class ProjectIndexStatusFactory
 
         $latestByProject = $this->indexGenerationRepository->findLatestByProjectIds($ids);
         $activeByProject = $this->indexGenerationRepository->findActiveByProjectIds($ids);
+        $activeCounts = $this->activeMemoryCounter->forProjects($ids);
         $statuses = [];
         foreach ($byId as $projectId => $project) {
+            $counts = $activeCounts[$projectId];
             $statuses[$projectId] = ProjectIndexStatus::fromProject(
                 $project,
                 $latestByProject[$projectId] ?? null,
                 $activeByProject[$projectId] ?? null,
+                $counts->observations,
+                $counts->reflections,
             );
         }
 

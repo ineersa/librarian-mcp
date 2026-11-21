@@ -41,6 +41,7 @@ if (file_exists($targetRoot)) {
     assertExactNonSymlinkedPath($targetRoot);
     assertPreparedProjectSources($targetRoot);
     prepareMemoryToolProjects($targetRoot);
+    ensureFixtureOmGenerationTables($targetRoot);
     prepareBackupFixtures($targetRoot);
     echo "Synthetic project sources already prepared at {$targetRoot}\n";
     exit(0);
@@ -68,6 +69,7 @@ buildCustomRelativeProject($projectsRoot.'/custom-relative');
 writeFile($targetRoot.'/'.PROJECT_SOURCES_OWNERSHIP_MARKER_BASENAME, PROJECT_SOURCES_OWNERSHIP_MARKER);
 assertPreparedProjectSources($targetRoot);
 prepareMemoryToolProjects($targetRoot);
+ensureFixtureOmGenerationTables($targetRoot);
 prepareBackupFixtures($targetRoot);
 echo "Prepared synthetic project sources at {$targetRoot}\n";
 echo "Visible mount: /project-sources\n";
@@ -180,6 +182,49 @@ extensions:
 YAML);
     createSupportedOmDatabase($path.'/.hatfield/custom-om/memory.sqlite', observationCount: 1, reflectionCount: 1, sourceRevision: 2, sourceChangeCount: 2);
     writeSessionJournal($path.'/.hatfield/custom-sessions/7/events.jsonl', '7', 1);
+}
+
+/**
+ * Idempotently add OM generation tables/links for harness-owned fixture DBs.
+ * Never recreates databases or writes outside the verified synthetic tree.
+ */
+function ensureFixtureOmGenerationTables(string $targetRoot): void
+{
+    assertPreparedProjectSources($targetRoot);
+
+    /** @var list<array{slug: string, relative: string, runId: string, idPrefix: string}> $fixtures */
+    $fixtures = [
+        ['slug' => 'default-om', 'relative' => '.hatfield/extensions-data/observational-memory/om.sqlite', 'runId' => '108', 'idPrefix' => 'fx'],
+        ['slug' => 'custom-relative', 'relative' => '.hatfield/custom-om/memory.sqlite', 'runId' => '108', 'idPrefix' => 'fx'],
+        ['slug' => 'mcp-a', 'relative' => '.hatfield/extensions-data/observational-memory/om.sqlite', 'runId' => '108', 'idPrefix' => 'mcp-a'],
+        ['slug' => 'mcp-b', 'relative' => '.hatfield/extensions-data/observational-memory/om.sqlite', 'runId' => '108', 'idPrefix' => 'mcp-b'],
+    ];
+
+    foreach ($fixtures as $fixture) {
+        $projectPath = $targetRoot.'/projects/'.$fixture['slug'];
+        if (!is_dir($projectPath)) {
+            continue;
+        }
+        assertExactNonSymlinkedPath($projectPath);
+
+        $dbPath = $projectPath.'/'.$fixture['relative'];
+        if (!is_file($dbPath)) {
+            continue;
+        }
+        assertExactNonSymlinkedPath(dirname($dbPath));
+        assertExactNonSymlinkedPath($dbPath);
+
+        $realRoot = realpath($targetRoot.'/projects');
+        $realDb = realpath($dbPath);
+        if (false === $realRoot || false === $realDb || !str_starts_with($realDb, $realRoot.\DIRECTORY_SEPARATOR)) {
+            throw new RuntimeException(sprintf('Refusing fixture mutation outside owned projects root: %s', $dbPath));
+        }
+
+        $pdo = new PDO('sqlite:'.$dbPath);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('PRAGMA foreign_keys = ON');
+        ensureOmGenerationProjection($pdo, $fixture['runId'], $fixture['idPrefix']);
+    }
 }
 
 function prepareMemoryToolProjects(string $targetRoot): void
@@ -338,6 +383,8 @@ SQL);
         ]);
     }
 
+    ensureOmGenerationProjection($pdo, $runId, $idPrefix, $appliedAt);
+
     $pdo->exec(sprintf('INSERT INTO om_source_revision (id, revision) VALUES (1, %d)', $sourceRevision));
     $insertChange = $pdo->prepare('INSERT INTO om_source_change (kind, source_id, revision) VALUES (?, ?, ?)');
     $written = 0;
@@ -349,6 +396,106 @@ SQL);
         $insertChange->execute([MemoryKind::Reflection->value, $canonicalIds ? ProjectSourceFixture::memoryId(MemoryKind::Reflection, $i) : sprintf('%s-ref-%d', $idPrefix, $i), $observationCount + $i]);
         ++$written;
     }
+}
+
+/**
+ * Ensure generation tables exist and one active succeeded generation links the run's memories.
+ * No-op when an active generation is already present. Never deletes or recreates the database.
+ */
+function ensureOmGenerationProjection(
+    PDO $pdo,
+    string $runId,
+    string $idPrefix,
+    string $appliedAt = '2026-01-01T00:00:00+00:00',
+): void {
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS om_memory_generation (
+    generation_id TEXT PRIMARY KEY NOT NULL,
+    run_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    observation_set_hash TEXT NOT NULL,
+    reflector_model TEXT NOT NULL,
+    reflector_schema_version TEXT NOT NULL,
+    required_start_seq INTEGER,
+    required_end_seq INTEGER,
+    failure_code TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+)
+SQL);
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS om_generation_reflection (
+    generation_id TEXT NOT NULL,
+    reflection_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (generation_id, reflection_id)
+)
+SQL);
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS om_generation_retained_observation (
+    generation_id TEXT NOT NULL,
+    observation_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (generation_id, observation_id)
+)
+SQL);
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS om_active_generation (
+    run_id TEXT PRIMARY KEY NOT NULL,
+    generation_id TEXT NOT NULL
+)
+SQL);
+
+    $active = $pdo->prepare('SELECT generation_id FROM om_active_generation WHERE run_id = ?');
+    $active->execute([$runId]);
+    if (false !== $active->fetchColumn()) {
+        return;
+    }
+
+    $observationIds = $pdo->prepare('SELECT observation_id FROM om_observation WHERE run_id = ? ORDER BY source_end_seq, observation_id');
+    $observationIds->execute([$runId]);
+    /** @var list<string> $observations */
+    $observations = array_map('strval', $observationIds->fetchAll(PDO::FETCH_COLUMN));
+
+    $reflectionIds = $pdo->prepare('SELECT reflection_id FROM om_reflection WHERE run_id = ? ORDER BY created_at, reflection_id');
+    $reflectionIds->execute([$runId]);
+    /** @var list<string> $reflections */
+    $reflections = array_map('strval', $reflectionIds->fetchAll(PDO::FETCH_COLUMN));
+
+    if ([] === $observations && [] === $reflections) {
+        return;
+    }
+
+    $generationId = sprintf('%s-gen-1', $idPrefix);
+    $pdo->prepare(<<<'SQL'
+INSERT INTO om_memory_generation (
+    generation_id, run_id, status, observation_set_hash, reflector_model, reflector_schema_version,
+    required_start_seq, required_end_seq, failure_code, created_at, completed_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+SQL)->execute([
+        $generationId,
+        $runId,
+        'succeeded',
+        hash('sha256', $idPrefix.'-active-set'),
+        'fixture-model',
+        '1',
+        1,
+        max(1, count($observations)),
+        $appliedAt,
+        $appliedAt,
+    ]);
+
+    $insertGenerationReflection = $pdo->prepare('INSERT INTO om_generation_reflection (generation_id, reflection_id, position) VALUES (?, ?, ?)');
+    foreach ($reflections as $index => $reflectionId) {
+        $insertGenerationReflection->execute([$generationId, $reflectionId, $index + 1]);
+    }
+
+    $insertRetained = $pdo->prepare('INSERT INTO om_generation_retained_observation (generation_id, observation_id, position) VALUES (?, ?, ?)');
+    foreach ($observations as $index => $observationId) {
+        $insertRetained->execute([$generationId, $observationId, $index + 1]);
+    }
+
+    $pdo->prepare('INSERT INTO om_active_generation (run_id, generation_id) VALUES (?, ?)')->execute([$runId, $generationId]);
 }
 
 function writeSessionJournal(string $path, string $runId, int $eventCount): void

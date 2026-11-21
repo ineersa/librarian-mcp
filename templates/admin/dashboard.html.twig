@@ -94,8 +94,8 @@
                                             <span data-project-health="{{ project.health.value }}">{{ project.health.label() }}</span>
                                         </td>
                                         <td><code>{{ project.rootPath }}</code></td>
-                                        <td>{{ project.observationCount }}</td>
-                                        <td>{{ project.reflectionCount }}</td>
+                                        <td>{{ activeMemoryCounts[project.id].observations|default(0) }}</td>
+                                        <td>{{ activeMemoryCounts[project.id].reflections|default(0) }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>

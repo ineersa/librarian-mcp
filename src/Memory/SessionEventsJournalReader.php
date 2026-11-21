@@ -17,11 +17,14 @@ final class SessionEventsJournalReader implements SessionSourceReader
     private const string EVENTS_BASENAME = 'events.jsonl';
     private const string PENDING_APPEND_SUFFIX = '.append.pending.json';
     private const int MAX_MANIFEST_BYTES = 4096;
-    private const int MAX_LINE_BYTES = 1_048_576;
-    private const int MAX_SCANNED_BYTES = 67_108_864;
-    private const int MAX_EVIDENCE_BYTES = 1_048_576;
 
     /**
+     * Exact recall evidence for requested seqs.
+     *
+     * Matches original OM OmQueryService::loadEventsForRefs: resolve the inclusive
+     * journal range once, keep only wanted seqs, and do not apply Librarian-only
+     * evidence/line/scan caps. Observer budgets stay on readRange().
+     *
      * @param list<int> $seqs
      *
      * @return list<array{run_id: string, seq: int, type: string, created_at: string, payload: array<string, mixed>}>|array{ok: false, error: string, message: string, timed_out?: true}
@@ -54,6 +57,7 @@ final class SessionEventsJournalReader implements SessionSourceReader
         if ([] === $wanted) {
             return [];
         }
+        $minSeq = min(array_keys($wanted));
         $maxSeq = max(array_keys($wanted));
 
         $handle = @fopen($journalPath, 'rb');
@@ -66,12 +70,10 @@ final class SessionEventsJournalReader implements SessionSourceReader
         }
 
         $events = [];
-        $scannedBytes = 0;
-        $evidenceBytes = 0;
         try {
             try {
                 $cut = $this->committedCut($journalPath, JsonlLines::size($handle));
-                $from = JsonlLines::usable($handle, $from, $cut, min(array_keys($wanted)));
+                $from = JsonlLines::usable($handle, $from, $cut, $minSeq);
                 $start = $from->offset ?? 0;
             } catch (\RuntimeException $e) {
                 return [
@@ -80,9 +82,8 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     'message' => $e->getMessage(),
                 ];
             }
-            // The scan cap counts from the checkpoint, so long journals stay recallable.
-            $position = $start;
-            foreach (JsonlLines::lines($handle, $start, $cut, self::MAX_LINE_BYTES) as $read) {
+
+            foreach (JsonlLines::completeLines($handle, $start, $cut) as $read) {
                 if (null !== $checkpoint) {
                     $interrupt = $checkpoint();
                     if (\is_array($interrupt)) {
@@ -90,115 +91,38 @@ final class SessionEventsJournalReader implements SessionSourceReader
                     }
                 }
 
-                $scannedBytes += $read['end'] - $position;
-                $position = $read['end'];
-                if ($scannedBytes > self::MAX_SCANNED_BYTES) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::ResourceLimitExceeded->value,
-                        'message' => 'Session event journal scan exceeded the bounded byte limit.',
-                    ];
-                }
-
                 $line = $read['line'];
-                if (null === $line) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::ResourceLimitExceeded->value,
-                        'message' => 'Session event journal line exceeded the bounded byte limit.',
-                    ];
-                }
-
-                $line = trim($line);
-                if ('' === $line) {
+                // Cheap pre-filter: skip lines of other runs without decoding large payloads.
+                if (!str_contains($line, $sessionId)) {
                     continue;
                 }
 
                 try {
-                    $decoded = json_decode($line, true, 512, \JSON_THROW_ON_ERROR);
-                } catch (\JsonException) {
+                    $event = $this->eventFromLine($line, $sessionId);
+                } catch (\RuntimeException $e) {
                     return [
                         'ok' => false,
                         'error' => MemoryErrorCode::EventsUnreadable->value,
-                        'message' => 'Session event journal contains corrupt JSON.',
+                        'message' => $e->getMessage(),
                     ];
                 }
-                if (!\is_array($decoded)) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::EventsUnreadable->value,
-                        'message' => 'Session event journal contains an unexpected event shape.',
-                    ];
-                }
-
-                $runId = $decoded['run_id'] ?? null;
-                $seq = $decoded['seq'] ?? null;
-                $type = $decoded['type'] ?? null;
-                $createdAt = $decoded['ts'] ?? ($decoded['created_at'] ?? null);
-                $payload = $decoded['payload'] ?? null;
-
-                if (!\is_string($runId) || $runId !== $sessionId) {
+                if (null === $event) {
                     continue;
                 }
-                if (!\is_int($seq) && !(is_numeric($seq) && (string) (int) $seq === (string) $seq)) {
-                    continue;
-                }
-                $seq = (int) $seq;
-                // Journals are append-only with ascending seq; stop past the wanted window.
-                if ($seq > $maxSeq) {
+                if ($event->seq > $maxSeq) {
                     break;
                 }
-                if (!isset($wanted[$seq])) {
+                if ($event->seq < $minSeq || !isset($wanted[$event->seq])) {
                     continue;
                 }
-                if (!\is_string($type) || '' === $type) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::EventsUnreadable->value,
-                        'message' => 'Session event journal contains an unexpected event shape.',
-                    ];
-                }
-                if (!\is_string($createdAt) || '' === $createdAt) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::EventsUnreadable->value,
-                        'message' => 'Session event journal contains an unexpected event shape.',
-                    ];
-                }
-                if (!\is_array($payload)) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::EventsUnreadable->value,
-                        'message' => 'Session event journal contains an unexpected event shape.',
-                    ];
-                }
 
-                $event = [
-                    'run_id' => $runId,
-                    'seq' => $seq,
-                    'type' => $type,
-                    'created_at' => $createdAt,
-                    'payload' => $payload,
+                $events[$event->seq] = [
+                    'run_id' => $event->runId,
+                    'seq' => $event->seq,
+                    'type' => $event->type,
+                    'created_at' => $event->createdAt,
+                    'payload' => $event->payload,
                 ];
-                try {
-                    $encoded = json_encode($event, \JSON_THROW_ON_ERROR);
-                } catch (\JsonException) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::EventsUnreadable->value,
-                        'message' => 'Session event journal contains an unexpected event shape.',
-                    ];
-                }
-                $evidenceBytes += \strlen($encoded);
-                if ($evidenceBytes > self::MAX_EVIDENCE_BYTES) {
-                    return [
-                        'ok' => false,
-                        'error' => MemoryErrorCode::ResourceLimitExceeded->value,
-                        'message' => 'Session event evidence exceeded the bounded response byte limit.',
-                    ];
-                }
-
-                $events[$seq] = $event;
 
                 if (\count($events) === \count($wanted)) {
                     break;
@@ -250,10 +174,10 @@ final class SessionEventsJournalReader implements SessionSourceReader
                 },
             );
             $collector = new BudgetedRangeCollector($endSeq, $carried['refs']);
-            foreach (JsonlLines::lines($handle, $from->offset ?? 0, $cut, JsonlLines::MAX_RECORD_BYTES) as $read) {
+            foreach (JsonlLines::completeLines($handle, $from->offset ?? 0, $cut) as $read) {
                 $line = $read['line'];
                 // Cheap pre-filter: skip lines of other runs without decoding large payloads.
-                if (null === $line || !str_contains($line, $sessionId)) {
+                if (!str_contains($line, $sessionId)) {
                     continue;
                 }
                 $event = $this->eventFromLine($line, $sessionId);
