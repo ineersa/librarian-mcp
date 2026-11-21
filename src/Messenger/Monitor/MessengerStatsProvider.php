@@ -9,6 +9,7 @@ use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Types\Types;
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Messenger\Failure\FailedMessageRepository;
@@ -28,10 +29,27 @@ final readonly class MessengerStatsProvider
         private FailedMessageRepository $failed,
         private Connection $connection,
         private ClockInterface $clock,
+        private LoggerInterface $logger,
     ) {
     }
 
-    public function snapshot(): MessengerStats
+    public function forDashboard(): MessengerStats
+    {
+        try {
+            return $this->snapshot(includeFailures: true);
+        } catch (\Throwable $exception) {
+            $this->logger->warning('Messenger dashboard stats are unavailable.', ['exception' => $exception]);
+
+            $queues = [];
+            foreach (MessengerTransport::monitored() as $transport) {
+                $queues[$transport->value] = ['queued' => null, 'delayed' => null];
+            }
+
+            return new MessengerStats($queues, null, null);
+        }
+    }
+
+    public function snapshot(bool $includeFailures): MessengerStats
     {
         $transports = MessengerTransport::monitored();
         $delayed = $this->connection->fetchAllKeyValue(
@@ -53,9 +71,15 @@ final readonly class MessengerStatsProvider
             ];
         }
 
-        $total = $this->failed->count();
+        return new MessengerStats($queues, $this->failed->count(), $includeFailures ? $this->newestFailures() : null);
+    }
+
+    /** @return list<array{id: string, class: string, transport: string|null, failedAt: \DateTimeInterface|null, retries: int, errorClass: string|null, error: string|null}> */
+    private function newestFailures(): array
+    {
         $failures = [];
-        foreach ($this->failed->all(limit: self::FAILED_LIMIT) as $envelope) {
+        // The Doctrine receiver streams batches with no limit. A limited read does not select the newest rows.
+        foreach ($this->failed->all() as $envelope) {
             $id = FailedMessageRepository::getMessageId($envelope);
             if (!\is_int($id) && !\is_string($id)) {
                 continue;
@@ -77,13 +101,29 @@ final readonly class MessengerStatsProvider
                 'errorClass' => $error?->getExceptionClass(),
                 'error' => null === $error ? null : mb_strimwidth($error->getExceptionMessage(), 0, 500, '…', 'UTF-8'),
             ];
+            if (2 * self::FAILED_LIMIT === \count($failures)) {
+                $failures = $this->trimFailures($failures);
+            }
         }
+
+        return $this->trimFailures($failures);
+    }
+
+    /**
+     * @template T of array{id: string, failedAt: \DateTimeInterface|null}
+     *
+     * @param list<T> $failures
+     *
+     * @return list<T>
+     */
+    private function trimFailures(array $failures): array
+    {
         usort($failures, static function (array $a, array $b): int {
             $byTime = $b['failedAt'] <=> $a['failedAt'];
 
             return 0 === $byTime ? $b['id'] <=> $a['id'] : $byTime;
         });
 
-        return new MessengerStats($queues, $total, $failures);
+        return \array_slice($failures, 0, self::FAILED_LIMIT);
     }
 }

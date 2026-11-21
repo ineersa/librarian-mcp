@@ -1,7 +1,10 @@
 <div id="messenger-failed">
-    {% if stats.failures is empty %}
+    {% if stats.failures is null %}
+        <p class="text-muted mb-0">Failed messages are unavailable.</p>
+    {% elseif stats.failures is empty %}
         <p class="text-muted mb-0">No failed messages to display.</p>
     {% else %}
+        {% set routes = constant('App\\Controller\\Admin\\DashboardController::MESSENGER_ROUTES') %}
         <p class="text-muted">Showing {{ stats.failures|length }} of {{ stats.failedTotal ?? 'unknown' }}.</p>
         <div class="table-responsive">
             <table class="table table-striped mb-0" aria-label="Failed messages">
@@ -29,10 +32,10 @@
                                 {{ message.error ?? 'No error details' }}
                             </td>
                             <td>
-                                <form method="post" action="{{ path('admin_messenger_retry', {id: message.id}) }}" class="d-flex gap-2">
+                                <form method="post" action="{{ path(routes.retry, {id: message.id}) }}" data-turbo="true" class="d-flex gap-2">
                                     {{ include('admin/messenger/_csrf.html.twig') }}
                                     <button class="btn btn-sm btn-secondary" type="submit">Retry</button>
-                                    <button class="btn btn-sm btn-danger" type="submit" formaction="{{ path('admin_messenger_remove', {id: message.id}) }}">Remove</button>
+                                    <button class="btn btn-sm btn-danger" type="submit" formaction="{{ path(routes.remove, {id: message.id}) }}" data-turbo-confirm="Permanently remove this failed message?">Remove</button>
                                 </form>
                             </td>
                         </tr>

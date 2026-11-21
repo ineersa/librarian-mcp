@@ -7,13 +7,13 @@ namespace App\Messenger\Monitor;
 final readonly class MessengerStats
 {
     /**
-     * @param array<string, array{queued: int|null, delayed: int}>                                                                                                         $queues
-     * @param list<array{id: string, class: string, transport: string|null, failedAt: \DateTimeInterface|null, retries: int, errorClass: string|null, error: string|null}> $failures
+     * @param array<string, array{queued: int|null, delayed: int|null}>                                                                                                         $queues
+     * @param list<array{id: string, class: string, transport: string|null, failedAt: \DateTimeInterface|null, retries: int, errorClass: string|null, error: string|null}>|null $failures
      */
     public function __construct(
         public array $queues,
         public ?int $failedTotal,
-        public array $failures,
+        public ?array $failures,
     ) {
     }
 }

@@ -31,14 +31,25 @@ use Symfony\Component\Messenger\Transport\Sender\SendersLocatorInterface;
 use Symfony\Component\Security\Http\Attribute\IsCsrfTokenValid;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-#[AdminDashboard(routePath: '/admin', routeName: 'admin')]
+#[AdminDashboard(routePath: '/admin', routeName: self::DASHBOARD_ROUTE)]
 #[IsGranted('ROLE_ADMIN')]
 class DashboardController extends AbstractDashboardController
 {
-    public const array MESSENGER_RETRY_ROUTES = ['admin_'.self::RETRY_ROUTE, 'admin_'.self::RETRY_ALL_ROUTE];
     public const string MESSENGER_CSRF_ID = 'messenger_failed';
+
+    public const array MESSENGER_ROUTES = [
+        'retry' => self::ROUTE_PREFIX.self::RETRY_ROUTE,
+        'retryAll' => self::ROUTE_PREFIX.self::RETRY_ALL_ROUTE,
+        'remove' => self::ROUTE_PREFIX.self::REMOVE_ROUTE,
+        'removeAll' => self::ROUTE_PREFIX.self::REMOVE_ALL_ROUTE,
+    ];
+    public const array MESSENGER_RETRY_ROUTES = [self::MESSENGER_ROUTES['retry'], self::MESSENGER_ROUTES['retryAll']];
+    private const string DASHBOARD_ROUTE = 'admin';
+    private const string ROUTE_PREFIX = self::DASHBOARD_ROUTE.'_';
     private const string RETRY_ROUTE = 'messenger_retry';
     private const string RETRY_ALL_ROUTE = 'messenger_retry_all';
+    private const string REMOVE_ROUTE = 'messenger_remove';
+    private const string REMOVE_ALL_ROUTE = 'messenger_remove_all';
 
     public function __construct(
         private readonly ProjectRepository $projectRepository,
@@ -75,7 +86,7 @@ class DashboardController extends AbstractDashboardController
             'projectCounts' => $counts,
             'recentProjects' => $projects,
             'activeMemoryCounts' => $activeCounts,
-            'stats' => $this->messengerStats->snapshot(),
+            'stats' => $this->messengerStats->forDashboard(),
             'messengerTopic' => MessengerStatsTopics::DASHBOARD,
         ]);
     }
@@ -87,7 +98,7 @@ class DashboardController extends AbstractDashboardController
         return $this->manageFailed(true, id: $id);
     }
 
-    #[AdminRoute('/messenger/{id}/remove', 'messenger_remove', options: ['methods' => [Request::METHOD_POST], 'requirements' => ['id' => '\d+']])]
+    #[AdminRoute('/messenger/{id}/remove', self::REMOVE_ROUTE, options: ['methods' => [Request::METHOD_POST], 'requirements' => ['id' => '\d+']])]
     #[IsCsrfTokenValid(self::MESSENGER_CSRF_ID)]
     public function removeFailed(string $id): RedirectResponse
     {
@@ -101,7 +112,7 @@ class DashboardController extends AbstractDashboardController
         return $this->manageFailed(true, class: trim($request->request->getString('class')));
     }
 
-    #[AdminRoute('/messenger/remove-all', 'messenger_remove_all', options: ['methods' => [Request::METHOD_POST]])]
+    #[AdminRoute('/messenger/remove-all', self::REMOVE_ALL_ROUTE, options: ['methods' => [Request::METHOD_POST]])]
     #[IsCsrfTokenValid(self::MESSENGER_CSRF_ID)]
     public function removeAllFailed(Request $request): RedirectResponse
     {
@@ -155,12 +166,13 @@ class DashboardController extends AbstractDashboardController
                 if (null === $envelope) {
                     $this->addFlash('info', 'This failed message was already handled.');
 
-                    return $this->redirectToRoute('admin', status: Response::HTTP_SEE_OTHER);
+                    return $this->redirectToRoute(self::DASHBOARD_ROUTE, status: Response::HTTP_SEE_OTHER);
                 }
 
                 $envelopes = [$envelope];
             } else {
-                $envelopes = iterator_to_array($this->failed->all(filter: new FailedMessageFilter('' === $class ? null : $class)), false);
+                $filter = new FailedMessageFilter('' === $class ? null : ltrim($class, '\\'));
+                $envelopes = iterator_to_array($this->failed->all(filter: $filter), false);
             }
 
             $changed = 0;
@@ -188,9 +200,9 @@ class DashboardController extends AbstractDashboardController
                 $this->addFlash('warning', \sprintf('Left %d failed message(s) in place because they cannot be sent to a configured queue.', $skipped));
             }
 
-            return $this->redirectToRoute('admin', status: Response::HTTP_SEE_OTHER);
+            return $this->redirectToRoute(self::DASHBOARD_ROUTE, status: Response::HTTP_SEE_OTHER);
         } finally {
-            $this->messengerPublisher->publish();
+            $this->messengerPublisher->publish(includeFailures: true);
         }
     }
 

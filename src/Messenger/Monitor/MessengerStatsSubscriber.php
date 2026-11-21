@@ -13,6 +13,7 @@ use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageReceivedEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageRetriedEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageSkipEvent;
 
 final readonly class MessengerStatsSubscriber implements EventSubscriberInterface
 {
@@ -29,7 +30,8 @@ final readonly class MessengerStatsSubscriber implements EventSubscriberInterfac
             WorkerMessageReceivedEvent::class => 'onWorkerMessage',
             WorkerMessageHandledEvent::class => 'onWorkerMessage',
             // Run after Messenger's retry and failure-transport listeners.
-            WorkerMessageFailedEvent::class => ['onWorkerMessage', -128],
+            WorkerMessageFailedEvent::class => ['onFailure', -128],
+            WorkerMessageSkipEvent::class => ['onFailure', -128],
             WorkerMessageRetriedEvent::class => 'onWorkerMessage',
         ];
     }
@@ -50,10 +52,22 @@ final readonly class MessengerStatsSubscriber implements EventSubscriberInterfac
         }
     }
 
-    public function onWorkerMessage(WorkerMessageReceivedEvent|WorkerMessageHandledEvent|WorkerMessageFailedEvent|WorkerMessageRetriedEvent $event): void
+    public function onWorkerMessage(WorkerMessageReceivedEvent|WorkerMessageHandledEvent|WorkerMessageRetriedEvent $event): void
     {
         if (\in_array(MessengerTransport::tryFrom($event->getReceiverName()), MessengerTransport::monitored(), true)) {
             $this->publisher->publish();
+        }
+    }
+
+    public function onFailure(WorkerMessageFailedEvent|WorkerMessageSkipEvent $event): void
+    {
+        if ($event instanceof WorkerMessageFailedEvent && $event->willRetry()) {
+            return; // WorkerMessageRetriedEvent already refreshed the queue cards.
+        }
+
+        $transport = MessengerTransport::tryFrom($event->getReceiverName());
+        if (null !== $transport) {
+            $this->publisher->publish(includeFailures: true);
         }
     }
 }

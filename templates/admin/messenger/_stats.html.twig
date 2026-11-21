@@ -5,7 +5,7 @@
                 <div class="card-body">
                     <h3 class="h6 card-title">{{ transport }}</h3>
                     <div>Queued: <strong>{{ counts.queued ?? 'Unavailable' }}</strong></div>
-                    <div>Delayed retries: <strong>{{ counts.delayed }}</strong></div>
+                    <div>Delayed retries: <strong>{{ counts.delayed ?? 'Unavailable' }}</strong></div>
                 </div>
             </div>
         </div>

@@ -19,10 +19,10 @@ final readonly class MessengerStatsPublisher
     ) {
     }
 
-    public function publish(): void
+    public function publish(bool $includeFailures = false): void
     {
         try {
-            $payload = $this->twig->render('admin/messenger/update.stream.html.twig', ['stats' => $this->stats->snapshot()]);
+            $payload = $this->twig->render('admin/messenger/update.stream.html.twig', ['stats' => $this->stats->snapshot($includeFailures)]);
             $this->hub->publish(new Update([MessengerStatsTopics::DASHBOARD], $payload, private: true));
         } catch (\Throwable $exception) {
             $this->logger->warning('Messenger dashboard update could not be published.', ['error' => $exception->getMessage()]);
