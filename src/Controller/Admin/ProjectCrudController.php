@@ -12,6 +12,8 @@ use App\Index\ProjectIndexManager;
 use App\Index\Search\HybridSearch;
 use App\Index\Status\ProjectIndexStatusFactory;
 use App\Index\Status\ProjectStatusTopics;
+use App\Messenger\Monitor\MessengerStatsProvider;
+use App\ObservationalMemory\Storage\ObserverCoverageReader;
 use App\Project\ProjectManager;
 use App\Repository\IndexGenerationRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -34,6 +36,7 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -42,6 +45,8 @@ use Symfony\Component\HttpFoundation\Response;
 #[AdminRoute(path: '/projects')]
 class ProjectCrudController extends AbstractCrudController
 {
+    public const string DETAIL_ROUTE = DashboardController::ROUTE_PREFIX.'project_detail';
+
     private const string ACTION_SEARCH_MEMORY = 'searchMemory';
 
     public function __construct(
@@ -51,6 +56,9 @@ class ProjectCrudController extends AbstractCrudController
         private readonly ProjectIndexStatusFactory $projectIndexStatusFactory,
         private readonly HybridSearch $hybridSearch,
         private readonly ClockInterface $clock,
+        private readonly ObserverCoverageReader $coverage,
+        private readonly MessengerStatsProvider $messengerStats,
+        private readonly RequestStack $requests,
     ) {
     }
 
@@ -252,6 +260,21 @@ class ProjectCrudController extends AbstractCrudController
 
         $status = $this->projectIndexStatusFactory->forProject($project);
         $responseParameters->set('indexStatus', $status);
+        $query = $this->requests->getCurrentRequest()?->query;
+        $session = $query?->getInt(ObserverCoverageReader::SESSION_QUERY) ?? 0;
+        $before = $query?->getInt(ObserverCoverageReader::BEFORE_QUERY) ?? 0;
+        $coverage = $this->coverage->forProject($project->id, $session, $before);
+        $jobs = [];
+        if ([] !== $coverage['sessions']) {
+            foreach ($this->messengerStats->recentFailuresForDisplay() ?? [] as $job) {
+                if ($project->id === $job['projectId'] && null !== $job['sessionId'] && null !== $job['target'] && isset($coverage['sessions'][$job['sessionId']])) {
+                    $jobs[$job['sessionId']][] = $job;
+                }
+            }
+        }
+        $responseParameters->set('coverage', $coverage);
+        $responseParameters->set('coverageJobs', $jobs);
+        $responseParameters->set('coverageFocused', $session > 0 || $before > 0);
         $responseParameters->set('statusTopics', [
             'list' => ProjectStatusTopics::LIST_STATUS,
             'project' => ProjectStatusTopics::forProject($project->id),

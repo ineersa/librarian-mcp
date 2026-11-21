@@ -25,6 +25,7 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         }
         $failedCard = $stats->locator('.card:has(h3:text-is("failed"))');
         self::assertMatchesRegularExpression('/Total:\s*\d+/', $failedCard->innerText());
+        self::assertTrue($page->getByRole('heading', ['name' => 'Failed messages', 'exact' => true])->isVisible());
         $page->getByText('Delayed retry details', ['exact' => true])->click();
         self::assertTrue($page->getByText('The live queue cards show the current counts.', ['exact' => false])->isVisible());
         $page->getByRole('link', ['name' => 'Logs'])->click();
