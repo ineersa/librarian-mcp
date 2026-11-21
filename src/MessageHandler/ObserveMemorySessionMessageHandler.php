@@ -10,6 +10,7 @@ use App\Memory\MemorySourceReaders;
 use App\Message\ObserveMemorySessionMessage;
 use App\Message\ReflectMemoryGenerationMessage;
 use App\ObservationalMemory\MemorySessionLock;
+use App\ObservationalMemory\MemorySessionWorkOutcome;
 use App\ObservationalMemory\MemorySettings;
 use App\ObservationalMemory\Observer\ObserverPipeline;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
@@ -43,12 +44,12 @@ final readonly class ObserveMemorySessionMessageHandler
     ) {
     }
 
-    public function __invoke(ObserveMemorySessionMessage $message): void
+    public function __invoke(ObserveMemorySessionMessage $message): ?MemorySessionWorkOutcome
     {
         $session = $this->sessions->find($message->sessionPk);
         if (null === $session) {
             // Project removal cascades sessions; stale jobs are inert.
-            return;
+            return null;
         }
         $sourceKind = MemorySourceKind::tryFrom($session['source_kind'])
             ?? throw new UnrecoverableMessageHandlingException('Unknown memory source kind.');
@@ -59,7 +60,11 @@ final readonly class ObserveMemorySessionMessageHandler
             throw new \RuntimeException('Session source root for this project is not available yet.');
         }
 
-        $lock = $this->sessionLock->acquire($message->sessionPk);
+        $lock = $this->sessionLock->tryAcquire($message->sessionPk);
+        if (null === $lock) {
+            return MemorySessionWorkOutcome::SessionBusy;
+        }
+
         try {
             try {
                 $result = $this->observer->observeThrough(
@@ -89,6 +94,8 @@ final readonly class ObserveMemorySessionMessageHandler
             // The per-job rendered-event budget stopped short of the requested end; continue from the new coverage.
             $this->bus->dispatch(new ObserveMemorySessionMessage($message->sessionPk, $message->terminalEndSeq, $message->terminalStatus));
         }
+
+        return null;
     }
 
     private function maybeDispatchThresholdReflection(int $sessionPk, string $runId): void

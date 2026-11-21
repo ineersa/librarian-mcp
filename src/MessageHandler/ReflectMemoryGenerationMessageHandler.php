@@ -11,6 +11,7 @@ use App\ObservationalMemory\Compaction\DropperPipeline;
 use App\ObservationalMemory\Compaction\ReflectorException;
 use App\ObservationalMemory\Compaction\ReflectorPipeline;
 use App\ObservationalMemory\MemorySessionLock;
+use App\ObservationalMemory\MemorySessionWorkOutcome;
 use App\ObservationalMemory\MemorySettings;
 use App\ObservationalMemory\Observer\OmTokenEstimator;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
@@ -43,11 +44,11 @@ final readonly class ReflectMemoryGenerationMessageHandler
     ) {
     }
 
-    public function __invoke(ReflectMemoryGenerationMessage $message): void
+    public function __invoke(ReflectMemoryGenerationMessage $message): ?MemorySessionWorkOutcome
     {
         $session = $this->sessions->find($message->sessionPk);
         if (null === $session) {
-            return;
+            return null;
         }
         $sessionPk = $session['session_pk'];
         $runId = $session['run_id'];
@@ -69,7 +70,11 @@ final readonly class ReflectMemoryGenerationMessageHandler
             throw new UnrecoverableMessageHandlingException('reflect_generation model/schema mismatch with current settings.');
         }
 
-        $lock = $this->sessionLock->acquire($sessionPk);
+        $lock = $this->sessionLock->tryAcquire($sessionPk);
+        if (null === $lock) {
+            return MemorySessionWorkOutcome::SessionBusy;
+        }
+
         try {
             $promoted = $this->reflect($message, $sessionPk, $runId);
         } finally {
@@ -79,6 +84,8 @@ final readonly class ReflectMemoryGenerationMessageHandler
         if ($promoted) {
             $this->projectIndexManager->queueId($session['project_id']);
         }
+
+        return null;
     }
 
     private function reflect(ReflectMemoryGenerationMessage $message, int $sessionPk, string $runId): bool
