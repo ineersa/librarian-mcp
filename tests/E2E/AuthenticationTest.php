@@ -32,10 +32,17 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $page->getByRole('heading', ['name' => 'Observational memory model'])->waitFor();
         self::assertTrue($page->getByText('Current selection', ['exact' => true])->isVisible());
         $page->getByLabel('Model and reasoning', ['exact' => true])->selectOption('llama_cpp/flash|default');
-        $page->getByLabel('OM context budget override', ['exact' => true])->fill('');
+        $budget = $page->getByLabel('OM context budget override', ['exact' => true]);
+        self::assertSame('', $budget->inputValue());
+        $budget->fill('80000');
         $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
         $page->getByText('Saved OM model', ['exact' => false])->waitFor();
         self::assertTrue($page->locator('dl')->getByText('llama_cpp/flash', ['exact' => true])->isVisible());
+        self::assertSame('80000', $budget->inputValue());
+        $page->getByLabel('Model and reasoning', ['exact' => true])->selectOption('llama_cpp/flash|off');
+        $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
+        $page->getByText('at Off with a 80000-token context budget', ['exact' => false])->waitFor();
+        self::assertSame('80000', $budget->inputValue());
         $page->getByRole('link', ['name' => 'Logs'])->click();
         $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
         $source = $page->getByLabel('Source', ['exact' => true]);

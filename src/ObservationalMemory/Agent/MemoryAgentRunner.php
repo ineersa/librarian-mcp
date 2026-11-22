@@ -70,6 +70,15 @@ final readonly class MemoryAgentRunner
                 : MemoryReasoningLevel::Low->value;
         }
         $options = $this->reasoningOptions($settings, $effectiveThinking);
+        // The buffered converters discard thinking on tool-call turns. The
+        // streaming runner replays the complete assistant turn; getResult()
+        // still drains the execution before the Messenger job can finish.
+        if (MemoryThinkingFormat::Mistral === $settings->thinkingFormat || MemoryThinkingFormat::Zai === $settings->thinkingFormat) {
+            $options['stream'] = true;
+        }
+        if (MemoryThinkingFormat::Zai === $settings->thinkingFormat) {
+            $options['tool_stream'] = true;
+        }
 
         $context = [
             'component' => 'observational_memory',

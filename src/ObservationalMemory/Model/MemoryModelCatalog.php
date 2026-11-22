@@ -148,6 +148,7 @@ final class MemoryModelCatalog
             apiKeyEnv: null,
             baseUrl: $this->localModelUrl,
             completionsPath: str_ends_with(rtrim($this->localModelUrl, '/'), '/v1') ? '/chat/completions' : '/v1/chat/completions',
+            configuredModelReference: $this->localModel,
         );
 
         $mistralLevels = [MemoryReasoningLevel::Low, MemoryReasoningLevel::High, MemoryReasoningLevel::Max];

@@ -27,6 +27,7 @@ final readonly class MemoryModelPreset
         public ?string $apiKeyEnv = null,
         public ?string $baseUrl = null,
         public string $completionsPath = '/chat/completions',
+        private ?string $configuredModelReference = null,
     ) {
         if ('' === trim($this->id) || '' === trim($this->modelId) || '' === trim($this->label)) {
             throw new \InvalidArgumentException('OM model preset identity fields are required.');
@@ -41,7 +42,7 @@ final readonly class MemoryModelPreset
 
     public function reference(): string
     {
-        return $this->provider->value.'/'.$this->modelId;
+        return $this->configuredModelReference ?? ($this->provider->value.'/'.$this->modelId);
     }
 
     public function leavesHost(): bool

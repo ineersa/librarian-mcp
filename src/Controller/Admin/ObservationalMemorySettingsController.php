@@ -30,9 +30,10 @@ final class ObservationalMemorySettingsController extends AbstractController
     public function index(Request $request): Response
     {
         $current = $this->selections->currentPinned();
+        $defaultContextWindow = $this->catalog->require($current->presetId)->defaultContextWindow;
         $form = $this->createForm(ObservationalMemorySettingsType::class, [
             'combinationId' => $this->catalog->combinationId($current->presetId, $current->reasoningLevel),
-            'contextWindow' => null,
+            'contextWindow' => $current->contextWindow === $defaultContextWindow ? null : $current->contextWindow,
         ]);
         $form->handleRequest($request);
 
