@@ -71,6 +71,11 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $committedBefore = trim((string) $this->page->locator('[data-index-committed-revision-value]')->textContent());
 
             $this->openOmIndex($projectId);
+            $sessionFilter = $this->page->getByLabel('Session ID', ['exact' => true]);
+            $sessionFilter->fill('108');
+            $this->page->getByRole('button', ['name' => 'Filter', 'exact' => true])->click();
+            $clearFilter = $this->page->getByRole('link', ['name' => 'Clear filter', 'exact' => true]);
+            $clearFilter->waitFor();
             Expect::locator($this->page->locator('[data-om-observation-id="'.$observationId.'"]'))->toContainText('medium');
             Expect::locator($this->page->locator('[data-om-observation-id="'.$observationId.'"]'))->toContainText('synthetic observation fx-1');
             Expect::locator($this->page->locator('[data-om-reflection-id="'.$reflectionId.'"]'))->toContainText('synthetic reflection fx-1');
@@ -87,7 +92,11 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             Expect::locator($this->page->locator('[data-recall-content]'))->toContainText('synthetic reflection fx-1');
             Expect::locator($this->page->locator('[data-recall-evidence]'))->toContainText('synthetic sanitized event');
             $this->page->locator('[data-recall-back]')->click();
-            $this->page->locator('#project-om-index')->waitFor();
+            $clearFilter->waitFor();
+            self::assertSame('108', $sessionFilter->inputValue());
+            $clearFilter->click();
+            $clearFilter->waitForDetached();
+            self::assertSame('', $sessionFilter->inputValue());
 
             $this->openSearchMemory($projectId);
             $this->searchMemory('where was I working on synthetic observation fx-1');

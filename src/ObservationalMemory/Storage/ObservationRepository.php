@@ -362,14 +362,19 @@ final readonly class ObservationRepository
      *   created_at: string
      * }>, page: int, page_size: int, total: int, page_count: int}
      */
-    public function pageForProject(int $projectId, int $page = 1): array
+    public function pageForProject(int $projectId, int $page = 1, ?string $sessionId = null): array
     {
         $page = max(1, $page);
+        $where = ' WHERE s.project_id = ?';
+        $params = [$projectId];
+        if (null !== $sessionId) {
+            $where .= ' AND s.session_id = ?';
+            $params[] = $sessionId;
+        }
         $total = (int) $this->connection->fetchOne(
             'SELECT COUNT(1) FROM om_observations o
-             INNER JOIN om_sessions s ON s.id = o.memory_session_id
-             WHERE s.project_id = ?',
-            [$projectId],
+             INNER JOIN om_sessions s ON s.id = o.memory_session_id'.$where,
+            $params,
         );
         $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
         if ($page > $pageCount) {
@@ -379,11 +384,10 @@ final readonly class ObservationRepository
         $rows = 0 === $total ? [] : $this->connection->fetchAllAssociative(
             'SELECT o.observation_id, s.session_id, o.content, o.relevance, o.timestamp, o.created_at
              FROM om_observations o
-             INNER JOIN om_sessions s ON s.id = o.memory_session_id
-             WHERE s.project_id = ?
+             INNER JOIN om_sessions s ON s.id = o.memory_session_id'.$where.'
              ORDER BY o.created_at DESC, o.observation_id DESC
              LIMIT ? OFFSET ?',
-            [$projectId, self::PAGE_SIZE, $offset],
+            [...$params, self::PAGE_SIZE, $offset],
         );
 
         $items = [];

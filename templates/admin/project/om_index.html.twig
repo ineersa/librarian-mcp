@@ -1,4 +1,5 @@
 {% extends '@EasyAdmin/page/content.html.twig' %}
+{% form_theme sessionFilter '@EasyAdmin/crud/form_theme.html.twig' %}
 
 {% set memoryIdQuery = constant('App\\Controller\\Admin\\ProjectCrudController::MEMORY_ID_QUERY') %}
 {% set returnToQuery = constant('App\\Controller\\Admin\\ProjectCrudController::RETURN_TO_QUERY') %}
@@ -17,11 +18,21 @@
             indexStatus: indexStatus
         } only %}
 
+        {% set indexUrl = path(app.request.attributes.get('_route'), app.request.attributes.get('_route_params')) %}
+        {{ form_start(sessionFilter, {action: indexUrl, attr: {class: 'row g-2 align-items-end mb-3'}}) }}
+            {{ form_errors(sessionFilter) }}
+            <div class="col-sm-5 col-lg-3">{{ form_row(sessionFilter.session) }}</div>
+            <div class="col-auto mb-3">
+                <button class="btn btn-primary" type="submit">Filter</button>
+                {% if filterParams is not empty %}<a class="btn btn-secondary" href="{{ indexUrl }}">Clear filter</a>{% endif %}
+            </div>
+        {{ form_end(sessionFilter) }}
+
         <section class="card mb-3" aria-labelledby="om-observations-heading">
             <div class="card-body">
                 <h2 id="om-observations-heading" class="h5">Observations</h2>
                 {% if observations.total == 0 %}
-                    <p class="mb-0 text-muted" data-om-observations-empty>No observations are stored for this project yet.</p>
+                    <p class="mb-0 text-muted" data-om-observations-empty>{{ filterParams ? 'No observations match this session.' : 'No observations are stored for this project yet.' }}</p>
                 {% else %}
                     <p class="small text-muted">{{ observations.total|number_format }} total · showing page {{ observations.page }}</p>
                     <div class="table-responsive">
@@ -66,7 +77,8 @@
                         observationsPageQuery: observationsPageQuery,
                         reflectionsPageQuery: reflectionsPageQuery,
                         observationsPage: observations.page,
-                        reflectionsPage: reflections.page
+                        reflectionsPage: reflections.page,
+                        filterParams: filterParams
                     } only %}
                 {% endif %}
             </div>
@@ -76,7 +88,7 @@
             <div class="card-body">
                 <h2 id="om-reflections-heading" class="h5">Reflections</h2>
                 {% if reflections.total == 0 %}
-                    <p class="mb-0 text-muted" data-om-reflections-empty>No reflections are stored for this project yet.</p>
+                    <p class="mb-0 text-muted" data-om-reflections-empty>{{ filterParams ? 'No reflections match this session.' : 'No reflections are stored for this project yet.' }}</p>
                 {% else %}
                     <p class="small text-muted">{{ reflections.total|number_format }} total · showing page {{ reflections.page }}</p>
                     <div class="table-responsive">
@@ -119,7 +131,8 @@
                         observationsPageQuery: observationsPageQuery,
                         reflectionsPageQuery: reflectionsPageQuery,
                         observationsPage: observations.page,
-                        reflectionsPage: reflections.page
+                        reflectionsPage: reflections.page,
+                        filterParams: filterParams
                     } only %}
                 {% endif %}
             </div>

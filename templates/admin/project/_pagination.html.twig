@@ -3,7 +3,7 @@
     {% set params = app.request.attributes.get('_route_params')|merge({
         (observationsPageQuery): observationsPage,
         (reflectionsPageQuery): reflectionsPage
-    })|merge({(query): page.page}) %}
+    })|merge(filterParams) %}
     {% set previousParams = params|merge({(query): page.page - 1}) %}
     {% set nextParams = params|merge({(query): page.page + 1}) %}
     <nav class="d-flex gap-2 align-items-center mt-2" aria-label="{{ label }} pagination">
