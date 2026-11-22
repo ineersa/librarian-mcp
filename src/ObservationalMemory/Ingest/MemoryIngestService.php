@@ -48,12 +48,10 @@ final readonly class MemoryIngestService
 
         $settings = $this->selections->currentPinned();
         $this->bus->dispatch(new ObserveMemorySessionMessage(
+            ...$settings->toMessagePayload(),
             sessionPk: $sessionPk,
             terminalEndSeq: $request->endSeq,
             terminalStatus: $request->terminalStatus,
-            presetId: $settings->presetId,
-            reasoningLevel: $settings->reasoningLevel->value,
-            contextWindow: $settings->contextWindow,
         ));
     }
 

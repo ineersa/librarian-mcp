@@ -50,44 +50,18 @@ final readonly class MemoryModelSelectionService
         }
     }
 
-    public function baselinePinned(): PinnedMemorySettings
-    {
-        $preset = $this->catalog->require(MemoryModelCatalog::LOCAL_PRESET_ID);
-
-        return $this->fromPreset(
-            $preset,
-            $preset->defaultReasoningLevel,
-            $this->baseline->contextWindow,
-        );
-    }
-
-    public function resolvePinned(?string $presetId, ?string $reasoningLevel, ?int $contextWindow): PinnedMemorySettings
+    public function resolvePinned(?string $presetId, ?string $reasoningLevel, ?int $contextWindow, ?string $model): PinnedMemorySettings
     {
         $presetId = null === $presetId || '' === trim($presetId) ? null : $presetId;
         $reasoningLevel = null === $reasoningLevel || '' === trim($reasoningLevel) ? null : $reasoningLevel;
         if (null === $presetId || null === $reasoningLevel) {
-            return $this->baselinePinned();
+            return $this->baselinePinned($model);
         }
 
         $level = MemoryReasoningLevel::tryFrom($reasoningLevel)
             ?? throw new \InvalidArgumentException(\sprintf('Unknown OM reasoning level "%s".', $reasoningLevel));
 
-        return $this->pin($presetId, $level, $contextWindow);
-    }
-
-    public function pin(string $presetId, MemoryReasoningLevel $reasoningLevel, ?int $contextWindow = null): PinnedMemorySettings
-    {
-        $preset = $this->catalog->require($presetId);
-        if (!$preset->supports($reasoningLevel)) {
-            throw new \InvalidArgumentException(\sprintf('Reasoning level "%s" is not available for "%s".', $reasoningLevel->value, $presetId));
-        }
-        $contextWindow ??= $preset->defaultContextWindow;
-        if ($contextWindow < 1 || $contextWindow > $preset->maxContextWindow) {
-            throw new \InvalidArgumentException(\sprintf('OM context window must be between 1 and %d for "%s".', $preset->maxContextWindow, $presetId));
-        }
-        $this->assertCredentialsAvailable($preset);
-
-        return $this->fromPreset($preset, $reasoningLevel, $contextWindow);
+        return $this->pin($presetId, $level, $contextWindow, $model);
     }
 
     public function save(string $presetId, MemoryReasoningLevel $reasoningLevel, ?int $contextWindow = null): PinnedMemorySettings
@@ -126,6 +100,33 @@ final readonly class MemoryModelSelectionService
         return $this->credential($settings->apiKeyEnv);
     }
 
+    private function baselinePinned(?string $model = null): PinnedMemorySettings
+    {
+        $preset = $this->catalog->require(MemoryModelCatalog::LOCAL_PRESET_ID);
+
+        return $this->fromPreset(
+            $preset,
+            $preset->defaultReasoningLevel,
+            $this->baseline->contextWindow,
+            $model,
+        );
+    }
+
+    private function pin(string $presetId, MemoryReasoningLevel $reasoningLevel, ?int $contextWindow = null, ?string $model = null): PinnedMemorySettings
+    {
+        $preset = $this->catalog->require($presetId);
+        if (!$preset->supports($reasoningLevel)) {
+            throw new \InvalidArgumentException(\sprintf('Reasoning level "%s" is not available for "%s".', $reasoningLevel->value, $presetId));
+        }
+        $contextWindow ??= $preset->defaultContextWindow;
+        if ($contextWindow < 1 || $contextWindow > $preset->maxContextWindow) {
+            throw new \InvalidArgumentException(\sprintf('OM context window must be between 1 and %d for "%s".', $preset->maxContextWindow, $presetId));
+        }
+        $this->assertCredentialsAvailable($preset);
+
+        return $this->fromPreset($preset, $reasoningLevel, $contextWindow, $model);
+    }
+
     private function credential(?string $keyEnv): ?string
     {
         $key = match ($keyEnv) {
@@ -150,10 +151,11 @@ final readonly class MemoryModelSelectionService
         MemoryModelPreset $preset,
         MemoryReasoningLevel $reasoningLevel,
         int $contextWindow,
+        ?string $model = null,
     ): PinnedMemorySettings {
         return new PinnedMemorySettings(
             presetId: $preset->id,
-            model: $preset->reference(),
+            model: $model ?? $preset->reference(),
             reasoningLevel: $reasoningLevel,
             contextWindow: $contextWindow,
             bridge: $preset->bridge,

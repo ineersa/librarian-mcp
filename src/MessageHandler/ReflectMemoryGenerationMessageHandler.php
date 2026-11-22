@@ -68,8 +68,8 @@ final readonly class ReflectMemoryGenerationMessageHandler
         if ($expectedId !== $generationId) {
             throw new UnrecoverableMessageHandlingException('reflect_generation generation_id does not match threshold formula.');
         }
-        if ($model !== $settings->model || $reflectorSchemaVersion !== $settings->reflectorSchemaVersion) {
-            throw new UnrecoverableMessageHandlingException('reflect_generation model/schema mismatch with pinned settings.');
+        if ($reflectorSchemaVersion !== $settings->reflectorSchemaVersion) {
+            throw new UnrecoverableMessageHandlingException('reflect_generation schema mismatch with pinned settings.');
         }
 
         $lock = $this->sessionLock->tryAcquire($sessionPk);
@@ -281,6 +281,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
                 $message->presetId ?? null,
                 $message->reasoningLevel ?? null,
                 $message->contextWindow ?? null,
+                $message->reflectorModel,
             );
         } catch (\InvalidArgumentException $e) {
             throw new UnrecoverableMessageHandlingException($e->getMessage(), previous: $e);

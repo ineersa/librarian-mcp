@@ -97,12 +97,10 @@ final readonly class ObserveMemorySessionMessageHandler
         if ($result['more']) {
             // The per-job rendered-event budget stopped short of the requested end; continue from the new coverage.
             $this->bus->dispatch(new ObserveMemorySessionMessage(
+                ...$settings->toMessagePayload(),
                 sessionPk: $message->sessionPk,
                 terminalEndSeq: $message->terminalEndSeq,
                 terminalStatus: $message->terminalStatus,
-                presetId: $settings->presetId,
-                reasoningLevel: $settings->reasoningLevel->value,
-                contextWindow: $settings->contextWindow,
             ));
         }
 
@@ -175,6 +173,7 @@ final readonly class ObserveMemorySessionMessageHandler
                 $message->presetId ?? null,
                 $message->reasoningLevel ?? null,
                 $message->contextWindow ?? null,
+                $message->model,
             );
         } catch (\InvalidArgumentException $e) {
             throw new UnrecoverableMessageHandlingException($e->getMessage(), previous: $e);

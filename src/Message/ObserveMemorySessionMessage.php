@@ -18,6 +18,7 @@ final class ObserveMemorySessionMessage
     public ?string $presetId = null;
     public ?string $reasoningLevel = null;
     public ?int $contextWindow = null;
+    public ?string $model = null;
 
     public function __construct(
         public readonly int $sessionPk,
@@ -26,9 +27,11 @@ final class ObserveMemorySessionMessage
         ?string $presetId = null,
         ?string $reasoningLevel = null,
         ?int $contextWindow = null,
+        ?string $model = null,
     ) {
         $this->presetId = $presetId;
         $this->reasoningLevel = $reasoningLevel;
         $this->contextWindow = $contextWindow;
+        $this->model = $model;
     }
 }
