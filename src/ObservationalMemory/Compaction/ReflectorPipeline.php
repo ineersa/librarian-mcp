@@ -95,7 +95,7 @@ final readonly class ReflectorPipeline
 
         $this->agentRunner->run(
             sessionId: $runId,
-            instructions: MemoryAgentRunner::withToolRoundBudget(ReflectorSystemPrompt::text(), MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS),
+            instructions: ReflectorSystemPrompt::text(MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS),
             input: $input,
             tools: [
                 new MemoryAgentTool(

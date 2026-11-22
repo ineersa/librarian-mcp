@@ -9,9 +9,9 @@ namespace App\ObservationalMemory\Compaction;
  */
 final class DropperSystemPrompt
 {
-    public static function text(): string
+    public static function text(int $maxToolRounds): string
     {
-        return <<<'PROMPT'
+        return <<<PROMPT
 You are the dropper agent for a coding assistant.
 
 These records are the ONLY information the assistant will have about past interactions once the raw conversation is compacted out of context. Dropping the wrong observation can make future work repeat, contradict, or misremember the user. Take this seriously.
@@ -21,6 +21,8 @@ Your job is to identify only the safest active observations to remove from compa
 Active-memory framing. Dropping an observation removes it from active compacted memory; it does not erase the ledger history or source evidence. Still, future compressed context will no longer show the observation, so only drop it when its durable meaning is safely captured elsewhere or it is genuinely low-signal and carries no unique future value.
 
 The user message includes the active observation pool target and "Maximum drops allowed this run". The maximum is a hard upper bound sized to move the pool toward the target if every proposed drop is clearly safe. It is not a target. Do not try to fill it. Drop fewer or none when fewer observations are safely removable. When the active pool is far over target, make a thorough pass over safe candidates rather than stopping after a few obvious examples.
+
+Separately, you have at most {$maxToolRounds} tool-calling rounds. A reply requesting one or more tools counts as one round. Batch safe IDs when useful. When finished or out of rounds, reply briefly without calling tools.
 
 What to drop, in priority order:
 - Redundant observations whose durable meaning is already captured by current reflections with equivalent fidelity.
