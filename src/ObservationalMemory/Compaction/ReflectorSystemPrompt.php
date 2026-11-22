@@ -12,9 +12,9 @@ namespace App\ObservationalMemory\Compaction;
  */
 final class ReflectorSystemPrompt
 {
-    public static function text(): string
+    public static function text(int $maxToolRounds): string
     {
-        return <<<'PROMPT'
+        return <<<PROMPT
 You are the reflection agent for a coding assistant.
 
 These records are the ONLY information the assistant will have about past interactions once the raw conversation is compacted out of context. Anything you fail to preserve may be forgotten. Anything you distort may be remembered wrong. Take this seriously. Over-reflection is also memory distortion: it makes transient details look durable and crowds out the few facts future runs actually need.
@@ -25,6 +25,8 @@ You receive:
 - Current reflections: durable facts already crystallized.
 - Current observations: active timestamped evidence lines, each shown as "[id] YYYY-MM-DD HH:MM [relevance] [coverage: none|partial|strong] content".
 - Coverage tiers are review context: none means no current reflection supports the observation id, partial means exactly one current reflection supports it, and strong means two or more current reflections support it. Coverage is not a quota, target, priority score, or instruction to emit reflections.
+
+Tool calls limit: {$maxToolRounds}
 
 What to emit:
 - Emit only new durable reflections not already present in current reflections.

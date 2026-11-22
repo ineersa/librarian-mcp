@@ -9,6 +9,7 @@ use App\Entity\Project;
 use App\Index\ProjectIndexManager;
 use App\Message\ObserveMemorySessionMessage;
 use App\ObservationalMemory\Compaction\ActiveMemoryRenderer;
+use App\ObservationalMemory\Model\MemoryModelSelectionService;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\MemoryRevision;
 use App\ObservationalMemory\Storage\ObservationRepository;
@@ -29,6 +30,7 @@ final readonly class MemoryIngestService
         private MemoryGenerationRepository $generations,
         private ClockInterface $clock,
         private ProjectIndexManager $projectIndexManager,
+        private MemoryModelSelectionService $selections,
     ) {
     }
 
@@ -44,7 +46,13 @@ final readonly class MemoryIngestService
         $sessionPk = $this->findSessionPk($project, $request->sourceKind, $request->sessionId)
             ?? throw new \LogicException('Memory session row is missing after upsert.');
 
-        $this->bus->dispatch(new ObserveMemorySessionMessage($sessionPk, $request->endSeq, $request->terminalStatus));
+        $settings = $this->selections->currentPinned();
+        $this->bus->dispatch(new ObserveMemorySessionMessage(
+            ...$settings->toMessagePayload(),
+            sessionPk: $sessionPk,
+            terminalEndSeq: $request->endSeq,
+            terminalStatus: $request->terminalStatus,
+        ));
     }
 
     /**

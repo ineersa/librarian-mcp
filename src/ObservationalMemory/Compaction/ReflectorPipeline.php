@@ -8,6 +8,7 @@ use App\Entity\MemoryGenerationFailureCode;
 use App\ObservationalMemory\Agent\MemoryAgentRunner;
 use App\ObservationalMemory\Agent\MemoryAgentTool;
 use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\ObservationRepository;
 use Psr\Log\LoggerInterface;
@@ -21,7 +22,6 @@ final readonly class ReflectorPipeline
         private MemoryAgentRunner $agentRunner,
         private ObservationRepository $observationRepo,
         private MemoryGenerationRepository $generationRepo,
-        private MemorySettings $settings,
         private LoggerInterface $logger,
     ) {
     }
@@ -54,10 +54,10 @@ final readonly class ReflectorPipeline
     public function produceDelta(
         int $sessionPk,
         string $runId,
+        PinnedMemorySettings $settings,
         ?string $jobId,
         ?string $correlationId,
     ): array {
-        $settings = $this->settings;
         $activeReflections = $this->generationRepo->listActiveReflections($sessionPk);
         $activeObservations = $this->observationRepo->listActiveCandidateObservations($sessionPk);
 
@@ -95,7 +95,7 @@ final readonly class ReflectorPipeline
 
         $this->agentRunner->run(
             sessionId: $runId,
-            instructions: ReflectorSystemPrompt::text(),
+            instructions: ReflectorSystemPrompt::text(MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS),
             input: $input,
             tools: [
                 new MemoryAgentTool(
@@ -135,6 +135,7 @@ final readonly class ReflectorPipeline
             ],
             correlationId: $jobId ?? $correlationId,
             maxToolCalls: MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS,
+            settings: $settings,
         );
 
         $newReflections = $toolHandler->newReflections();

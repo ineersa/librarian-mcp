@@ -7,6 +7,7 @@ namespace App\ObservationalMemory\Compaction;
 use App\ObservationalMemory\Agent\MemoryAgentRunner;
 use App\ObservationalMemory\Agent\MemoryAgentTool;
 use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Observer\OmTokenEstimator;
 use Psr\Log\LoggerInterface;
 
@@ -17,7 +18,6 @@ final readonly class DropperPipeline
 {
     public function __construct(
         private MemoryAgentRunner $agentRunner,
-        private MemorySettings $settings,
         private LoggerInterface $logger,
     ) {
     }
@@ -44,6 +44,7 @@ final readonly class DropperPipeline
         string $runId,
         array $reflectionsForCoverage,
         array $activeObservations,
+        PinnedMemorySettings $settings,
         ?string $jobId,
         ?string $correlationId,
     ): array {
@@ -51,7 +52,7 @@ final readonly class DropperPipeline
             return [];
         }
 
-        $targetTokens = $this->settings->observationsMaxTokens;
+        $targetTokens = $settings->observationsMaxTokens;
         $observationTokens = 0;
         foreach ($activeObservations as $observation) {
             $observationTokens += OmTokenEstimator::estimate($observation['content']);
@@ -83,7 +84,7 @@ final readonly class DropperPipeline
 
         $this->agentRunner->run(
             sessionId: $runId,
-            instructions: DropperSystemPrompt::text(),
+            instructions: DropperSystemPrompt::text(MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS),
             input: $input,
             tools: [
                 new MemoryAgentTool(
@@ -111,6 +112,7 @@ final readonly class DropperPipeline
             ],
             correlationId: $jobId ?? $correlationId,
             maxToolCalls: MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS,
+            settings: $settings,
             thinkingLevel: MemoryAgentRunner::THINKING_OFF,
         );
 

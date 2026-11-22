@@ -143,7 +143,7 @@ Then publish host 443 with a local compose override.
 
 - `compose.prod.yaml` loads `.env.prod.local` with `env_file` and Castor passes `--env-file .env.prod.local`.
 - Caddy reads Mercure keys via `{env.MERCURE_*}`.
-- Symfony environment is baked by `composer dump-env prod` during image build.
+- Symfony environment from `.env` + `.env.prod` is baked by `composer dump-env prod` during image build. `.env.prod.local` stays out of the build context and is injected at runtime.
 - Castor loads `.env`, `.env.prod` and `.env.prod.local` for compose interpolation, preserving `COMPOSE_PROJECT_NAME=librarian-mcp-prod`. It does not assign a new hashed production project name.
 - Project sources are mounted read-only; source database connections remain `mode=ro`, with no source-table, journal or transcript writes. Mounting the whole home (`PROJECTS_HOST_PATH=/home/<user>`) is supported and also covers `~/.claude/projects`.
 - Postgres stays on the private network with no host ports. `messenger` consumes Messenger `scheduler_cron` and `cron` (daily backups, prioritized; see [backups.md](backups.md)), then `async` and `scheduler_default`; `messenger-om` consumes `om` (memory generation).
@@ -151,6 +151,7 @@ Then publish host 443 with a local compose override.
 - Scheduler uses `CallbackMessageProvider` for automatic source discovery followed by incremental indexing (`INDEX_INTERVAL`, default 60s). Check timestamps advance even when unchanged memories do not need rebuilding.
 - Live admin status uses private Mercure + Turbo Streams with native topic-scoped authorization cookies; anonymous hub subscriptions are disabled. Use the configured `MERCURE_PUBLIC_URL` origin for admin access so the app and hub can share the cookie. If a reverse proxy is added, preserve long-lived, unbuffered event-stream responses.
 - **Operations → Logs** shows a curated, admin-only view of recent application diagnostics. Production stderr is unchanged. The shared `data-prod/operations/` directory retains up to three daily files per source; the UI reads only bounded tails. Delayed retry details are a snapshot on dashboard load based on retry events captured since deployment; the live cards remain the source of truth for queue counts.
+- **Operations → OM model** switches the shared Observer/Reflector/Dropper selection without restarting workers. New ingest pins the non-secret choice onto jobs; queued and in-flight work keeps its original selection. Cloud presets require `MISTRAL_API_KEY` / `ZAI_API_KEY` in `.env.prod.local` and send OM content off-host.
 - Registration deletion removes owned derived indexes only; never source trees.
 - `data-prod/` and private production settings are ignored; preserve them across builds and checkout changes.
 - Do not exercise migrations against the real application database for tests; use isolated storage for validation.

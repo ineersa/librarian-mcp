@@ -1,0 +1,79 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% block content_title %}Observational memory model{% endblock %}
+
+{% block main %}
+    <p class="text-muted mb-3">
+        Choose the shared Observer/Reflector/Dropper model. New ingest pins this selection onto queued jobs.
+        Already queued or in-flight work keeps the selection it started with.
+    </p>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">Current selection</h2>
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Provider / model</dt>
+                <dd class="col-sm-9"><code>{{ current.model }}</code></dd>
+                <dt class="col-sm-3">Reasoning</dt>
+                <dd class="col-sm-9">{{ current.reasoningLevel.label() }}</dd>
+                <dt class="col-sm-3">Context budget</dt>
+                <dd class="col-sm-9">{{ current.contextWindow }} tokens</dd>
+            </dl>
+        </div>
+    </div>
+
+    {{ form_start(form, {attr: {class: 'card'}}) }}
+        <div class="card-body">
+            <div class="alert alert-warning" role="status">
+                Cloud presets send observational-memory prompts and tool payloads to the selected provider.
+                They stay disabled until the matching API key is present in the environment.
+                Leave the context override blank to keep the preset default.
+            </div>
+            {{ form_row(form.combinationId) }}
+            {{ form_row(form.contextWindow) }}
+            <button class="btn btn-primary" type="submit">Save OM model</button>
+        </div>
+    {{ form_end(form) }}
+
+    <div class="mt-4">
+        <h2 class="h5">Available presets</h2>
+        <div class="table-responsive">
+            <table class="table table-striped" aria-label="Observational memory model presets">
+                <thead>
+                <tr>
+                    <th scope="col">Preset</th>
+                    <th scope="col">Reasoning levels</th>
+                    <th scope="col">Default context</th>
+                    <th scope="col">Credentials</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for preset in presets %}
+                    <tr>
+                        <td>
+                            <strong>{{ preset.label }}</strong>
+                            <div><code>{{ preset.id }}</code></div>
+                            {% if preset.leavesHost %}
+                                <div class="text-warning small">OM content leaves the host</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% for level in preset.reasoningLevels %}
+                                <span class="badge text-bg-secondary">{{ level.label() }}</span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ preset.defaultContextWindow }}</td>
+                        <td>
+                            {% if credentialStatus[preset.id] %}
+                                Ready
+                            {% else %}
+                                Missing {{ preset.apiKeyEnv }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

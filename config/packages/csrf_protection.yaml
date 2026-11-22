@@ -12,3 +12,4 @@ framework:
             - switch_user
             # Dashboard forms can be rendered by a worker without an HTTP session.
             - !php/const App\Controller\Admin\DashboardController::MESSENGER_CSRF_ID
+            - !php/const App\Controller\Admin\ObservationalMemorySettingsController::CSRF_ID

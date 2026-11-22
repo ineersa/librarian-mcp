@@ -1,8 +1,9 @@
 # Production-like / VPS stack: FrankenPHP + private PostgreSQL/pgvector.
 # Usage: vendor/bin/castor prod:up
 #
-# Symfony: `.env` + `.env.prod` (+ optional `.env.prod.local` on the build host) are compiled into
-# `.env.local.php` in the image via `composer dump-env prod` in the Dockerfile.
+# Symfony: `.env` + `.env.prod` are compiled into `.env.local.php` in the image via
+# `composer dump-env prod` in the Dockerfile. Private overrides stay out of the build
+# context; Compose `env_file` injects `.env.prod.local` at runtime.
 #
 # Compose loads `.env.prod.local` via `env_file` into each service (no shell `export`). Use it for
 # Caddy `{env.MERCURE_*}` / `SERVER_NAME` and any runtime overrides; values override Symfony’s dump

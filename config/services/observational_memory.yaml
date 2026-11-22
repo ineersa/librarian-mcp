@@ -12,6 +12,8 @@ parameters:
     env(OM_OBSERVER_CONTEXT_WINDOW_RATIO): '0.65'
     env(OM_REFLECT_AFTER_OBSERVATION_TOKENS): '40000'
     env(OM_OBSERVATIONS_MAX_TOKENS): '30000'
+    env(MISTRAL_API_KEY): ''
+    env(ZAI_API_KEY): ''
 
 services:
     _defaults:
@@ -27,3 +29,10 @@ services:
             $observerContextWindowRatio: '%env(float:OM_OBSERVER_CONTEXT_WINDOW_RATIO)%'
             $reflectAfterObservationTokens: '%env(int:OM_REFLECT_AFTER_OBSERVATION_TOKENS)%'
             $observationsMaxTokens: '%env(int:OM_OBSERVATIONS_MAX_TOKENS)%'
+
+    App\ObservationalMemory\Model\MemoryModelCatalog:
+        arguments:
+            $localModel: '%env(OM_MODEL)%'
+            $localModelUrl: '%env(OM_MODEL_URL)%'
+            $localContextWindow: '%env(int:OM_MODEL_CONTEXT_WINDOW)%'
+            $localThinkingFormat: '%env(default::OM_MODEL_THINKING_FORMAT)%'

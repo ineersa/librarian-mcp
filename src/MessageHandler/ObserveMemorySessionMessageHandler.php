@@ -11,7 +11,8 @@ use App\Message\ObserveMemorySessionMessage;
 use App\Message\ReflectMemoryGenerationMessage;
 use App\ObservationalMemory\MemorySessionLock;
 use App\ObservationalMemory\MemorySessionWorkOutcome;
-use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\MemoryModelSelectionService;
+use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Observer\ObserverPipeline;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\MemorySessionRepository;
@@ -37,7 +38,7 @@ final readonly class ObserveMemorySessionMessageHandler
         private ObserverPipeline $observer,
         private ObservationRepository $repository,
         private MemoryGenerationRepository $generationRepository,
-        private MemorySettings $settings,
+        private MemoryModelSelectionService $selections,
         private MessageBusInterface $bus,
         private ProjectIndexManager $projectIndexManager,
         private LoggerInterface $logger,
@@ -60,6 +61,8 @@ final readonly class ObserveMemorySessionMessageHandler
             throw new \RuntimeException('Session source root for this project is not available yet.');
         }
 
+        $settings = $this->resolveSettings($message);
+
         $lock = $this->sessionLock->tryAcquire($message->sessionPk);
         if (null === $lock) {
             return MemorySessionWorkOutcome::SessionBusy;
@@ -74,6 +77,7 @@ final readonly class ObserveMemorySessionMessageHandler
                     sourceRoot: $sourceRoot,
                     terminalEndSeq: $message->terminalEndSeq,
                     terminalStatus: $message->terminalStatus->value,
+                    settings: $settings,
                     jobId: null,
                     correlationId: $session['run_id'],
                 );
@@ -82,7 +86,7 @@ final readonly class ObserveMemorySessionMessageHandler
                 throw new UnrecoverableMessageHandlingException($e->getMessage(), previous: $e);
             }
 
-            $this->maybeDispatchThresholdReflection($session['session_pk'], $session['run_id']);
+            $this->maybeDispatchThresholdReflection($session['session_pk'], $session['run_id'], $settings);
         } finally {
             $lock->release();
         }
@@ -92,15 +96,19 @@ final readonly class ObserveMemorySessionMessageHandler
         }
         if ($result['more']) {
             // The per-job rendered-event budget stopped short of the requested end; continue from the new coverage.
-            $this->bus->dispatch(new ObserveMemorySessionMessage($message->sessionPk, $message->terminalEndSeq, $message->terminalStatus));
+            $this->bus->dispatch(new ObserveMemorySessionMessage(
+                ...$settings->toMessagePayload(),
+                sessionPk: $message->sessionPk,
+                terminalEndSeq: $message->terminalEndSeq,
+                terminalStatus: $message->terminalStatus,
+            ));
         }
 
         return null;
     }
 
-    private function maybeDispatchThresholdReflection(int $sessionPk, string $runId): void
+    private function maybeDispatchThresholdReflection(int $sessionPk, string $runId, PinnedMemorySettings $settings): void
     {
-        $settings = $this->settings;
         if ($this->repository->activeCandidateStats($sessionPk)['token_count'] <= $settings->reflectAfterObservationTokens) {
             return;
         }
@@ -143,6 +151,9 @@ final readonly class ObserveMemorySessionMessageHandler
             requiredStartSeq: 1,
             // Source watermark for the exact active candidate set claimed at dispatch.
             requiredEndSeq: $candidate['max_source_end_seq'],
+            presetId: $settings->presetId,
+            reasoningLevel: $settings->reasoningLevel->value,
+            contextWindow: $settings->contextWindow,
         ));
 
         $this->logger->info('om.observe.threshold_dispatched', [
@@ -153,5 +164,19 @@ final readonly class ObserveMemorySessionMessageHandler
             'observation_set_hash' => $candidate['observation_set_hash'],
             'token_count' => $candidate['token_count'],
         ]);
+    }
+
+    private function resolveSettings(ObserveMemorySessionMessage $message): PinnedMemorySettings
+    {
+        try {
+            return $this->selections->resolvePinned(
+                $message->presetId ?? null,
+                $message->reasoningLevel ?? null,
+                $message->contextWindow ?? null,
+                $message->model,
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new UnrecoverableMessageHandlingException($e->getMessage(), previous: $e);
+        }
     }
 }

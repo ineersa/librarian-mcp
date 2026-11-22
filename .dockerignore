@@ -13,7 +13,6 @@ node_modules
 .env*
 !.env
 !.env.prod
-!.env.prod.local
 auth.json
 .playwright-cli
 /public/assets
