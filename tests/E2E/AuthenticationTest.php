@@ -33,7 +33,7 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $model = $page->getByLabel('Model', ['exact' => true]);
         $reasoning = $page->getByLabel('Reasoning', ['exact' => true]);
         self::assertSame('llama_cpp/flash', $model->inputValue());
-        $reasoning->locator('option[value="medium"]').waitFor(['state' => 'detached']);
+        $reasoning->locator('option[value="medium"]')->waitForDetached();
         self::assertSame(2, $reasoning->locator('option')->count());
         self::assertSame('default', $reasoning->inputValue());
         $reasoning->selectOption('off');
