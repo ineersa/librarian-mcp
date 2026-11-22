@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\E2E;
 
 use App\Entity\ProjectHealth;
+use App\Index\Source\MemoryKind;
 use App\Mcp\MemoryContextResolver;
 use App\Tests\Support\LibrarianNetworkBrowserTest;
 use App\Tests\Support\ProjectSourceBrowserHelpers;
@@ -22,6 +23,8 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
         $visiblePath = ProjectSourceFixture::visibleProjectPath($slug);
         $builderPath = ProjectSourceFixture::builderProjectPath($slug);
         $before = ProjectSourceFixture::hashTree($builderPath);
+        $observationId = ProjectSourceFixture::memoryId(MemoryKind::Observation, 1);
+        $reflectionId = ProjectSourceFixture::memoryId(MemoryKind::Reflection, 1);
 
         try {
             $this->login();
@@ -67,9 +70,35 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
             $committedBefore = trim((string) $this->page->locator('[data-index-committed-revision-value]')->textContent());
 
+            $this->openOmIndex($projectId);
+            Expect::locator($this->page->locator('[data-om-observation-id="'.$observationId.'"]'))->toContainText('medium');
+            Expect::locator($this->page->locator('[data-om-observation-id="'.$observationId.'"]'))->toContainText('synthetic observation fx-1');
+            Expect::locator($this->page->locator('[data-om-reflection-id="'.$reflectionId.'"]'))->toContainText('synthetic reflection fx-1');
+            $this->page->locator('[data-om-observation-id="'.$observationId.'"]')->getByRole('link', ['name' => 'Recall'])->click();
+            $this->page->locator('#project-memory-recall')->waitFor();
+            Expect::locator($this->page->locator('[data-recall-kind]'))->toHaveText('observation');
+            Expect::locator($this->page->locator('[data-recall-content]'))->toContainText('synthetic observation fx-1');
+            Expect::locator($this->page->locator('[data-recall-evidence]'))->toContainText('synthetic sanitized event');
+            $this->page->locator('[data-recall-back]')->click();
+            $this->page->locator('#project-om-index')->waitFor();
+            $this->page->locator('[data-om-reflection-id="'.$reflectionId.'"]')->getByRole('link', ['name' => 'Recall'])->click();
+            $this->page->locator('#project-memory-recall')->waitFor();
+            Expect::locator($this->page->locator('[data-recall-kind]'))->toHaveText('reflection');
+            Expect::locator($this->page->locator('[data-recall-content]'))->toContainText('synthetic reflection fx-1');
+            Expect::locator($this->page->locator('[data-recall-evidence]'))->toContainText('synthetic sanitized event');
+            $this->page->locator('[data-recall-back]')->click();
+            $this->page->locator('#project-om-index')->waitFor();
+
             $this->openSearchMemory($projectId);
             $this->searchMemory('where was I working on synthetic observation fx-1');
-            $this->assertSearchHitContains('fx-obs-1', 'synthetic observation fx-1');
+            $this->assertSearchHitContains($observationId, 'synthetic observation fx-1');
+            Expect::locator($this->page->locator('[data-search-hit][data-source-id="'.$observationId.'"]'))->toContainText('medium');
+            $this->page->locator('[data-search-hit][data-source-id="'.$observationId.'"]')->getByRole('link', ['name' => 'Recall'])->click();
+            $this->page->locator('#project-memory-recall')->waitFor();
+            Expect::locator($this->page->locator('[data-recall-evidence]'))->toContainText('synthetic sanitized event');
+            $this->page->locator('[data-recall-back]')->click();
+            $this->page->locator('#project-memory-search')->waitFor();
+            $this->assertSearchHitContains($observationId, 'synthetic observation fx-1');
 
             // Post-cutover change path: the client deletes a session and Librarian forgets
             // its memory. The scheduler indexes the removal without manual actions.
@@ -107,7 +136,7 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
             $this->openSearchMemory($projectId);
             $this->searchMemory('where was I working on synthetic observation fx-1');
             Expect::locator($this->page->locator('[data-search-empty], [data-search-no-active]'))->toBeVisible(new AssertionOptions(timeoutMs: 30_000));
-            self::assertSame(0, $this->page->locator('[data-search-hit][data-source-id="fx-obs-1"]')->count());
+            self::assertSame(0, $this->page->locator('[data-search-hit][data-source-id="'.$observationId.'"]')->count());
 
             ProjectSourceFixture::assertUnchanged($before, ProjectSourceFixture::hashTree($builderPath), 'default-om after session deletion');
 

@@ -1,0 +1,86 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% block content_title %}Recall memory: {{ project.name }}{% endblock %}
+
+{% block main %}
+    <div id="project-memory-recall" data-project-id="{{ project.id }}" data-memory-id="{{ memoryId }}">
+        {% if recall.ok is defined and recall.ok %}
+            <dl class="row mb-3">
+                <dt class="col-sm-3">Kind</dt>
+                <dd class="col-sm-9" data-recall-kind>{{ recall.kind }}</dd>
+                <dt class="col-sm-3">Session</dt>
+                <dd class="col-sm-9">{{ recall.session_id }}</dd>
+                <dt class="col-sm-3">Memory id</dt>
+                <dd class="col-sm-9"><code>{{ recall.id }}</code></dd>
+                {% if recall.timestamp is defined %}
+                    <dt class="col-sm-3">Timestamp</dt>
+                    <dd class="col-sm-9">{{ recall.timestamp }}</dd>
+                {% endif %}
+                {% if recall.importance is defined %}
+                    <dt class="col-sm-3">Relevance</dt>
+                    <dd class="col-sm-9">{% include 'admin/project/_relevance_badge.html.twig' with { relevance: recall.importance } only %}</dd>
+                {% endif %}
+                {% if recall.supporting_observation_ids is defined %}
+                    <dt class="col-sm-3">Supporting observations</dt>
+                    <dd class="col-sm-9">
+                        {% if recall.supporting_observation_ids is empty %}
+                            None
+                        {% else %}
+                            <ul class="mb-0">
+                                {% for supportId in recall.supporting_observation_ids %}
+                                    <li><code>{{ supportId }}</code></li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </dd>
+                {% endif %}
+            </dl>
+
+            <section class="card mb-3" aria-labelledby="recall-content-heading">
+                <div class="card-body">
+                    <h2 id="recall-content-heading" class="h5">Memory</h2>
+                    <pre class="small mb-0 text-wrap" data-recall-content>{{ recall.content }}</pre>
+                </div>
+            </section>
+
+            <section class="card mb-3" aria-labelledby="recall-evidence-heading">
+                <div class="card-body">
+                    <h2 id="recall-evidence-heading" class="h5">Source evidence</h2>
+                    {% if recall.events is empty %}
+                        <p class="mb-0 text-muted" data-recall-evidence-missing>
+                            No source evidence is available for this memory. The journal may be missing, unreadable, or the referenced sequences may not exist.
+                        </p>
+                    {% else %}
+                        <div class="list-group" data-recall-evidence>
+                            {% for event in recall.events %}
+                                <article class="list-group-item" data-recall-event-seq="{{ event.seq }}">
+                                    <div class="d-flex justify-content-between gap-3">
+                                        <strong>seq {{ event.seq }} · {{ event.type }}</strong>
+                                        <span class="small text-muted">{{ event.created_at }}</span>
+                                    </div>
+                                    <pre class="small mb-0 text-wrap">{{ event.payload|json_encode }}</pre>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        {% else %}
+            <div class="alert alert-warning" data-recall-error>
+                {{ recall.message|default('Unable to recall this memory.') }}
+            </div>
+            {% if recall.candidates is defined %}
+                <ul>
+                    {% for candidate in recall.candidates %}
+                        <li><code>{{ candidate.id }}</code> — {{ candidate.content|length > 160 ? candidate.content|slice(0, 160) ~ '…' : candidate.content }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endif %}
+
+        <p class="mb-0">
+            <a href="{{ backUrl }}" class="btn btn-link px-0" data-recall-back>{{ backLabel }}</a>
+            <a href="{{ detailUrl }}" class="btn btn-link">Back to project detail</a>
+        </p>
+    </div>
+{% endblock %}

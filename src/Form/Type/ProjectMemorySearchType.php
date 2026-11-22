@@ -24,6 +24,7 @@ final class ProjectMemorySearchType extends AbstractType
     public const int MAX_QUESTION_LENGTH = 500;
     public const int DEFAULT_LIMIT = 10;
     public const int MAX_LIMIT = 20;
+    public const string FORM_NAME = 'project_memory_search';
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
@@ -66,5 +67,10 @@ final class ProjectMemorySearchType extends AbstractType
             'method' => Request::METHOD_GET,
             'csrf_protection' => false,
         ]);
+    }
+
+    public function getBlockPrefix(): string
+    {
+        return self::FORM_NAME;
     }
 }

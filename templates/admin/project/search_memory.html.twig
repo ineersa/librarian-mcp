@@ -1,6 +1,8 @@
 {% extends '@EasyAdmin/page/content.html.twig' %}
+{% form_theme form '@EasyAdmin/crud/form_theme.html.twig' %}
 
-{% form_theme form 'bootstrap_5_layout.html.twig' %}
+{% set memoryIdQuery = constant('App\\Controller\\Admin\\ProjectCrudController::MEMORY_ID_QUERY') %}
+{% set returnToQuery = constant('App\\Controller\\Admin\\ProjectCrudController::RETURN_TO_QUERY') %}
 
 {% block content_title %}Search memory: {{ project.name }}{% endblock %}
 
@@ -57,8 +59,9 @@
                     {% for hit in searchResult.results %}
                         <article class="list-group-item" data-search-hit data-source-id="{{ hit.source_id }}" data-kind="{{ hit.kind }}">
                             <div class="d-flex justify-content-between gap-3">
-                                <div>
+                                <div class="d-flex align-items-center gap-2">
                                     <strong>{{ hit.kind|capitalize }}</strong>
+                                    {% include 'admin/project/_relevance_badge.html.twig' with { relevance: hit.relevance|default(null) } only %}
                                 </div>
                                 <span class="small text-muted">
                                     {{ hit.occurred_at|date('Y-m-d H:i:s T') }}
@@ -67,7 +70,17 @@
                             <div class="small text-muted mb-1">
                                 Session {{ hit.session_id }}
                             </div>
-                            <pre class="small mb-0 text-wrap">{{ hit.snippet }}</pre>
+                            <pre class="small mb-2 text-wrap">{{ hit.snippet }}</pre>
+                            <a class="btn btn-sm btn-outline-primary"
+                               href="{{ ea_url()
+                                    .setController('App\\Controller\\Admin\\ProjectCrudController')
+                                    .setAction(recallAction)
+                                    .setEntityId(project.id)
+                                    .set(memoryIdQuery, hit.source_id)
+                                    .set(returnToQuery, returnToSearch)
+                                    .set('question', searchQuestion)
+                                    .set('limit', searchLimit)
+                               }}">Recall</a>
                             <details class="small text-muted mt-2">
                                 <summary>Technical result details</summary>
                                 Memory <code>{{ hit.source_id }}</code> · chunk {{ hit.chunk_position }}
@@ -81,6 +94,7 @@
 
         <p class="mt-4 mb-0">
             <a href="{{ detailUrl }}" class="btn btn-link px-0">Back to project detail</a>
+            <a href="{{ omIndexUrl }}" class="btn btn-link">OM index details</a>
         </p>
     </div>
 {% endblock %}

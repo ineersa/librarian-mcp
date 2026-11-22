@@ -136,6 +136,16 @@ trait ProjectSourceBrowserHelpers
         return $this->page;
     }
 
+    protected function openOmIndex(string $projectId): PageInterface
+    {
+        $this->openProjectsIndex()->locator('tr[data-project-id="'.$projectId.'"]')
+            ->getByRole('button', ['name' => 'OM index details'])->click();
+        $this->page->waitForURL('**/om-index**');
+        $this->page->locator('#project-om-index')->waitFor();
+
+        return $this->page;
+    }
+
     protected function searchMemory(string $question): void
     {
         $this->page->getByLabel('Question', ['exact' => true])->fill($question);

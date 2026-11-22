@@ -40,6 +40,7 @@ assertExactNonSymlinkedPath($projectDir.'/var/browser-live');
 if (file_exists($targetRoot)) {
     assertExactNonSymlinkedPath($targetRoot);
     assertPreparedProjectSources($targetRoot);
+    refreshDefaultOmRecallFixtures($targetRoot.'/projects/default-om');
     prepareMemoryToolProjects($targetRoot);
     ensureFixtureOmGenerationTables($targetRoot);
     prepareBackupFixtures($targetRoot);
@@ -129,8 +130,34 @@ sessions:
     path: '.hatfield/sessions'
 YAML);
     $db = $path.'/.hatfield/extensions-data/observational-memory/om.sqlite';
-    createSupportedOmDatabase($db, observationCount: 2, reflectionCount: 1, sourceRevision: 4, sourceChangeCount: 3);
-    writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 1);
+    createSupportedOmDatabase(
+        $db,
+        observationCount: 2,
+        reflectionCount: 1,
+        sourceRevision: 4,
+        sourceChangeCount: 3,
+        runId: '108',
+        idPrefix: 'fx',
+        canonicalIds: true,
+    );
+    writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 2);
+}
+
+function refreshDefaultOmRecallFixtures(string $path): void
+{
+    assertExactNonSymlinkedPath($path);
+    $db = $path.'/.hatfield/extensions-data/observational-memory/om.sqlite';
+    createSupportedOmDatabase(
+        $db,
+        observationCount: 2,
+        reflectionCount: 1,
+        sourceRevision: 4,
+        sourceChangeCount: 3,
+        runId: '108',
+        idPrefix: 'fx',
+        canonicalIds: true,
+    );
+    writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 2);
 }
 
 function prepareBackupFixtures(string $targetRoot): void

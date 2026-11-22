@@ -21,6 +21,9 @@ final readonly class MemoryGenerationRepository
     public const string CLAIM_ALREADY_SUCCEEDED = 'already_succeeded';
     public const string CLAIM_CONFLICT = 'conflict';
 
+    public const string PAGE_QUERY = 'reflections_page';
+    public const int PAGE_SIZE = 20;
+
     public function __construct(
         private Connection $connection,
     ) {
@@ -297,5 +300,58 @@ final readonly class MemoryGenerationRepository
              WHERE memory_session_id = ? AND generation_id = ? AND status = ?',
             [MemoryGenerationStatus::Succeeded->value, $now, $sessionPk, $generationId, MemoryGenerationStatus::Running->value],
         );
+    }
+
+    /**
+     * Newest-first project-scoped reflection page for admin browsing.
+     *
+     * @return array{items: list<array{
+     *   reflection_id: string,
+     *   session_id: string,
+     *   content: string,
+     *   created_at: string
+     * }>, page: int, page_size: int, total: int, page_count: int}
+     */
+    public function pageForProject(int $projectId, int $page = 1): array
+    {
+        $page = max(1, $page);
+        $total = (int) $this->connection->fetchOne(
+            'SELECT COUNT(1) FROM om_reflections r
+             INNER JOIN om_sessions s ON s.id = r.memory_session_id
+             WHERE s.project_id = ?',
+            [$projectId],
+        );
+        $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
+        if ($page > $pageCount) {
+            $page = $pageCount;
+        }
+        $offset = ($page - 1) * self::PAGE_SIZE;
+        $rows = 0 === $total ? [] : $this->connection->fetchAllAssociative(
+            'SELECT r.reflection_id, s.session_id, r.content, r.created_at
+             FROM om_reflections r
+             INNER JOIN om_sessions s ON s.id = r.memory_session_id
+             WHERE s.project_id = ?
+             ORDER BY r.created_at DESC, r.reflection_id DESC
+             LIMIT ? OFFSET ?',
+            [$projectId, self::PAGE_SIZE, $offset],
+        );
+
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = [
+                'reflection_id' => (string) $row['reflection_id'],
+                'session_id' => (string) $row['session_id'],
+                'content' => (string) $row['content'],
+                'created_at' => (string) $row['created_at'],
+            ];
+        }
+
+        return [
+            'items' => $items,
+            'page' => $page,
+            'page_size' => self::PAGE_SIZE,
+            'total' => $total,
+            'page_count' => $pageCount,
+        ];
     }
 }

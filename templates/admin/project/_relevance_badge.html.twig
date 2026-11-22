@@ -1,0 +1,6 @@
+{% set colors = constant('App\\Controller\\Admin\\ProjectCrudController::RELEVANCE_BADGE_COLORS') %}
+{% if relevance %}
+    <twig:ea:Badge color="{{ colors[relevance]|default('secondary') }}">{{ relevance }}</twig:ea:Badge>
+{% else %}
+    <span class="text-muted">—</span>
+{% endif %}

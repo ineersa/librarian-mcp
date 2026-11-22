@@ -1,0 +1,133 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% set memoryIdQuery = constant('App\\Controller\\Admin\\ProjectCrudController::MEMORY_ID_QUERY') %}
+{% set returnToQuery = constant('App\\Controller\\Admin\\ProjectCrudController::RETURN_TO_QUERY') %}
+{% set returnIndex = constant('App\\Controller\\Admin\\ProjectCrudController::RETURN_INDEX') %}
+
+{% block content_title %}OM index details: {{ project.name }}{% endblock %}
+
+{% block main %}
+    <div id="project-om-index" data-project-id="{{ project.id }}">
+        <p class="text-muted mb-3">
+            Read-only observational memory for this project. Levels come from stored observations; reflections have no importance level.
+        </p>
+
+        {% include 'admin/project/status/_index_panel.html.twig' with {
+            project: project,
+            indexStatus: indexStatus
+        } only %}
+
+        <section class="card mb-3" aria-labelledby="om-observations-heading">
+            <div class="card-body">
+                <h2 id="om-observations-heading" class="h5">Observations</h2>
+                {% if observations.total == 0 %}
+                    <p class="mb-0 text-muted" data-om-observations-empty>No observations are stored for this project yet.</p>
+                {% else %}
+                    <p class="small text-muted">{{ observations.total|number_format }} total · showing page {{ observations.page }}</p>
+                    <div class="table-responsive">
+                        <table class="table align-middle" aria-label="Observations" data-om-observations>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Timestamp</th>
+                                    <th scope="col">Session</th>
+                                    <th scope="col">Relevance</th>
+                                    <th scope="col">Content</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for observation in observations.items %}
+                                    <tr data-om-observation-id="{{ observation.observation_id }}">
+                                        <td>{{ observation.timestamp }}</td>
+                                        <td>{{ observation.session_id }}</td>
+                                        <td>{% include 'admin/project/_relevance_badge.html.twig' with { relevance: observation.relevance } only %}</td>
+                                        <td class="text-break">{{ observation.content|length > 240 ? observation.content|slice(0, 240) ~ '…' : observation.content }}</td>
+                                        <td>
+                                            <a class="btn btn-sm btn-outline-primary"
+                                               href="{{ ea_url()
+                                                    .setController('App\\Controller\\Admin\\ProjectCrudController')
+                                                    .setAction(recallAction)
+                                                    .setEntityId(project.id)
+                                                    .set(memoryIdQuery, observation.observation_id)
+                                                    .set(returnToQuery, returnIndex)
+                                                    .set(observationsPageQuery, observations.page)
+                                                    .set(reflectionsPageQuery, reflections.page)
+                                               }}">Recall</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% include 'admin/project/_pagination.html.twig' with {
+                        page: observations,
+                        query: observationsPageQuery,
+                        label: 'Observations',
+                        observationsPageQuery: observationsPageQuery,
+                        reflectionsPageQuery: reflectionsPageQuery,
+                        observationsPage: observations.page,
+                        reflectionsPage: reflections.page
+                    } only %}
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="card mb-3" aria-labelledby="om-reflections-heading">
+            <div class="card-body">
+                <h2 id="om-reflections-heading" class="h5">Reflections</h2>
+                {% if reflections.total == 0 %}
+                    <p class="mb-0 text-muted" data-om-reflections-empty>No reflections are stored for this project yet.</p>
+                {% else %}
+                    <p class="small text-muted">{{ reflections.total|number_format }} total · showing page {{ reflections.page }}</p>
+                    <div class="table-responsive">
+                        <table class="table align-middle" aria-label="Reflections" data-om-reflections>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Created</th>
+                                    <th scope="col">Session</th>
+                                    <th scope="col">Content</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reflection in reflections.items %}
+                                    <tr data-om-reflection-id="{{ reflection.reflection_id }}">
+                                        <td>{{ reflection.created_at }}</td>
+                                        <td>{{ reflection.session_id }}</td>
+                                        <td class="text-break">{{ reflection.content|length > 240 ? reflection.content|slice(0, 240) ~ '…' : reflection.content }}</td>
+                                        <td>
+                                            <a class="btn btn-sm btn-outline-primary"
+                                               href="{{ ea_url()
+                                                    .setController('App\\Controller\\Admin\\ProjectCrudController')
+                                                    .setAction(recallAction)
+                                                    .setEntityId(project.id)
+                                                    .set(memoryIdQuery, reflection.reflection_id)
+                                                    .set(returnToQuery, returnIndex)
+                                                    .set(observationsPageQuery, observations.page)
+                                                    .set(reflectionsPageQuery, reflections.page)
+                                               }}">Recall</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% include 'admin/project/_pagination.html.twig' with {
+                        page: reflections,
+                        query: reflectionsPageQuery,
+                        label: 'Reflections',
+                        observationsPageQuery: observationsPageQuery,
+                        reflectionsPageQuery: reflectionsPageQuery,
+                        observationsPage: observations.page,
+                        reflectionsPage: reflections.page
+                    } only %}
+                {% endif %}
+            </div>
+        </section>
+
+        <p class="mb-0">
+            <a href="{{ detailUrl }}" class="btn btn-link px-0">Back to project detail</a>
+            <a href="{{ searchUrl }}" class="btn btn-link">Search memory</a>
+        </p>
+    </div>
+{% endblock %}
