@@ -35,7 +35,7 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $page->getByLabel('OM context budget override', ['exact' => true])->fill('');
         $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
         $page->getByText('Saved OM model', ['exact' => false])->waitFor();
-        self::assertTrue($page->getByText('llama_cpp/flash', ['exact' => false])->isVisible());
+        self::assertTrue($page->locator('dl')->getByText('llama_cpp/flash', ['exact' => true])->isVisible());
         $page->getByRole('link', ['name' => 'Logs'])->click();
         $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
         $source = $page->getByLabel('Source', ['exact' => true]);
