@@ -54,17 +54,4 @@ final readonly class MemoryModelPreset
     {
         return \in_array($level, $this->reasoningLevels, true);
     }
-
-    public function adminChoiceLabel(): string
-    {
-        $parts = [$this->label, 'default '.$this->defaultReasoningLevel->label()];
-        if ($this->leavesHost()) {
-            $parts[] = 'OM content leaves the host';
-        }
-        if (null !== $this->apiKeyEnv) {
-            $parts[] = 'requires '.$this->apiKeyEnv;
-        }
-
-        return implode(' · ', $parts);
-    }
 }

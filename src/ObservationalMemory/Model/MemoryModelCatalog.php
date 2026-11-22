@@ -63,66 +63,10 @@ final class MemoryModelCatalog
     {
         $choices = [];
         foreach ($this->all() as $preset) {
-            $choices[$preset->provider->label()][$preset->adminChoiceLabel()] = $preset->id;
+            $choices[$preset->provider->label()][$preset->label] = $preset->id;
         }
 
         return $choices;
-    }
-
-    /**
-     * Grouped ChoiceType values for valid model + reasoning combinations.
-     *
-     * @return array<string, array<string, string>>
-     */
-    public function groupedCombinationChoices(): array
-    {
-        $choices = [];
-        foreach ($this->all() as $preset) {
-            foreach ($preset->reasoningLevels as $level) {
-                $label = $preset->label.' · '.$level->label();
-                if ($preset->leavesHost()) {
-                    $label .= ' · OM content leaves the host';
-                }
-                if (null !== $preset->apiKeyEnv) {
-                    $label .= ' · requires '.$preset->apiKeyEnv;
-                }
-                $choices[$preset->provider->label()][$label] = $this->combinationId($preset->id, $level);
-            }
-        }
-
-        return $choices;
-    }
-
-    public function combinationId(string $presetId, MemoryReasoningLevel $level): string
-    {
-        return $presetId.'|'.$level->value;
-    }
-
-    /**
-     * @return array{presetId: string, reasoningLevel: MemoryReasoningLevel}
-     */
-    public function parseCombinationId(string $combinationId): array
-    {
-        $parts = explode('|', $combinationId, 2);
-        if (2 !== \count($parts) || '' === $parts[0] || '' === $parts[1]) {
-            throw new \InvalidArgumentException(\sprintf('Invalid OM model combination "%s".', $combinationId));
-        }
-        $level = MemoryReasoningLevel::tryFrom($parts[1])
-            ?? throw new \InvalidArgumentException(\sprintf('Unknown OM reasoning level "%s".', $parts[1]));
-        $preset = $this->require($parts[0]);
-        if (!$preset->supports($level)) {
-            throw new \InvalidArgumentException(\sprintf('Reasoning level "%s" is not available for "%s".', $level->value, $preset->id));
-        }
-
-        return ['presetId' => $preset->id, 'reasoningLevel' => $level];
-    }
-
-    /**
-     * @return list<MemoryReasoningLevel>
-     */
-    public function reasoningLevelsFor(string $presetId): array
-    {
-        return $this->require($presetId)->reasoningLevels;
     }
 
     /**

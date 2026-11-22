@@ -42,7 +42,6 @@ final readonly class MemoryModelSelectionService
             return $this->pin(
                 $selection->presetId,
                 $selection->reasoningLevel,
-                $selection->contextWindow,
             );
         } catch (\InvalidArgumentException) {
             // Corrupt/outdated rows fall back to the env baseline rather than failing ingest.
@@ -64,9 +63,9 @@ final readonly class MemoryModelSelectionService
         return $this->pin($presetId, $level, $contextWindow, $model);
     }
 
-    public function save(string $presetId, MemoryReasoningLevel $reasoningLevel, ?int $contextWindow = null): PinnedMemorySettings
+    public function save(string $presetId, MemoryReasoningLevel $reasoningLevel): PinnedMemorySettings
     {
-        $pinned = $this->pin($presetId, $reasoningLevel, $contextWindow);
+        $pinned = $this->pin($presetId, $reasoningLevel);
         $now = $this->clock->now();
         $selection = $this->selections->current();
         if (null === $selection) {
