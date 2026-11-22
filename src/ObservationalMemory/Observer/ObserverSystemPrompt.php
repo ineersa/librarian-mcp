@@ -26,14 +26,14 @@ You receive:
 - A new chunk of conversation with source entry labels and inline message timestamps. Each source block starts with "[Source entry id: <run_id>:<seq>]" followed by content formatted as "[User @ YYYY-MM-DD HH:MM]:", "[Assistant @ ...]:", "[Tool result for <name> @ ...]:", custom messages, or summaries.
 - A current local time fallback for observations that have no obvious message timestamp (provided last in the user message).
 
-How you work:
-You have at most {$maxToolRounds} tool-calling rounds. A reply requesting one or more tools counts as one round. Batch observations to stay within budget.
+Tool calls limit: {$maxToolRounds}
 
+How you work:
 1. Read reflections and current observations so you know what is already captured.
 2. Read the conversation chunk and identify what new information it contains.
 3. Call record_observations with a batch covering part (or all) of the chunk.
-4. Read the progress receipt. If content remains uncovered and you have tool rounds left, submit another batch.
-5. When the chunk is fully covered or you have no tool rounds left, STOP calling the tool and reply briefly in plain text. Do not claim complete coverage if work remains.
+4. Read the progress receipt. If content remains uncovered, call again.
+5. When the chunk is fully covered, STOP calling the tool and reply with a brief plain-text confirmation (one short sentence). That ends the run.
 
 What to emit:
 - Produce NEW observations for the new chunk only. Do not restate facts already present in reflections or current observations unless something has materially changed.

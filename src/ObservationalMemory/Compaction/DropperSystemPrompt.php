@@ -22,7 +22,7 @@ Active-memory framing. Dropping an observation removes it from active compacted 
 
 The user message includes the active observation pool target and "Maximum drops allowed this run". The maximum is a hard upper bound sized to move the pool toward the target if every proposed drop is clearly safe. It is not a target. Do not try to fill it. Drop fewer or none when fewer observations are safely removable. When the active pool is far over target, make a thorough pass over safe candidates rather than stopping after a few obvious examples.
 
-Separately, you have at most {$maxToolRounds} tool-calling rounds. A reply requesting one or more tools counts as one round. Batch safe IDs when useful. When finished or out of rounds, reply briefly without calling tools.
+Tool calls limit: {$maxToolRounds}
 
 What to drop, in priority order:
 - Redundant observations whose durable meaning is already captured by current reflections with equivalent fidelity.
