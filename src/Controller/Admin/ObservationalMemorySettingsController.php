@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Form\Admin\ObservationalMemorySettingsType;
-use App\ObservationalMemory\Model\MemoryModelCatalog;
 use App\ObservationalMemory\Model\MemoryModelSelectionService;
+use App\ObservationalMemory\Model\MemoryReasoningLevel;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminRoute;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Form\FormError;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -22,7 +23,6 @@ final class ObservationalMemorySettingsController extends AbstractController
 
     public function __construct(
         private readonly MemoryModelSelectionService $selections,
-        private readonly MemoryModelCatalog $catalog,
     ) {
     }
 
@@ -30,49 +30,31 @@ final class ObservationalMemorySettingsController extends AbstractController
     public function index(Request $request): Response
     {
         $current = $this->selections->currentPinned();
-        $defaultContextWindow = $this->catalog->require($current->presetId)->defaultContextWindow;
         $form = $this->createForm(ObservationalMemorySettingsType::class, [
-            'combinationId' => $this->catalog->combinationId($current->presetId, $current->reasoningLevel),
-            'contextWindow' => $current->contextWindow === $defaultContextWindow ? null : $current->contextWindow,
+            'presetId' => $current->presetId,
+            'reasoningLevel' => $current->reasoningLevel,
         ]);
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            /** @var array{combinationId: string, contextWindow: int|null} $data */
+            /** @var array{presetId: string, reasoningLevel: MemoryReasoningLevel} $data */
             $data = $form->getData();
             try {
-                $parsed = $this->catalog->parseCombinationId($data['combinationId']);
-                $saved = $this->selections->save(
-                    $parsed['presetId'],
-                    $parsed['reasoningLevel'],
-                    $data['contextWindow'],
-                );
+                $saved = $this->selections->save($data['presetId'], $data['reasoningLevel']);
                 $this->addFlash(
                     'success',
-                    \sprintf(
-                        'Saved OM model %s at %s with a %d-token context budget. Queued and in-flight jobs keep their original selection.',
-                        $saved->model,
-                        $saved->reasoningLevel->label(),
-                        $saved->contextWindow,
-                    ),
+                    \sprintf('Saved OM model %s at %s.', $saved->model, $saved->reasoningLevel->label()),
                 );
 
                 return $this->redirectToRoute(self::ROUTE, status: Response::HTTP_SEE_OTHER);
             } catch (\InvalidArgumentException $e) {
-                $this->addFlash('danger', $e->getMessage());
+                $form->addError(new FormError($e->getMessage()));
             }
-        }
-
-        $credentialStatus = [];
-        foreach ($this->catalog->all() as $preset) {
-            $credentialStatus[$preset->id] = $this->selections->hasCredential($preset);
         }
 
         return $this->render('admin/operations/om_settings.html.twig', [
             'form' => $form,
             'current' => $current,
-            'presets' => $this->catalog->all(),
-            'credentialStatus' => $credentialStatus,
         ])->setPrivate();
     }
 }
