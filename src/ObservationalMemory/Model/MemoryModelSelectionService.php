@@ -23,9 +23,11 @@ final readonly class MemoryModelSelectionService
         private EntityManagerInterface $entityManager,
         private ClockInterface $clock,
         #[Autowire('%env(default::MISTRAL_API_KEY)%')]
-        private string $mistralApiKey = '',
+        #[\SensitiveParameter]
+        private ?string $mistralApiKey = null,
         #[Autowire('%env(default::ZAI_API_KEY)%')]
-        private string $zaiApiKey = '',
+        #[\SensitiveParameter]
+        private ?string $zaiApiKey = null,
     ) {
     }
 
@@ -116,22 +118,23 @@ final readonly class MemoryModelSelectionService
 
     public function hasCredential(MemoryModelPreset $preset): bool
     {
-        return match ($preset->apiKeyEnv) {
-            null => true,
-            MemoryModelCatalog::ENV_MISTRAL_API_KEY => '' !== trim($this->mistralApiKey),
-            MemoryModelCatalog::ENV_ZAI_API_KEY => '' !== trim($this->zaiApiKey),
-            default => false,
-        };
+        return null === $preset->apiKeyEnv || null !== $this->credential($preset->apiKeyEnv);
     }
 
     public function apiKeyFor(PinnedMemorySettings $settings): ?string
     {
-        return match ($settings->apiKeyEnv) {
-            null => null,
-            MemoryModelCatalog::ENV_MISTRAL_API_KEY => '' === trim($this->mistralApiKey) ? null : $this->mistralApiKey,
-            MemoryModelCatalog::ENV_ZAI_API_KEY => '' === trim($this->zaiApiKey) ? null : $this->zaiApiKey,
+        return $this->credential($settings->apiKeyEnv);
+    }
+
+    private function credential(?string $keyEnv): ?string
+    {
+        $key = match ($keyEnv) {
+            MemoryModelCatalog::ENV_MISTRAL_API_KEY => $this->mistralApiKey,
+            MemoryModelCatalog::ENV_ZAI_API_KEY => $this->zaiApiKey,
             default => null,
         };
+
+        return '' === trim($key ?? '') ? null : $key;
     }
 
     private function assertCredentialsAvailable(MemoryModelPreset $preset): void
