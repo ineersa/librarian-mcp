@@ -30,7 +30,7 @@ How you work:
 1. Read reflections and current observations so you know what is already captured.
 2. Read the conversation chunk and identify what new information it contains.
 3. Call record_observations with a batch covering part (or all) of the chunk.
-4. Read the progress receipt. If content remains uncovered, call again. You may call the tool many times.
+4. Read the progress receipt. If content remains uncovered and you have tool rounds left, submit another batch.
 5. When the chunk is fully covered, STOP calling the tool and reply with a brief plain-text confirmation (one short sentence). That ends the run.
 
 What to emit:

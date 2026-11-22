@@ -84,7 +84,7 @@ final readonly class DropperPipeline
 
         $this->agentRunner->run(
             sessionId: $runId,
-            instructions: DropperSystemPrompt::text(),
+            instructions: MemoryAgentRunner::withToolRoundBudget(DropperSystemPrompt::text(), MemorySettings::DEFAULT_AGENT_MAX_TOOL_CALLS),
             input: $input,
             tools: [
                 new MemoryAgentTool(

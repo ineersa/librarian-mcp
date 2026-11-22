@@ -94,7 +94,7 @@ final readonly class ObserverPipeline
         $observerModel = $settings->model;
         $envelope = $settings->observerEnvelope();
 
-        $systemPrompt = ObserverSystemPrompt::text();
+        $systemPrompt = MemoryAgentRunner::withToolRoundBudget(ObserverSystemPrompt::text(), self::MAX_TOOL_CALLS);
         $toolSchemaText = $this->toolSchemaEstimateText();
         $fixedOverhead = OmTokenEstimator::estimate($systemPrompt) + OmTokenEstimator::estimate($toolSchemaText) + 32;
 

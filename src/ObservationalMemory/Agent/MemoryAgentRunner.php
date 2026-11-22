@@ -41,6 +41,14 @@ final readonly class MemoryAgentRunner
     ) {
     }
 
+    public static function withToolRoundBudget(string $instructions, int $maxToolCalls): string
+    {
+        return $instructions.\sprintf(
+            "\n\nTool budget: at most %d tool-calling rounds. Each reply that requests tools uses one round, even if it includes multiple calls. Batch items when useful, stop when done, and reply briefly without calling tools once the budget is exhausted.",
+            $maxToolCalls,
+        );
+    }
+
     /**
      * @param list<MemoryAgentTool> $tools
      */
