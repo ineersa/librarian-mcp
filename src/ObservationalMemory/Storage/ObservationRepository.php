@@ -19,6 +19,9 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
  */
 final readonly class ObservationRepository
 {
+    public const string PAGE_QUERY = 'observations_page';
+    public const int PAGE_SIZE = 20;
+
     public function __construct(
         private Connection $connection,
     ) {
@@ -344,6 +347,63 @@ final readonly class ObservationRepository
         return [
             'status' => 'inserted',
             'observation_count' => \count($observations),
+        ];
+    }
+
+    /**
+     * Newest-first project-scoped observation page for admin browsing.
+     *
+     * @return array{items: list<array{
+     *   observation_id: string,
+     *   session_id: string,
+     *   content: string,
+     *   relevance: string,
+     *   timestamp: string,
+     *   created_at: string
+     * }>, page: int, page_size: int, total: int, page_count: int}
+     */
+    public function pageForProject(int $projectId, int $page = 1): array
+    {
+        $page = max(1, $page);
+        $total = (int) $this->connection->fetchOne(
+            'SELECT COUNT(1) FROM om_observations o
+             INNER JOIN om_sessions s ON s.id = o.memory_session_id
+             WHERE s.project_id = ?',
+            [$projectId],
+        );
+        $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
+        if ($page > $pageCount) {
+            $page = $pageCount;
+        }
+        $offset = ($page - 1) * self::PAGE_SIZE;
+        $rows = 0 === $total ? [] : $this->connection->fetchAllAssociative(
+            'SELECT o.observation_id, s.session_id, o.content, o.relevance, o.timestamp, o.created_at
+             FROM om_observations o
+             INNER JOIN om_sessions s ON s.id = o.memory_session_id
+             WHERE s.project_id = ?
+             ORDER BY o.created_at DESC, o.observation_id DESC
+             LIMIT ? OFFSET ?',
+            [$projectId, self::PAGE_SIZE, $offset],
+        );
+
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = [
+                'observation_id' => (string) $row['observation_id'],
+                'session_id' => (string) $row['session_id'],
+                'content' => (string) $row['content'],
+                'relevance' => (string) $row['relevance'],
+                'timestamp' => (string) $row['timestamp'],
+                'created_at' => (string) $row['created_at'],
+            ];
+        }
+
+        return [
+            'items' => $items,
+            'page' => $page,
+            'page_size' => self::PAGE_SIZE,
+            'total' => $total,
+            'page_count' => $pageCount,
         ];
     }
 

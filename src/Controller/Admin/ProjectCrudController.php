@@ -10,10 +10,16 @@ use App\Form\Type\ProjectMemorySearchType;
 use App\Index\IndexException;
 use App\Index\ProjectIndexManager;
 use App\Index\Search\HybridSearch;
+use App\Index\Source\CanonicalSourceReader;
+use App\Index\Source\MemoryKind;
 use App\Index\Status\ProjectIndexStatusFactory;
 use App\Index\Status\ProjectStatusTopics;
+use App\Memory\MemoryRecall;
 use App\Messenger\Monitor\MessengerStatsProvider;
+use App\ObservationalMemory\Storage\MemoryGenerationRepository;
+use App\ObservationalMemory\Storage\ObservationRepository;
 use App\ObservationalMemory\Storage\ObserverCoverageReader;
+use App\ObservationalMemory\Support\OmIdentity;
 use App\Project\ProjectManager;
 use App\Repository\IndexGenerationRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -46,8 +52,22 @@ use Symfony\Component\HttpFoundation\Response;
 class ProjectCrudController extends AbstractCrudController
 {
     public const string DETAIL_ROUTE = DashboardController::ROUTE_PREFIX.'project_detail';
+    public const string RETURN_TO_QUERY = 'returnTo';
+    public const string RETURN_INDEX = 'index';
+    public const string RETURN_SEARCH = 'search';
+    public const string MEMORY_ID_QUERY = 'memoryId';
+
+    /** @var array<string, string> */
+    public const array RELEVANCE_BADGE_COLORS = [
+        OmIdentity::RELEVANCE_LOW => 'secondary',
+        OmIdentity::RELEVANCE_MEDIUM => 'info',
+        OmIdentity::RELEVANCE_HIGH => 'warning',
+        OmIdentity::RELEVANCE_CRITICAL => 'danger',
+    ];
 
     private const string ACTION_SEARCH_MEMORY = 'searchMemory';
+    private const string ACTION_OM_INDEX = 'omIndex';
+    private const string ACTION_RECALL_MEMORY = 'recallMemory';
 
     public function __construct(
         private readonly ProjectManager $projectManager,
@@ -55,6 +75,10 @@ class ProjectCrudController extends AbstractCrudController
         private readonly IndexGenerationRepository $indexGenerationRepository,
         private readonly ProjectIndexStatusFactory $projectIndexStatusFactory,
         private readonly HybridSearch $hybridSearch,
+        private readonly CanonicalSourceReader $canonicalSourceReader,
+        private readonly ObservationRepository $observations,
+        private readonly MemoryGenerationRepository $generations,
+        private readonly MemoryRecall $memoryRecall,
         private readonly ClockInterface $clock,
         private readonly ObserverCoverageReader $coverage,
         private readonly MessengerStatsProvider $messengerStats,
@@ -192,6 +216,9 @@ class ProjectCrudController extends AbstractCrudController
         $searchMemory = Action::new(self::ACTION_SEARCH_MEMORY, 'Search memory', 'fa fa-magnifying-glass')
             ->linkToCrudAction(self::ACTION_SEARCH_MEMORY)
             ->addCssClass('btn btn-outline-primary');
+        $omIndex = Action::new(self::ACTION_OM_INDEX, 'OM index details', 'fa fa-book-open')
+            ->linkToCrudAction(self::ACTION_OM_INDEX)
+            ->addCssClass('btn btn-outline-secondary');
 
         return $actions
             ->disable(Action::EDIT)
@@ -201,10 +228,11 @@ class ProjectCrudController extends AbstractCrudController
             ->update(Crud::PAGE_INDEX, Action::DETAIL, static fn (Action $action) => $action
                 ->addCssClass('d-none'))
             ->add(Crud::PAGE_INDEX, $searchMemory)
+            ->add(Crud::PAGE_INDEX, $omIndex)
             ->update(Crud::PAGE_INDEX, Action::DELETE, static fn (Action $action) => $action
                 ->setLabel('Delete')
                 ->setIcon('fa fa-trash'))
-            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_SEARCH_MEMORY, Action::DELETE])
+            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_OM_INDEX, self::ACTION_SEARCH_MEMORY, Action::DELETE])
             ->setPermission(Action::DELETE, 'ROLE_ADMIN');
     }
 
@@ -321,11 +349,15 @@ class ProjectCrudController extends AbstractCrudController
         $searchError = null;
         $searchResult = null;
         $searched = false;
+        $question = '';
+        $limit = ProjectMemorySearchType::DEFAULT_LIMIT;
 
         if ($form->isSubmitted() && $form->isValid()) {
             $searched = true;
             /** @var array{question: string, limit: int} $data */
             $data = $form->getData();
+            $question = trim($data['question']);
+            $limit = (int) $data['limit'];
             if (null === $active || !$active->state->isUsable() || null === $active->id) {
                 $searchError = 'No committed searchable index is active for this project yet.';
             } else {
@@ -333,9 +365,10 @@ class ProjectCrudController extends AbstractCrudController
                     $searchResult = $this->hybridSearch->search(
                         $project->id,
                         $active->id,
-                        trim($data['question']),
-                        (int) $data['limit'],
+                        $question,
+                        $limit,
                     );
+                    $searchResult = $this->withStoredRelevance($project->id, $searchResult);
                 } catch (IndexException $exception) {
                     $searchError = $exception->getMessage();
                 } catch (\InvalidArgumentException $exception) {
@@ -351,12 +384,184 @@ class ProjectCrudController extends AbstractCrudController
             'searched' => $searched,
             'searchError' => $searchError,
             'searchResult' => $searchResult,
+            'searchQuestion' => $question,
+            'searchLimit' => $limit,
+            'detailUrl' => $urlGenerator
+                ->setController(self::class)
+                ->setAction(Action::DETAIL)
+                ->setEntityId((string) $project->id)
+                ->generateUrl(),
+            'omIndexUrl' => $urlGenerator
+                ->setController(self::class)
+                ->setAction(self::ACTION_OM_INDEX)
+                ->setEntityId((string) $project->id)
+                ->generateUrl(),
+            'recallAction' => self::ACTION_RECALL_MEMORY,
+            'returnToSearch' => self::RETURN_SEARCH,
+        ]);
+    }
+
+    /**
+     * @param AdminContext<Project> $context
+     */
+    #[AdminRoute(path: '/{entityId}/om-index', name: 'om-index', options: ['methods' => [Request::METHOD_GET]])]
+    public function omIndex(AdminContext $context, Request $request, AdminUrlGenerator $urlGenerator): Response
+    {
+        /** @var Project $project */
+        $project = $context->getEntity()->getInstance();
+        if (null === $project->id) {
+            throw $this->createNotFoundException('Project registration is missing.');
+        }
+
+        $observations = $this->observations->pageForProject(
+            $project->id,
+            $request->query->getInt(ObservationRepository::PAGE_QUERY, 1),
+        );
+        $reflections = $this->generations->pageForProject(
+            $project->id,
+            $request->query->getInt(MemoryGenerationRepository::PAGE_QUERY, 1),
+        );
+
+        return $this->render('admin/project/om_index.html.twig', [
+            'project' => $project,
+            'indexStatus' => $this->projectIndexStatusFactory->forProject($project),
+            'observations' => $observations,
+            'reflections' => $reflections,
+            'observationsPageQuery' => ObservationRepository::PAGE_QUERY,
+            'reflectionsPageQuery' => MemoryGenerationRepository::PAGE_QUERY,
+            'detailUrl' => $urlGenerator
+                ->setController(self::class)
+                ->setAction(Action::DETAIL)
+                ->setEntityId((string) $project->id)
+                ->generateUrl(),
+            'searchUrl' => $urlGenerator
+                ->setController(self::class)
+                ->setAction(self::ACTION_SEARCH_MEMORY)
+                ->setEntityId((string) $project->id)
+                ->generateUrl(),
+            'recallAction' => self::ACTION_RECALL_MEMORY,
+            'returnToIndex' => self::RETURN_INDEX,
+        ]);
+    }
+
+    /**
+     * @param AdminContext<Project> $context
+     */
+    #[AdminRoute(path: '/{entityId}/recall-memory', name: 'recall-memory', options: ['methods' => [Request::METHOD_GET]])]
+    public function recallMemory(AdminContext $context, Request $request, AdminUrlGenerator $urlGenerator): Response
+    {
+        /** @var Project $project */
+        $project = $context->getEntity()->getInstance();
+        if (null === $project->id) {
+            throw $this->createNotFoundException('Project registration is missing.');
+        }
+
+        $memoryId = strtolower(trim($request->query->getString(self::MEMORY_ID_QUERY)));
+        if ('' === $memoryId) {
+            throw $this->createNotFoundException('Memory id is required.');
+        }
+
+        $returnTo = $request->query->getString(self::RETURN_TO_QUERY, self::RETURN_INDEX);
+        $backUrl = match ($returnTo) {
+            self::RETURN_SEARCH => $this->searchReturnUrl(
+                $urlGenerator,
+                $project->id,
+                $request->query->getString('question'),
+                $request->query->getInt('limit', ProjectMemorySearchType::DEFAULT_LIMIT),
+            ),
+            default => $this->indexReturnUrl(
+                $urlGenerator,
+                $project->id,
+                $request->query->getInt(ObservationRepository::PAGE_QUERY, 1),
+                $request->query->getInt(MemoryGenerationRepository::PAGE_QUERY, 1),
+            ),
+        };
+        $backLabel = self::RETURN_SEARCH === $returnTo ? 'Back to search results' : 'Back to OM index details';
+
+        return $this->render('admin/project/recall_memory.html.twig', [
+            'project' => $project,
+            'memoryId' => $memoryId,
+            'recall' => $this->memoryRecall->recall($project, $memoryId),
+            'backUrl' => $backUrl,
+            'backLabel' => $backLabel,
             'detailUrl' => $urlGenerator
                 ->setController(self::class)
                 ->setAction(Action::DETAIL)
                 ->setEntityId((string) $project->id)
                 ->generateUrl(),
         ]);
+    }
+
+    /**
+     * @return array{results: list<array<string, mixed>>, truncated: bool, candidateTruncated: bool, resultTruncated: bool}
+     */
+    private function withStoredRelevance(int $projectId, \App\Index\Search\SearchResult $searchResult): array
+    {
+        $observationIds = [];
+        foreach ($searchResult->results as $hit) {
+            if (MemoryKind::Observation->value !== $hit['kind']) {
+                continue;
+            }
+            $observationIds[$hit['source_id']] = $hit['source_id'];
+        }
+
+        $relevanceById = [];
+        $ids = array_values($observationIds);
+        if ([] !== $ids) {
+            foreach ($this->canonicalSourceReader->fetchByIds($projectId, MemoryKind::Observation, $ids) as $memory) {
+                $relevanceById[$memory->sourceId] = $memory->relevance;
+            }
+        }
+
+        $results = [];
+        foreach ($searchResult->results as $hit) {
+            if (MemoryKind::Observation->value === $hit['kind']) {
+                $hit['relevance'] = $relevanceById[$hit['source_id']] ?? null;
+            }
+            $results[] = $hit;
+        }
+
+        return [
+            'results' => $results,
+            'truncated' => $searchResult->truncated,
+            'candidateTruncated' => $searchResult->candidateTruncated,
+            'resultTruncated' => $searchResult->resultTruncated,
+        ];
+    }
+
+    private function indexReturnUrl(AdminUrlGenerator $urlGenerator, int $projectId, int $observationsPage, int $reflectionsPage): string
+    {
+        $generator = $urlGenerator
+            ->setController(self::class)
+            ->setAction(self::ACTION_OM_INDEX)
+            ->setEntityId((string) $projectId);
+        if ($observationsPage > 1) {
+            $generator->set(ObservationRepository::PAGE_QUERY, $observationsPage);
+        }
+        if ($reflectionsPage > 1) {
+            $generator->set(MemoryGenerationRepository::PAGE_QUERY, $reflectionsPage);
+        }
+
+        return $generator->generateUrl();
+    }
+
+    private function searchReturnUrl(AdminUrlGenerator $urlGenerator, int $projectId, string $question, int $limit): string
+    {
+        $generator = $urlGenerator
+            ->setController(self::class)
+            ->setAction(self::ACTION_SEARCH_MEMORY)
+            ->setEntityId((string) $projectId);
+        if ('' === $question) {
+            return $generator->generateUrl();
+        }
+
+        return $generator
+            ->set(ProjectMemorySearchType::FORM_NAME, [
+                'question' => $question,
+                'limit' => max(1, $limit),
+                'search' => '',
+            ])
+            ->generateUrl();
     }
 
     /**
