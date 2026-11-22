@@ -32,6 +32,7 @@
         "stof/doctrine-extensions-bundle": "^1.15.3",
         "symfony/ai-agent": "~1.0.0-BETA1",
         "symfony/ai-generic-platform": "~1.0.0-BETA1",
+        "symfony/ai-mistral-platform": "~1.0.0-BETA1",
         "symfony/ai-platform": "~1.0.0-BETA1",
         "symfony/ai-postgres-store": "dev-development",
         "symfony/ai-store": "~1.0.0-BETA1",

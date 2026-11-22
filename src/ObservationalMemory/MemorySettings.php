@@ -50,6 +50,7 @@ final readonly class MemorySettings
             throw new \InvalidArgumentException('OM model context window must be positive.');
         }
         if (null !== $this->thinkingFormat && self::THINKING_FORMAT_LLAMA_CPP !== $this->thinkingFormat) {
+            // Baseline env binding remains llama.cpp; runtime cloud formats come from pinned presets.
             throw new \InvalidArgumentException('OM thinking format must be empty or "llama_cpp".');
         }
         if ($this->observerContextWindowRatio <= 0.0 || $this->observerContextWindowRatio >= 1.0) {

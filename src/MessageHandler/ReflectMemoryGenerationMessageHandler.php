@@ -12,7 +12,8 @@ use App\ObservationalMemory\Compaction\ReflectorException;
 use App\ObservationalMemory\Compaction\ReflectorPipeline;
 use App\ObservationalMemory\MemorySessionLock;
 use App\ObservationalMemory\MemorySessionWorkOutcome;
-use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\MemoryModelSelectionService;
+use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Observer\OmTokenEstimator;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\MemorySessionRepository;
@@ -37,7 +38,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
         private DropperPipeline $dropper,
         private ObservationRepository $observationRepo,
         private MemoryGenerationRepository $generationRepo,
-        private MemorySettings $settings,
+        private MemoryModelSelectionService $selections,
         private ProjectIndexManager $projectIndexManager,
         private ClockInterface $clock,
         private LoggerInterface $logger,
@@ -55,6 +56,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
         $generationId = $message->generationId;
         $model = $message->reflectorModel;
         $reflectorSchemaVersion = $message->reflectorSchemaVersion;
+        $settings = $this->resolveSettings($message);
 
         $expectedId = OmIdentity::thresholdGenerationId(
             $runId,
@@ -66,8 +68,8 @@ final readonly class ReflectMemoryGenerationMessageHandler
         if ($expectedId !== $generationId) {
             throw new UnrecoverableMessageHandlingException('reflect_generation generation_id does not match threshold formula.');
         }
-        if ($model !== $this->settings->model || $reflectorSchemaVersion !== $this->settings->reflectorSchemaVersion) {
-            throw new UnrecoverableMessageHandlingException('reflect_generation model/schema mismatch with current settings.');
+        if ($model !== $settings->model || $reflectorSchemaVersion !== $settings->reflectorSchemaVersion) {
+            throw new UnrecoverableMessageHandlingException('reflect_generation model/schema mismatch with pinned settings.');
         }
 
         $lock = $this->sessionLock->tryAcquire($sessionPk);
@@ -76,7 +78,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
         }
 
         try {
-            $promoted = $this->reflect($message, $sessionPk, $runId);
+            $promoted = $this->reflect($message, $sessionPk, $runId, $settings);
         } finally {
             $lock->release();
         }
@@ -88,8 +90,12 @@ final readonly class ReflectMemoryGenerationMessageHandler
         return null;
     }
 
-    private function reflect(ReflectMemoryGenerationMessage $message, int $sessionPk, string $runId): bool
-    {
+    private function reflect(
+        ReflectMemoryGenerationMessage $message,
+        int $sessionPk,
+        string $runId,
+        PinnedMemorySettings $settings,
+    ): bool {
         $generationId = $message->generationId;
         $observationSetHash = $message->observationSetHash;
         $model = $message->reflectorModel;
@@ -133,7 +139,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
             $candidate = $this->observationRepo->activeCandidateSet($sessionPk, $runId);
             $liveGenerationId = OmIdentity::thresholdGenerationId($runId, $livePrior, $candidate['observation_set_hash'], $model, $reflectorSchemaVersion);
 
-            if ($candidate['token_count'] <= $this->settings->reflectAfterObservationTokens
+            if ($candidate['token_count'] <= $settings->reflectAfterObservationTokens
                 || [] === $candidate['observation_ids']) {
                 $this->generationRepo->markSucceededNoop($sessionPk, $generationId, $this->nowUtc());
                 $this->logger->info('om.reflect.threshold_noop', [
@@ -163,6 +169,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
             $delta = $this->reflector->produceDelta(
                 sessionPk: $sessionPk,
                 runId: $runId,
+                settings: $settings,
                 jobId: $generationId,
                 correlationId: $runId,
             );
@@ -178,11 +185,12 @@ final readonly class ReflectMemoryGenerationMessageHandler
             }
 
             // Dropper only after >=1 new reflection AND pool over observations_max_tokens.
-            if (\count($newReflections) >= 1 && $activeObsTokens > $this->settings->observationsMaxTokens) {
+            if (\count($newReflections) >= 1 && $activeObsTokens > $settings->observationsMaxTokens) {
                 $droppedIds = $this->dropper->selectDrops(
                     runId: $runId,
                     reflectionsForCoverage: array_merge($priorReflections, $newReflections),
                     activeObservations: $activeObservations,
+                    settings: $settings,
                     jobId: $generationId,
                     correlationId: $runId,
                 );
@@ -263,6 +271,19 @@ final readonly class ReflectMemoryGenerationMessageHandler
             // Any other failure (provider, DBAL, ...) leaves the claim reclaimable on retry.
             $this->generationRepo->markFailed($sessionPk, $generationId, MemoryGenerationFailureCode::TransientRuntime, $this->nowUtc());
             throw $e;
+        }
+    }
+
+    private function resolveSettings(ReflectMemoryGenerationMessage $message): PinnedMemorySettings
+    {
+        try {
+            return $this->selections->resolvePinned(
+                $message->presetId ?? null,
+                $message->reasoningLevel ?? null,
+                $message->contextWindow ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new UnrecoverableMessageHandlingException($e->getMessage(), previous: $e);
         }
     }
 

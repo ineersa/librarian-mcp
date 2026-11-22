@@ -46,6 +46,9 @@ services:
             - '../src/Project/ProjectSourceException.php'
             # Per-call OM value objects and model tool handlers are built by pipelines.
             - '../src/ObservationalMemory/MemorySettings.php'
+            - '../src/ObservationalMemory/Model/MemoryModelCatalog.php'
+            - '../src/ObservationalMemory/Model/MemoryModelPreset.php'
+            - '../src/ObservationalMemory/Model/PinnedMemorySettings.php'
             - '../src/ObservationalMemory/Agent/MemoryAgentTool.php'
             - '../src/ObservationalMemory/Agent/MemoryAgentToolbox.php'
             - '../src/ObservationalMemory/Observer/SessionEventDTO.php'

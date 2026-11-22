@@ -28,6 +28,14 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         self::assertTrue($page->getByRole('heading', ['name' => 'Failed messages', 'exact' => true])->isVisible());
         $page->getByText('Delayed retry details', ['exact' => true])->click();
         self::assertTrue($page->getByText('The live queue cards show the current counts.', ['exact' => false])->isVisible());
+        $page->getByRole('link', ['name' => 'OM model'])->click();
+        $page->getByRole('heading', ['name' => 'Observational memory model'])->waitFor();
+        self::assertTrue($page->getByText('Current selection', ['exact' => true])->isVisible());
+        $page->getByLabel('Model and reasoning', ['exact' => true])->selectOption('llama_cpp/flash|default');
+        $page->getByLabel('OM context budget override', ['exact' => true])->fill('');
+        $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
+        $page->getByText('Saved OM model', ['exact' => false])->waitFor();
+        self::assertTrue($page->getByText('llama_cpp/flash', ['exact' => false])->isVisible());
         $page->getByRole('link', ['name' => 'Logs'])->click();
         $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
         $source = $page->getByLabel('Source', ['exact' => true]);

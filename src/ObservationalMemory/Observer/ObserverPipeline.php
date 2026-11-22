@@ -7,7 +7,7 @@ namespace App\ObservationalMemory\Observer;
 use App\Memory\SessionSourceReader;
 use App\ObservationalMemory\Agent\MemoryAgentRunner;
 use App\ObservationalMemory\Agent\MemoryAgentTool;
-use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\ObservationRepository;
 use App\ObservationalMemory\Storage\SourceCheckpointRepository;
@@ -31,7 +31,6 @@ final readonly class ObserverPipeline
         private ObservationRepository $repository,
         private MemoryGenerationRepository $generationRepository,
         private SourceCheckpointRepository $checkpoints,
-        private MemorySettings $settings,
         private ClockInterface $clock,
         private LoggerInterface $logger,
     ) {
@@ -59,14 +58,13 @@ final readonly class ObserverPipeline
         string $sourceRoot,
         int $terminalEndSeq,
         string $terminalStatus,
+        PinnedMemorySettings $settings,
         ?string $jobId,
         ?string $correlationId,
     ): array {
         if ($terminalEndSeq < 1) {
             throw new \InvalidArgumentException(\sprintf('Invalid terminal end seq %d for run %s.', $terminalEndSeq, $runId));
         }
-
-        $settings = $this->settings;
         $repository = $this->repository;
         $rendererVersion = $settings->rendererVersion;
         $observerSchemaVersion = $settings->observerSchemaVersion;
@@ -232,6 +230,7 @@ final readonly class ObserverPipeline
                 ],
                 correlationId: $jobId ?? $correlationId,
                 maxToolCalls: self::MAX_TOOL_CALLS,
+                settings: $settings,
             );
 
             // Zero observations and/or no tool call at all is successful coverage.

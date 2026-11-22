@@ -155,6 +155,7 @@ class DashboardController extends AbstractDashboardController
 
         yield MenuItem::section('Operations');
         yield MenuItem::linkTo(CronRunCrudController::class, 'Cron runs', 'fas fa-clock-rotate-left');
+        yield MenuItem::linkToRoute('OM model', 'fas fa-brain', ObservationalMemorySettingsController::ROUTE);
         yield MenuItem::linkToRoute('Logs', 'fas fa-file-lines', OperationsLogController::ROUTE);
 
         yield MenuItem::section();

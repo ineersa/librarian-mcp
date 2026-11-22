@@ -5,15 +5,24 @@ declare(strict_types=1);
 namespace App\ObservationalMemory\Agent;
 
 use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\MemoryModelBridge;
+use App\ObservationalMemory\Model\MemoryModelSelectionService;
+use App\ObservationalMemory\Model\MemoryReasoningLevel;
+use App\ObservationalMemory\Model\MemoryThinkingFormat;
+use App\ObservationalMemory\Model\PinnedMemorySettings;
 use Psr\Log\LoggerInterface;
 use Symfony\AI\Agent\Agent;
 use Symfony\AI\Agent\Toolbox\FaultTolerantToolbox;
 use Symfony\AI\Platform\Bridge\Generic\CompletionsModel;
 use Symfony\AI\Platform\Bridge\Generic\Factory as GenericFactory;
-use Symfony\AI\Platform\Bridge\Generic\ModelCatalog;
+use Symfony\AI\Platform\Bridge\Generic\ModelCatalog as GenericModelCatalog;
+use Symfony\AI\Platform\Bridge\Mistral\Factory as MistralFactory;
+use Symfony\AI\Platform\Bridge\Mistral\Mistral;
+use Symfony\AI\Platform\Bridge\Mistral\ModelCatalog as MistralModelCatalog;
 use Symfony\AI\Platform\Capability;
 use Symfony\AI\Platform\Message\Message;
 use Symfony\AI\Platform\Message\MessageBag;
+use Symfony\AI\Platform\PlatformInterface;
 use Symfony\Component\HttpClient\HttpClient;
 
 /**
@@ -27,7 +36,7 @@ final readonly class MemoryAgentRunner
     public const string THINKING_OFF = 'off';
 
     public function __construct(
-        private MemorySettings $settings,
+        private MemoryModelSelectionService $selections,
         private LoggerInterface $logger,
     ) {
     }
@@ -42,49 +51,33 @@ final readonly class MemoryAgentRunner
         array $tools,
         ?string $correlationId,
         int $maxToolCalls,
+        PinnedMemorySettings $settings,
         ?string $thinkingLevel = null,
     ): void {
-        $platform = GenericFactory::createPlatform(
-            baseUrl: $this->settings->modelUrl,
-            httpClient: HttpClient::create([
-                'timeout' => (float) MemorySettings::AGENT_HTTP_MAX_DURATION_SECONDS,
-                'max_duration' => (float) MemorySettings::AGENT_HTTP_MAX_DURATION_SECONDS,
-                'extra' => ['trace_content' => false],
-            ]),
-            modelCatalog: new ModelCatalog([
-                $this->settings->providerModelName => [
-                    'class' => CompletionsModel::class,
-                    'capabilities' => [
-                        Capability::INPUT_MESSAGES,
-                        Capability::OUTPUT_TEXT,
-                        Capability::TOOL_CALLING,
-                    ],
-                ],
-            ]),
-            supportsEmbeddings: false,
-            completionsPath: self::completionsPath($this->settings->modelUrl),
-            name: 'librarian_om',
-        );
-
+        $platform = $this->createPlatform($settings);
         $agent = new Agent(
             platform: $platform,
-            model: $this->settings->providerModelName,
+            model: $settings->providerModelName,
             name: 'librarian-om',
             toolbox: [] === $tools ? null : new FaultTolerantToolbox(new MemoryAgentToolbox($tools)),
             maxToolCalls: $maxToolCalls,
         );
 
-        $options = [];
-        if (self::THINKING_OFF === $thinkingLevel && MemorySettings::THINKING_FORMAT_LLAMA_CPP === $this->settings->thinkingFormat) {
-            // Explicit per-call off only (Dropper): disables the reasoning phase.
-            $options['chat_template_kwargs'] = ['enable_thinking' => false];
+        $effectiveThinking = $thinkingLevel ?? $settings->reasoningLevel->value;
+        if (self::THINKING_OFF === $effectiveThinking && !$settings->supportsTrueOff) {
+            $effectiveThinking = MemoryThinkingFormat::None === $settings->thinkingFormat
+                ? MemoryReasoningLevel::Default->value
+                : MemoryReasoningLevel::Low->value;
         }
+        $options = $this->reasoningOptions($settings, $effectiveThinking);
 
         $context = [
             'component' => 'observational_memory',
             'run_id' => $sessionId,
             'correlation_id' => $correlationId,
-            'model' => $this->settings->model,
+            'model' => $settings->model,
+            'preset_id' => $settings->presetId,
+            'reasoning_level' => $effectiveThinking,
             'tool_count' => \count($tools),
         ];
         $this->logger->info('om.agent.run.started', $context + ['event_type' => 'om.agent.run.started']);
@@ -105,8 +98,82 @@ final readonly class MemoryAgentRunner
         $this->logger->info('om.agent.run.completed', $context + ['event_type' => 'om.agent.run.completed']);
     }
 
-    private static function completionsPath(string $baseUrl): string
+    /**
+     * @return array<string, mixed>
+     */
+    private function reasoningOptions(PinnedMemorySettings $settings, string $thinkingLevel): array
     {
-        return str_ends_with(rtrim($baseUrl, '/'), '/v1') ? '/chat/completions' : '/v1/chat/completions';
+        return match ($settings->thinkingFormat) {
+            MemoryThinkingFormat::None => [],
+            MemoryThinkingFormat::LlamaCpp => self::THINKING_OFF === $thinkingLevel
+                ? ['chat_template_kwargs' => ['enable_thinking' => false]]
+                : [],
+            MemoryThinkingFormat::Mistral => [
+                'reasoning_effort' => self::THINKING_OFF === $thinkingLevel ? 'none' : $thinkingLevel,
+            ],
+            MemoryThinkingFormat::Zai => [
+                'thinking' => [
+                    'type' => 'enabled',
+                    'clear_thinking' => false,
+                ],
+                'reasoning_effort' => $thinkingLevel,
+            ],
+        };
+    }
+
+    private function createPlatform(PinnedMemorySettings $settings): PlatformInterface
+    {
+        $httpClient = HttpClient::create([
+            'timeout' => (float) MemorySettings::AGENT_HTTP_MAX_DURATION_SECONDS,
+            'max_duration' => (float) MemorySettings::AGENT_HTTP_MAX_DURATION_SECONDS,
+            'extra' => ['trace_content' => false],
+        ]);
+
+        return match ($settings->bridge) {
+            MemoryModelBridge::Mistral => MistralFactory::createPlatform(
+                apiKey: $this->requireApiKey($settings),
+                httpClient: $httpClient,
+                modelCatalog: new MistralModelCatalog([
+                    $settings->providerModelName => [
+                        'class' => Mistral::class,
+                        'capabilities' => [
+                            Capability::INPUT_MESSAGES,
+                            Capability::OUTPUT_TEXT,
+                            Capability::TOOL_CALLING,
+                        ],
+                    ],
+                ]),
+                name: 'librarian_om_mistral',
+                baseUrl: $settings->baseUrl ?? 'https://api.mistral.ai',
+            ),
+            MemoryModelBridge::Generic => GenericFactory::createPlatform(
+                baseUrl: $settings->baseUrl ?? throw new \InvalidArgumentException('Generic OM bridge requires a base URL.'),
+                apiKey: $this->selections->apiKeyFor($settings),
+                httpClient: $httpClient,
+                modelCatalog: new GenericModelCatalog([
+                    $settings->providerModelName => [
+                        'class' => CompletionsModel::class,
+                        'capabilities' => [
+                            Capability::INPUT_MESSAGES,
+                            Capability::OUTPUT_TEXT,
+                            Capability::TOOL_CALLING,
+                        ],
+                    ],
+                ]),
+                supportsEmbeddings: false,
+                completionsPath: $settings->completionsPath,
+                name: 'librarian_om',
+            ),
+        };
+    }
+
+    private function requireApiKey(PinnedMemorySettings $settings): string
+    {
+        $apiKey = $this->selections->apiKeyFor($settings);
+        if (null === $apiKey || '' === trim($apiKey)) {
+            throw new \RuntimeException(\sprintf('OM preset "%s" is missing its API key.', $settings->presetId));
+        }
+
+        return $apiKey;
     }
 }
