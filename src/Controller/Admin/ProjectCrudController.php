@@ -430,6 +430,7 @@ class ProjectCrudController extends AbstractCrudController
         if ($filter->isSubmitted() && $filter->isValid()) {
             /** @var string|null $sessionId */
             $sessionId = $filter->get(self::SESSION_FILTER_FIELD)->getData();
+            $sessionId = '' === $sessionId ? null : $sessionId;
         }
         $filterParams = null === $sessionId ? [] : [self::SESSION_FILTER_FORM => [self::SESSION_FILTER_FIELD => $sessionId]];
 
