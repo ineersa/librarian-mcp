@@ -63,7 +63,9 @@ class CronRunCrudController extends AbstractCrudController
             ->setPageTitle(Crud::PAGE_DETAIL, static fn (CronRun $run) => \sprintf('Cron run #%d', (int) $run->id))
             ->setDefaultSort(['id' => 'DESC'])
             ->setDefaultRowAction(Action::DETAIL)
-            ->setPaginatorPageSize(30);
+            ->setPaginatorPageSize(30)
+            // No row actions: keep the hidden Detail action for row navigation only.
+            ->overrideTemplate('crud/index', 'admin/cron_runs/index.html.twig');
     }
 
     public function configureFields(string $pageName): iterable

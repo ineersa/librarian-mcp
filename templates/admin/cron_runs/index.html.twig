@@ -1,0 +1,13 @@
+{% extends '@EasyAdmin/crud/index.html.twig' %}
+
+{# The Cron runs table has no row actions (Detail stays hidden via d-none for the
+   default row navigation, and "Run backup now" is a global page action). Hide the
+   actions column header and cell while keeping the rest of the grid unchanged. #}
+{% block table_head %}
+    {%- set has_entity_actions = false -%}
+    {{ parent() }}
+{% endblock %}
+{% block entity_actions %}
+    {%- set has_entity_actions = false -%}
+    {{ parent() }}
+{% endblock %}
