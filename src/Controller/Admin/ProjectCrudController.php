@@ -41,6 +41,9 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\Form\Extension\Core\Type\FormType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
+use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -68,6 +71,8 @@ class ProjectCrudController extends AbstractCrudController
     private const string ACTION_SEARCH_MEMORY = 'searchMemory';
     private const string ACTION_OM_INDEX = 'omIndex';
     private const string ACTION_RECALL_MEMORY = 'recallMemory';
+    private const string SESSION_FILTER_FORM = 'memory_filter';
+    private const string SESSION_FILTER_FIELD = 'session';
 
     public function __construct(
         private readonly ProjectManager $projectManager,
@@ -405,7 +410,7 @@ class ProjectCrudController extends AbstractCrudController
      * @param AdminContext<Project> $context
      */
     #[AdminRoute(path: '/{entityId}/om-index', name: 'om-index', options: ['methods' => [Request::METHOD_GET]])]
-    public function omIndex(AdminContext $context, Request $request, AdminUrlGenerator $urlGenerator): Response
+    public function omIndex(AdminContext $context, Request $request, AdminUrlGenerator $urlGenerator, FormFactoryInterface $forms): Response
     {
         /** @var Project $project */
         $project = $context->getEntity()->getInstance();
@@ -413,17 +418,37 @@ class ProjectCrudController extends AbstractCrudController
             throw $this->createNotFoundException('Project registration is missing.');
         }
 
+        $filter = $forms->createNamedBuilder(self::SESSION_FILTER_FORM, FormType::class, options: [
+            'method' => Request::METHOD_GET,
+            'csrf_protection' => false,
+        ])->add(self::SESSION_FILTER_FIELD, TextType::class, [
+            'label' => 'Session ID',
+            'required' => false,
+        ])->getForm()->handleRequest($request);
+
+        $sessionId = null;
+        if ($filter->isSubmitted() && $filter->isValid()) {
+            /** @var string|null $sessionId */
+            $sessionId = $filter->get(self::SESSION_FILTER_FIELD)->getData();
+            $sessionId = '' === $sessionId ? null : $sessionId;
+        }
+        $filterParams = null === $sessionId ? [] : [self::SESSION_FILTER_FORM => [self::SESSION_FILTER_FIELD => $sessionId]];
+
         $observations = $this->observations->pageForProject(
             $project->id,
             $request->query->getInt(ObservationRepository::PAGE_QUERY, 1),
+            $sessionId,
         );
         $reflections = $this->generations->pageForProject(
             $project->id,
             $request->query->getInt(MemoryGenerationRepository::PAGE_QUERY, 1),
+            $sessionId,
         );
 
         return $this->render('admin/project/om_index.html.twig', [
             'project' => $project,
+            'sessionFilter' => $filter->createView(),
+            'filterParams' => $filterParams,
             'indexStatus' => $this->projectIndexStatusFactory->forProject($project),
             'observations' => $observations,
             'reflections' => $reflections,
