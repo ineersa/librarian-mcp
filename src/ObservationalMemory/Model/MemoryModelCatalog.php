@@ -22,6 +22,7 @@ final class MemoryModelCatalog
 
     public const string OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1';
     public const string OPENCODE_GO_COMPLETIONS_PATH = '/chat/completions';
+    public const string OPENCODE_GO_RESPONSES_PATH = '/responses';
     public const string ZAI_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
     public const string ZAI_COMPLETIONS_PATH = '/chat/completions';
 
@@ -89,9 +90,9 @@ final class MemoryModelCatalog
             thinkingFormat: $localThinkingFormat,
             defaultContextWindow: self::LOCAL_CONTEXT_WINDOW,
             maxContextWindow: self::LOCAL_CONTEXT_WINDOW,
-            reasoningLevels: [MemoryReasoningLevel::Default],
+            reasoningLevels: MemoryThinkingFormat::LlamaCpp === $localThinkingFormat ? MemoryReasoningLevel::cases() : [MemoryReasoningLevel::Default],
             defaultReasoningLevel: MemoryReasoningLevel::Default,
-            supportsTrueOff: false,
+            supportsTrueOff: MemoryThinkingFormat::LlamaCpp === $localThinkingFormat,
             apiKeyEnv: null,
             baseUrl: $this->localModelUrl,
             completionsPath: str_ends_with(rtrim($this->localModelUrl, '/'), '/v1') ? '/chat/completions' : '/v1/chat/completions',
@@ -130,14 +131,14 @@ final class MemoryModelCatalog
                 supportsTrueOff: false,
                 apiKeyEnv: self::ENV_OPENCODE_API_KEY,
                 baseUrl: self::OPENCODE_GO_BASE_URL,
-                completionsPath: self::OPENCODE_GO_COMPLETIONS_PATH,
+                completionsPath: self::OPENCODE_GO_RESPONSES_PATH,
             ),
             new MemoryModelPreset(
                 id: 'opencode-go/space-bunny-free',
                 provider: MemoryModelProvider::OpencodeGo,
                 modelId: 'space-bunny-free',
                 label: 'Space Bunny Free',
-                thinkingFormat: MemoryThinkingFormat::ChatGpt,
+                thinkingFormat: MemoryThinkingFormat::ReasoningEffort,
                 defaultContextWindow: self::CLOUD_DEFAULT_CONTEXT_WINDOW,
                 maxContextWindow: self::CLOUD_DEFAULT_CONTEXT_WINDOW,
                 reasoningLevels: $spaceBunnyLevels,

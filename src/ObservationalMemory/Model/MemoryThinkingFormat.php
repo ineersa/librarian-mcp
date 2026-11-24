@@ -13,5 +13,6 @@ enum MemoryThinkingFormat: string
     case LlamaCpp = 'llama_cpp';
     case Deepseek = 'deepseek';
     case ChatGpt = 'chatgpt';
+    case ReasoningEffort = 'reasoning_effort';
     case Zai = 'zai';
 }

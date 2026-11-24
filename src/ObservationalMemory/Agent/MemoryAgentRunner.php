@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\ObservationalMemory\Agent;
 
 use App\ObservationalMemory\MemorySettings;
+use App\ObservationalMemory\Model\MemoryModelCatalog;
 use App\ObservationalMemory\Model\MemoryModelSelectionService;
 use App\ObservationalMemory\Model\MemoryReasoningLevel;
 use App\ObservationalMemory\Model\MemoryThinkingFormat;
@@ -12,13 +13,19 @@ use App\ObservationalMemory\Model\PinnedMemorySettings;
 use Psr\Log\LoggerInterface;
 use Symfony\AI\Agent\Agent;
 use Symfony\AI\Agent\Toolbox\FaultTolerantToolbox;
+use Symfony\AI\Platform\Bridge\Generic\Completions\ResultConverter;
 use Symfony\AI\Platform\Bridge\Generic\CompletionsModel;
 use Symfony\AI\Platform\Bridge\Generic\Factory as GenericFactory;
 use Symfony\AI\Platform\Bridge\Generic\ModelCatalog as GenericModelCatalog;
+use Symfony\AI\Platform\Bridge\OpenResponses\Factory as OpenResponsesFactory;
+use Symfony\AI\Platform\Bridge\OpenResponses\ModelCatalog as OpenResponsesModelCatalog;
+use Symfony\AI\Platform\Bridge\OpenResponses\ResponsesModel;
 use Symfony\AI\Platform\Capability;
 use Symfony\AI\Platform\Message\Message;
 use Symfony\AI\Platform\Message\MessageBag;
+use Symfony\AI\Platform\Platform;
 use Symfony\AI\Platform\PlatformInterface;
+use Symfony\AI\Platform\Provider;
 use Symfony\Component\HttpClient\HttpClient;
 
 /**
@@ -30,6 +37,10 @@ use Symfony\Component\HttpClient\HttpClient;
 final readonly class MemoryAgentRunner
 {
     public const string THINKING_OFF = 'off';
+
+    private const string OPENCODE_SESSION_HEADER = 'x-opencode-session';
+    private const string OPENCODE_CLIENT_HEADER = 'x-opencode-client';
+    private const string OPENCODE_CLIENT = 'hatfield';
 
     public function __construct(
         private MemoryModelSelectionService $selections,
@@ -50,7 +61,7 @@ final readonly class MemoryAgentRunner
         PinnedMemorySettings $settings,
         ?string $thinkingLevel = null,
     ): void {
-        $platform = $this->createPlatform($settings);
+        $platform = $this->createPlatform($settings, $sessionId);
         $agent = new Agent(
             platform: $platform,
             model: $settings->providerModelName,
@@ -62,8 +73,7 @@ final readonly class MemoryAgentRunner
         $effectiveThinking = $thinkingLevel ?? $settings->reasoningLevel->value;
         if (self::THINKING_OFF === $effectiveThinking && !$settings->supportsTrueOff) {
             $effectiveThinking = match ($settings->thinkingFormat) {
-                // These shapes carry no per-level effort option; the request stays at provider default.
-                MemoryThinkingFormat::None, MemoryThinkingFormat::LlamaCpp => MemoryReasoningLevel::Default->value,
+                MemoryThinkingFormat::None => MemoryReasoningLevel::Default->value,
                 default => MemoryReasoningLevel::Low->value,
             };
         }
@@ -73,6 +83,7 @@ final readonly class MemoryAgentRunner
         // still drains the execution before the Messenger job can finish.
         if (MemoryThinkingFormat::Deepseek === $settings->thinkingFormat
             || MemoryThinkingFormat::ChatGpt === $settings->thinkingFormat
+            || MemoryThinkingFormat::ReasoningEffort === $settings->thinkingFormat
             || MemoryThinkingFormat::Zai === $settings->thinkingFormat) {
             $options['stream'] = true;
         }
@@ -112,14 +123,20 @@ final readonly class MemoryAgentRunner
      */
     private function reasoningOptions(PinnedMemorySettings $settings, string $thinkingLevel): array
     {
+        if (MemoryReasoningLevel::Default->value === $thinkingLevel) {
+            return [];
+        }
+
         return match ($settings->thinkingFormat) {
             MemoryThinkingFormat::None => [],
-            MemoryThinkingFormat::LlamaCpp => self::THINKING_OFF === $thinkingLevel
-                ? ['chat_template_kwargs' => ['enable_thinking' => false]]
-                : [],
-            MemoryThinkingFormat::Deepseek, MemoryThinkingFormat::ChatGpt => [
-                'reasoning_effort' => self::THINKING_OFF === $thinkingLevel ? 'none' : $thinkingLevel,
+            MemoryThinkingFormat::LlamaCpp, MemoryThinkingFormat::ReasoningEffort => [
+                'reasoning_effort' => self::THINKING_OFF === $thinkingLevel ? MemoryThinkingFormat::None->value : $thinkingLevel,
             ],
+            MemoryThinkingFormat::Deepseek => [
+                'thinking' => ['type' => 'enabled'],
+                'reasoning_effort' => $thinkingLevel,
+            ],
+            MemoryThinkingFormat::ChatGpt => ['reasoning' => ['effort' => $thinkingLevel, 'summary' => 'auto']],
             MemoryThinkingFormat::Zai => [
                 'thinking' => [
                     'type' => 'enabled',
@@ -130,7 +147,7 @@ final readonly class MemoryAgentRunner
         };
     }
 
-    private function createPlatform(PinnedMemorySettings $settings): PlatformInterface
+    private function createPlatform(PinnedMemorySettings $settings, string $sessionId): PlatformInterface
     {
         $httpClient = HttpClient::create([
             'timeout' => (float) MemorySettings::AGENT_HTTP_MAX_DURATION_SECONDS,
@@ -138,20 +155,56 @@ final readonly class MemoryAgentRunner
             'extra' => ['trace_content' => false],
         ]);
 
-        return GenericFactory::createPlatform(
-            baseUrl: $settings->baseUrl ?? throw new \InvalidArgumentException('Generic OM bridge requires a base URL.'),
-            apiKey: $this->selections->apiKeyFor($settings),
-            httpClient: $httpClient,
-            modelCatalog: new GenericModelCatalog([
-                $settings->providerModelName => [
-                    'class' => CompletionsModel::class,
-                    'capabilities' => [
-                        Capability::INPUT_MESSAGES,
-                        Capability::OUTPUT_TEXT,
-                        Capability::TOOL_CALLING,
-                    ],
+        $baseUrl = $settings->baseUrl ?? throw new \InvalidArgumentException('OM bridge requires a base URL.');
+        $apiKey = $this->selections->apiKeyFor($settings);
+        $isOpenCodeGo = MemoryModelCatalog::OPENCODE_GO_BASE_URL === $baseUrl && MemoryModelCatalog::ENV_OPENCODE_API_KEY === $settings->apiKeyEnv;
+        if ($isOpenCodeGo) {
+            if (null === $apiKey || '' === $sessionId) {
+                throw new \InvalidArgumentException('OpenCode Go requires an API key and a run ID.');
+            }
+            // Reuse the run ID on every tool round, as Agent Core does.
+            $httpClient = $httpClient->withOptions([
+                'max_redirects' => 0,
+                'headers' => [
+                    self::OPENCODE_SESSION_HEADER => $sessionId,
+                    self::OPENCODE_CLIENT_HEADER => self::OPENCODE_CLIENT,
+                    'User-Agent' => self::OPENCODE_CLIENT,
                 ],
-            ]),
+            ]);
+        }
+
+        $capabilities = [Capability::INPUT_MESSAGES, Capability::OUTPUT_TEXT, Capability::TOOL_CALLING];
+        if ($isOpenCodeGo && MemoryModelCatalog::OPENCODE_GO_RESPONSES_PATH === $settings->completionsPath) {
+            return OpenResponsesFactory::createPlatform(
+                baseUrl: $baseUrl,
+                apiKey: $apiKey,
+                httpClient: $httpClient,
+                modelCatalog: new OpenResponsesModelCatalog([
+                    $settings->providerModelName => ['class' => ResponsesModel::class, 'capabilities' => $capabilities],
+                ]),
+                responsesPath: $settings->completionsPath,
+                name: 'librarian_om',
+            );
+        }
+
+        $catalog = new GenericModelCatalog([
+            $settings->providerModelName => ['class' => CompletionsModel::class, 'capabilities' => $capabilities],
+        ]);
+        if ($isOpenCodeGo && MemoryThinkingFormat::Deepseek === $settings->thinkingFormat) {
+            // The installed Generic converter already keeps only the final cumulative usage snapshot.
+            return new Platform([new Provider(
+                'librarian_om',
+                [new OpenCodeDeepseekModelClient($httpClient, $baseUrl, $apiKey, $settings->completionsPath)],
+                [new ResultConverter()],
+                $catalog,
+            )]);
+        }
+
+        return GenericFactory::createPlatform(
+            baseUrl: $baseUrl,
+            apiKey: $apiKey,
+            httpClient: $httpClient,
+            modelCatalog: $catalog,
             supportsEmbeddings: false,
             completionsPath: $settings->completionsPath,
             name: 'librarian_om',
