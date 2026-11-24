@@ -61,9 +61,11 @@ final readonly class MemoryAgentRunner
 
         $effectiveThinking = $thinkingLevel ?? $settings->reasoningLevel->value;
         if (self::THINKING_OFF === $effectiveThinking && !$settings->supportsTrueOff) {
-            $effectiveThinking = MemoryThinkingFormat::None === $settings->thinkingFormat
-                ? MemoryReasoningLevel::Default->value
-                : MemoryReasoningLevel::Low->value;
+            $effectiveThinking = match ($settings->thinkingFormat) {
+                // These shapes carry no per-level effort option; the request stays at provider default.
+                MemoryThinkingFormat::None, MemoryThinkingFormat::LlamaCpp => MemoryReasoningLevel::Default->value,
+                default => MemoryReasoningLevel::Low->value,
+            };
         }
         $options = $this->reasoningOptions($settings, $effectiveThinking);
         // The buffered converters discard thinking on tool-call turns. The
