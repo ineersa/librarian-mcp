@@ -55,6 +55,7 @@ final class ObservationalMemorySettingsController extends AbstractController
         return $this->render('admin/operations/om_settings.html.twig', [
             'form' => $form,
             'current' => $current,
+            'hasSelectableReasoning' => $this->selections->hasSelectableReasoning($current),
         ])->setPrivate();
     }
 }

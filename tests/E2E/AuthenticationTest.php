@@ -36,6 +36,8 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $reasoning->locator('option[value="medium"]')->waitForDetached();
         self::assertSame(1, $reasoning->locator('option')->count());
         self::assertSame('default', $reasoning->inputValue());
+        self::assertFalse($page->locator('[data-om-model-target="reasoningRow"]')->isVisible());
+        self::assertSame(0, $page->locator('dl dt:text-is("Reasoning")')->count());
         $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
         $page->getByText('Saved OM model llama_cpp/flash at Provider default.', ['exact' => true])->waitFor();
         self::assertSame('default', $reasoning->inputValue());

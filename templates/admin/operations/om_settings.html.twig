@@ -12,8 +12,10 @@
                     <dl class="row mb-3">
                         <dt class="col-sm-4">Model</dt>
                         <dd class="col-sm-8">{{ current.model }}</dd>
-                        <dt class="col-sm-4">Reasoning</dt>
-                        <dd class="col-sm-8">{{ current.reasoningLevel.label() }}</dd>
+                        {% if hasSelectableReasoning %}
+                            <dt class="col-sm-4">Reasoning</dt>
+                            <dd class="col-sm-8">{{ current.reasoningLevel.label() }}</dd>
+                        {% endif %}
                         <dt class="col-sm-4">Context budget</dt>
                         <dd class="col-sm-8">{{ current.contextWindow|number_format }} tokens</dd>
                     </dl>
@@ -21,7 +23,9 @@
                     {{ form_start(form) }}
                         {{ form_errors(form) }}
                         {{ form_row(form.presetId) }}
-                        {{ form_row(form.reasoningLevel) }}
+                        <div data-om-model-target="reasoningRow">
+                            {{ form_row(form.reasoningLevel) }}
+                        </div>
                         <button class="btn btn-primary" type="submit">Save OM model</button>
                     {{ form_end(form) }}
                     <p class="text-muted small mt-3 mb-0">Applies to new jobs only. Queued and in-flight jobs keep their settings.</p>
