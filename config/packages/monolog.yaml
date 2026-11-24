@@ -18,19 +18,22 @@ monolog:
             file_permission: 0640
             formatter: App\Operations\OperationsLogFormatter
         mcp:
-            # The SDK logs tools/call arguments at debug; never retain that payload.
-            type: stream
+            # Retain problems, not routine calls or debug tool payloads.
+            type: rotating_file
             path: "%kernel.logs_dir%/%kernel.environment%.log"
-            level: info
+            max_files: 3
+            level: warning
             channels: [mcp]
 
 when@dev:
     monolog:
         handlers:
             main:
-                type: stream
+                type: rotating_file
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
-                level: debug
+                max_files: 3
+                # Retain problems, not normal worker activity or idle SQL polls.
+                level: warning
                 channels: ["!event", "!deprecation", "!mcp"]
             console:
                 type: console
@@ -55,6 +58,7 @@ when@prod:
     monolog:
         handlers:
             mcp:
+                type: stream
                 path: php://stderr
                 formatter: monolog.formatter.json
             main:
@@ -67,7 +71,7 @@ when@prod:
             nested:
                 type: stream
                 path: php://stderr
-                level: info
+                level: warning
                 formatter: monolog.formatter.json
             console:
                 type: console
