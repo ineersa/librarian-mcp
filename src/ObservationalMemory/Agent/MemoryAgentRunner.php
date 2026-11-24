@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\ObservationalMemory\Agent;
 
 use App\ObservationalMemory\MemorySettings;
-use App\ObservationalMemory\Model\MemoryModelBridge;
 use App\ObservationalMemory\Model\MemoryModelSelectionService;
 use App\ObservationalMemory\Model\MemoryReasoningLevel;
 use App\ObservationalMemory\Model\MemoryThinkingFormat;
@@ -16,9 +15,6 @@ use Symfony\AI\Agent\Toolbox\FaultTolerantToolbox;
 use Symfony\AI\Platform\Bridge\Generic\CompletionsModel;
 use Symfony\AI\Platform\Bridge\Generic\Factory as GenericFactory;
 use Symfony\AI\Platform\Bridge\Generic\ModelCatalog as GenericModelCatalog;
-use Symfony\AI\Platform\Bridge\Mistral\Factory as MistralFactory;
-use Symfony\AI\Platform\Bridge\Mistral\Mistral;
-use Symfony\AI\Platform\Bridge\Mistral\ModelCatalog as MistralModelCatalog;
 use Symfony\AI\Platform\Capability;
 use Symfony\AI\Platform\Message\Message;
 use Symfony\AI\Platform\Message\MessageBag;
@@ -65,15 +61,19 @@ final readonly class MemoryAgentRunner
 
         $effectiveThinking = $thinkingLevel ?? $settings->reasoningLevel->value;
         if (self::THINKING_OFF === $effectiveThinking && !$settings->supportsTrueOff) {
-            $effectiveThinking = MemoryThinkingFormat::None === $settings->thinkingFormat
-                ? MemoryReasoningLevel::Default->value
-                : MemoryReasoningLevel::Low->value;
+            $effectiveThinking = match ($settings->thinkingFormat) {
+                // These shapes carry no per-level effort option; the request stays at provider default.
+                MemoryThinkingFormat::None, MemoryThinkingFormat::LlamaCpp => MemoryReasoningLevel::Default->value,
+                default => MemoryReasoningLevel::Low->value,
+            };
         }
         $options = $this->reasoningOptions($settings, $effectiveThinking);
         // The buffered converters discard thinking on tool-call turns. The
         // streaming runner replays the complete assistant turn; getResult()
         // still drains the execution before the Messenger job can finish.
-        if (MemoryThinkingFormat::Mistral === $settings->thinkingFormat || MemoryThinkingFormat::Zai === $settings->thinkingFormat) {
+        if (MemoryThinkingFormat::Deepseek === $settings->thinkingFormat
+            || MemoryThinkingFormat::ChatGpt === $settings->thinkingFormat
+            || MemoryThinkingFormat::Zai === $settings->thinkingFormat) {
             $options['stream'] = true;
         }
         if (MemoryThinkingFormat::Zai === $settings->thinkingFormat) {
@@ -117,7 +117,7 @@ final readonly class MemoryAgentRunner
             MemoryThinkingFormat::LlamaCpp => self::THINKING_OFF === $thinkingLevel
                 ? ['chat_template_kwargs' => ['enable_thinking' => false]]
                 : [],
-            MemoryThinkingFormat::Mistral => [
+            MemoryThinkingFormat::Deepseek, MemoryThinkingFormat::ChatGpt => [
                 'reasoning_effort' => self::THINKING_OFF === $thinkingLevel ? 'none' : $thinkingLevel,
             ],
             MemoryThinkingFormat::Zai => [
@@ -138,51 +138,23 @@ final readonly class MemoryAgentRunner
             'extra' => ['trace_content' => false],
         ]);
 
-        return match ($settings->bridge) {
-            MemoryModelBridge::Mistral => MistralFactory::createPlatform(
-                apiKey: $this->requireApiKey($settings),
-                httpClient: $httpClient,
-                modelCatalog: new MistralModelCatalog([
-                    $settings->providerModelName => [
-                        'class' => Mistral::class,
-                        'capabilities' => [
-                            Capability::INPUT_MESSAGES,
-                            Capability::OUTPUT_TEXT,
-                            Capability::TOOL_CALLING,
-                        ],
+        return GenericFactory::createPlatform(
+            baseUrl: $settings->baseUrl ?? throw new \InvalidArgumentException('Generic OM bridge requires a base URL.'),
+            apiKey: $this->selections->apiKeyFor($settings),
+            httpClient: $httpClient,
+            modelCatalog: new GenericModelCatalog([
+                $settings->providerModelName => [
+                    'class' => CompletionsModel::class,
+                    'capabilities' => [
+                        Capability::INPUT_MESSAGES,
+                        Capability::OUTPUT_TEXT,
+                        Capability::TOOL_CALLING,
                     ],
-                ]),
-                name: 'librarian_om_mistral',
-                baseUrl: $settings->baseUrl ?? 'https://api.mistral.ai',
-            ),
-            MemoryModelBridge::Generic => GenericFactory::createPlatform(
-                baseUrl: $settings->baseUrl ?? throw new \InvalidArgumentException('Generic OM bridge requires a base URL.'),
-                apiKey: $this->selections->apiKeyFor($settings),
-                httpClient: $httpClient,
-                modelCatalog: new GenericModelCatalog([
-                    $settings->providerModelName => [
-                        'class' => CompletionsModel::class,
-                        'capabilities' => [
-                            Capability::INPUT_MESSAGES,
-                            Capability::OUTPUT_TEXT,
-                            Capability::TOOL_CALLING,
-                        ],
-                    ],
-                ]),
-                supportsEmbeddings: false,
-                completionsPath: $settings->completionsPath,
-                name: 'librarian_om',
-            ),
-        };
-    }
-
-    private function requireApiKey(PinnedMemorySettings $settings): string
-    {
-        $apiKey = $this->selections->apiKeyFor($settings);
-        if (null === $apiKey || '' === trim($apiKey)) {
-            throw new \RuntimeException(\sprintf('OM preset "%s" is missing its API key.', $settings->presetId));
-        }
-
-        return $apiKey;
+                ],
+            ]),
+            supportsEmbeddings: false,
+            completionsPath: $settings->completionsPath,
+            name: 'librarian_om',
+        );
     }
 }

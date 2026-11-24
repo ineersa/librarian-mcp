@@ -11,6 +11,7 @@ enum MemoryThinkingFormat: string
 {
     case None = 'none';
     case LlamaCpp = 'llama_cpp';
-    case Mistral = 'mistral';
+    case Deepseek = 'deepseek';
+    case ChatGpt = 'chatgpt';
     case Zai = 'zai';
 }

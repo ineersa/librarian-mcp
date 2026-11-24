@@ -10,14 +10,14 @@ namespace App\ObservationalMemory\Model;
 enum MemoryModelProvider: string
 {
     case LlamaCpp = 'llama_cpp';
-    case Mistral = 'mistral';
+    case OpencodeGo = 'opencode-go';
     case Zai = 'zai';
 
     public function label(): string
     {
         return match ($this) {
             self::LlamaCpp => 'Local llama.cpp',
-            self::Mistral => 'Mistral AI',
+            self::OpencodeGo => 'OpenCode Go',
             self::Zai => 'Z.ai',
         };
     }
@@ -26,7 +26,7 @@ enum MemoryModelProvider: string
     {
         return match ($this) {
             self::LlamaCpp => false,
-            self::Mistral, self::Zai => true,
+            self::OpencodeGo, self::Zai => true,
         };
     }
 }

@@ -17,7 +17,6 @@ final readonly class MemoryModelPreset
         public MemoryModelProvider $provider,
         public string $modelId,
         public string $label,
-        public MemoryModelBridge $bridge,
         public MemoryThinkingFormat $thinkingFormat,
         public int $defaultContextWindow,
         public int $maxContextWindow,
