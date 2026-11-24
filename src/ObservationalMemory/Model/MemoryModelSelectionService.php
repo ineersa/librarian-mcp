@@ -94,6 +94,16 @@ final readonly class MemoryModelSelectionService
         return null === $preset->apiKeyEnv || null !== $this->credential($preset->apiKeyEnv);
     }
 
+    /**
+     * False when the pinned preset exposes only the provider-default level and has no Reasoning selector.
+     */
+    public function hasSelectableReasoning(PinnedMemorySettings $settings): bool
+    {
+        $preset = $this->catalog->get($settings->presetId);
+
+        return null !== $preset && \count($preset->reasoningLevels) > 1;
+    }
+
     public function apiKeyFor(PinnedMemorySettings $settings): ?string
     {
         return $this->credential($settings->apiKeyEnv);
