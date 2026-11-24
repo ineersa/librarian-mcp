@@ -11,6 +11,7 @@ enum MemoryReasoningLevel: string
 {
     case Default = 'default';
     case Off = 'off';
+    case Minimal = 'minimal';
     case Low = 'low';
     case Medium = 'medium';
     case High = 'high';
@@ -22,6 +23,7 @@ enum MemoryReasoningLevel: string
         return match ($this) {
             self::Default => 'Provider default',
             self::Off => 'Off',
+            self::Minimal => 'Minimal',
             self::Low => 'Low',
             self::Medium => 'Medium',
             self::High => 'High',

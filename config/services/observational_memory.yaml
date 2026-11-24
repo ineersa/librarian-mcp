@@ -3,16 +3,17 @@
 # Librarian-owned observational memory (plan 09). One shared model serves the
 # Observer, Reflector, and Dropper, as in Hatfield OM. OM_MODEL keeps the exact
 # Hatfield provider/model reference because it is a generation identity input.
+# The local llama.cpp context window is hardcoded (200k) and must match
+# MemoryModelCatalog::LOCAL_CONTEXT_WINDOW; do not reintroduce an env override.
 
 parameters:
     env(OM_MODEL): 'llama_cpp/flash'
     env(OM_MODEL_URL): 'http://host.docker.internal:8052/v1'
-    env(OM_MODEL_CONTEXT_WINDOW): '160000'
     env(OM_MODEL_THINKING_FORMAT): 'llama_cpp'
     env(OM_OBSERVER_CONTEXT_WINDOW_RATIO): '0.65'
     env(OM_REFLECT_AFTER_OBSERVATION_TOKENS): '40000'
     env(OM_OBSERVATIONS_MAX_TOKENS): '30000'
-    env(MISTRAL_API_KEY): ''
+    env(OPENCODE_API_KEY): ''
     env(ZAI_API_KEY): ''
 
 services:
@@ -24,7 +25,7 @@ services:
         arguments:
             $model: '%env(OM_MODEL)%'
             $modelUrl: '%env(OM_MODEL_URL)%'
-            $contextWindow: '%env(int:OM_MODEL_CONTEXT_WINDOW)%'
+            $contextWindow: 200000
             $thinkingFormat: '%env(default::OM_MODEL_THINKING_FORMAT)%'
             $observerContextWindowRatio: '%env(float:OM_OBSERVER_CONTEXT_WINDOW_RATIO)%'
             $reflectAfterObservationTokens: '%env(int:OM_REFLECT_AFTER_OBSERVATION_TOKENS)%'
@@ -34,5 +35,4 @@ services:
         arguments:
             $localModel: '%env(OM_MODEL)%'
             $localModelUrl: '%env(OM_MODEL_URL)%'
-            $localContextWindow: '%env(int:OM_MODEL_CONTEXT_WINDOW)%'
             $localThinkingFormat: '%env(default::OM_MODEL_THINKING_FORMAT)%'

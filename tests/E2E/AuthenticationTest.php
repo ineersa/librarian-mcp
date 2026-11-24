@@ -34,13 +34,12 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $reasoning = $page->getByLabel('Reasoning', ['exact' => true]);
         self::assertSame('llama_cpp/flash', $model->inputValue());
         $reasoning->locator('option[value="medium"]')->waitForDetached();
-        self::assertSame(2, $reasoning->locator('option')->count());
+        self::assertSame(1, $reasoning->locator('option')->count());
         self::assertSame('default', $reasoning->inputValue());
-        $reasoning->selectOption('off');
         $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
-        $page->getByText('Saved OM model llama_cpp/flash at Off.', ['exact' => true])->waitFor();
-        self::assertSame('off', $reasoning->inputValue());
-        self::assertTrue($page->locator('dl')->getByText('160,000 tokens', ['exact' => true])->isVisible());
+        $page->getByText('Saved OM model llama_cpp/flash at Provider default.', ['exact' => true])->waitFor();
+        self::assertSame('default', $reasoning->inputValue());
+        self::assertTrue($page->locator('dl')->getByText('200,000 tokens', ['exact' => true])->isVisible());
         $page->getByRole('link', ['name' => 'Logs'])->click();
         $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
         $source = $page->getByLabel('Source', ['exact' => true]);

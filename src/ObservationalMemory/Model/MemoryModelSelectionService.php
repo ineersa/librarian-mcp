@@ -22,9 +22,9 @@ final readonly class MemoryModelSelectionService
         private ObservationalMemorySelectionRepository $selections,
         private EntityManagerInterface $entityManager,
         private ClockInterface $clock,
-        #[Autowire('%env(default::MISTRAL_API_KEY)%')]
+        #[Autowire('%env(default::OPENCODE_API_KEY)%')]
         #[\SensitiveParameter]
-        private ?string $mistralApiKey = null,
+        private ?string $opencodeApiKey = null,
         #[Autowire('%env(default::ZAI_API_KEY)%')]
         #[\SensitiveParameter]
         private ?string $zaiApiKey = null,
@@ -129,7 +129,7 @@ final readonly class MemoryModelSelectionService
     private function credential(?string $keyEnv): ?string
     {
         $key = match ($keyEnv) {
-            MemoryModelCatalog::ENV_MISTRAL_API_KEY => $this->mistralApiKey,
+            MemoryModelCatalog::ENV_OPENCODE_API_KEY => $this->opencodeApiKey,
             MemoryModelCatalog::ENV_ZAI_API_KEY => $this->zaiApiKey,
             default => null,
         };
@@ -157,7 +157,6 @@ final readonly class MemoryModelSelectionService
             model: $model ?? $preset->reference(),
             reasoningLevel: $reasoningLevel,
             contextWindow: $contextWindow,
-            bridge: $preset->bridge,
             thinkingFormat: $preset->thinkingFormat,
             baseUrl: $preset->baseUrl,
             completionsPath: $preset->completionsPath,

@@ -18,7 +18,6 @@ final readonly class PinnedMemorySettings
         public string $model,
         public MemoryReasoningLevel $reasoningLevel,
         public int $contextWindow,
-        public MemoryModelBridge $bridge,
         public MemoryThinkingFormat $thinkingFormat,
         public ?string $baseUrl,
         public string $completionsPath,
