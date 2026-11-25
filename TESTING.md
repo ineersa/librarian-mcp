@@ -74,6 +74,8 @@ vendor/bin/castor test --headed -- tests/E2E/ProjectCrudTest.php
 
 Castor must not hardcode test filenames, method filters, or scenario selection. PHPUnit owns discovery and selection. There is no per-scenario Castor task or custom test coordinator.
 
+A fresh checkout needs no manual preparation before `test`: the stack preparation creates every directory Compose mounts under the read-only `/app` and builds the Tailwind stylesheet, downloading the Tailwind binary into `var/tailwind/` when it is missing.
+
 Use `test --headed` or `check --headed` only when the owner requests a visible run. Missing display access blocks a requested headed run; it does not justify silently changing modes.
 
 Run `cs:fix`, relevant saved happy-path scenarios, and `qa:static` after code changes. `check` is the combined static + browser gate. The default gate starts the real isolated application but must not exercise owner/production databases or private credentials.

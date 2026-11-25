@@ -12,6 +12,7 @@ enum MemoryModelProvider: string
     case LlamaCpp = 'llama_cpp';
     case OpencodeGo = 'opencode-go';
     case Zai = 'zai';
+    case Vllm = 'vllm';
 
     public function label(): string
     {
@@ -19,6 +20,7 @@ enum MemoryModelProvider: string
             self::LlamaCpp => 'Local llama.cpp',
             self::OpencodeGo => 'OpenCode Go',
             self::Zai => 'Z.ai',
+            self::Vllm => 'vLLM',
         };
     }
 
@@ -26,7 +28,7 @@ enum MemoryModelProvider: string
     {
         return match ($this) {
             self::LlamaCpp => false,
-            self::OpencodeGo, self::Zai => true,
+            self::OpencodeGo, self::Zai, self::Vllm => true,
         };
     }
 }

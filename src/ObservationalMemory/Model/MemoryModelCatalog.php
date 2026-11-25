@@ -8,10 +8,12 @@ namespace App\ObservationalMemory\Model;
  * Fixed OM provider/model catalog for EasyAdmin and runtime resolution.
  *
  * OpenCode Go IDs and reasoning levels follow the installed Hatfield catalog; Z.ai exposes GLM 5.3 Flash only.
+ * The vLLM Qwen preset is registered only when VLLM_BASE_URL is configured.
  */
 final class MemoryModelCatalog
 {
     public const string LOCAL_PRESET_ID = 'llama_cpp/flash';
+    public const string VLLM_PRESET_ID = 'vllm/Qwen3.8-27B';
 
     /**
      * Hardcoded local llama.cpp context window (tokens). Deliberately not env-overridable.
@@ -28,6 +30,7 @@ final class MemoryModelCatalog
 
     public const string ENV_OPENCODE_API_KEY = 'OPENCODE_API_KEY';
     public const string ENV_ZAI_API_KEY = 'ZAI_API_KEY';
+    public const string ENV_VLLM_API_KEY = 'VLLM_API_KEY';
 
     /**
      * @var array<string, MemoryModelPreset>|null
@@ -38,6 +41,7 @@ final class MemoryModelCatalog
         private readonly string $localModel,
         private readonly string $localModelUrl,
         private readonly ?string $localThinkingFormat,
+        private readonly ?string $vllmBaseUrl = null,
     ) {
     }
 
@@ -102,6 +106,8 @@ final class MemoryModelCatalog
         $lowHighMaxLevels = [MemoryReasoningLevel::Low, MemoryReasoningLevel::High, MemoryReasoningLevel::Max];
         $museSparkLevels = [MemoryReasoningLevel::Minimal, MemoryReasoningLevel::Low, MemoryReasoningLevel::Medium, MemoryReasoningLevel::High, MemoryReasoningLevel::Xhigh];
         $spaceBunnyLevels = [MemoryReasoningLevel::Low, MemoryReasoningLevel::Medium, MemoryReasoningLevel::High, MemoryReasoningLevel::Xhigh, MemoryReasoningLevel::Max];
+        // The server rejects reasoning_effort values other than low, medium and xhigh (its default).
+        $vllmLevels = [MemoryReasoningLevel::Low, MemoryReasoningLevel::Medium, MemoryReasoningLevel::Xhigh];
         $cloud = [
             new MemoryModelPreset(
                 id: 'opencode-go/deepseek-v4.1-flash',
@@ -179,6 +185,23 @@ final class MemoryModelCatalog
                 completionsPath: self::ZAI_COMPLETIONS_PATH,
             ),
         ];
+
+        if (null !== $this->vllmBaseUrl && '' !== trim($this->vllmBaseUrl)) {
+            $cloud[] = new MemoryModelPreset(
+                id: self::VLLM_PRESET_ID,
+                provider: MemoryModelProvider::Vllm,
+                modelId: 'Qwen3.8-27B',
+                label: 'Qwen3.8 27B',
+                thinkingFormat: MemoryThinkingFormat::ReasoningEffort,
+                defaultContextWindow: self::CLOUD_DEFAULT_CONTEXT_WINDOW,
+                maxContextWindow: self::CLOUD_DEFAULT_CONTEXT_WINDOW,
+                reasoningLevels: $vllmLevels,
+                defaultReasoningLevel: MemoryReasoningLevel::Low,
+                supportsTrueOff: false,
+                apiKeyEnv: self::ENV_VLLM_API_KEY,
+                baseUrl: rtrim($this->vllmBaseUrl, '/'),
+            );
+        }
 
         $presets = [$local->id => $local];
         foreach ($cloud as $preset) {

@@ -40,6 +40,21 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $page->getByText('Saved OM model llama_cpp/flash at High.', ['exact' => true])->waitFor();
         self::assertSame('high', $reasoning->inputValue());
         self::assertTrue($page->locator('dl')->getByText('200,000 tokens', ['exact' => true])->isVisible());
+        // The vLLM preset exists only because .env.test sets a dummy VLLM_BASE_URL; it is never called.
+        $model->selectOption('vllm/Qwen3.8-27B');
+        $reasoning->locator('option[value="xhigh"]')->waitFor(['state' => 'attached']);
+        self::assertSame(['low', 'medium', 'xhigh'], $reasoning->evaluate('el => Array.from(el.options, (option) => option.value)'));
+        self::assertSame('low', $reasoning->inputValue());
+        $reasoning->selectOption('medium');
+        $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
+        $page->getByText('Saved OM model vllm/Qwen3.8-27B at Medium.', ['exact' => true])->waitFor();
+        self::assertSame('vllm/Qwen3.8-27B', $model->inputValue());
+        self::assertSame('medium', $reasoning->inputValue());
+        $model->selectOption('llama_cpp/flash');
+        $reasoning->locator('option[value="high"]')->waitFor(['state' => 'attached']);
+        $reasoning->selectOption('high');
+        $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
+        $page->getByText('Saved OM model llama_cpp/flash at High.', ['exact' => true])->waitFor();
         $page->getByRole('link', ['name' => 'Logs'])->click();
         $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
         $source = $page->getByLabel('Source', ['exact' => true]);

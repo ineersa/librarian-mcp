@@ -497,8 +497,13 @@ function developmentStack(string $mode, string $action): int
                     }
                 }
                 if ('browser' === $mode) {
+                    // Compose cannot create mountpoints inside the read-only /app checkout mount:
+                    // every nested bind target must exist, and writable sources are pre-created
+                    // as the host user so Docker does not create them as root.
                     foreach ([
                         '/var/mcp-sessions',
+                        '/var/cache',
+                        '/var/log',
                         '/var/browser-live',
                         '/var/browser-live/cache',
                         '/var/browser-live/log',
@@ -517,6 +522,13 @@ function developmentStack(string $mode, string $action): int
                     $fixtures = report('test:sources:prepare', ['php', 'tests/Support/prepare_project_sources.php']);
                     if (0 !== $fixtures) {
                         return $fixtures;
+                    }
+                    // Admin pages need the built Tailwind stylesheet. The bundle only serves it
+                    // once var/tailwind/app.built.css exists, and the checkout is read-only inside
+                    // the browser stack, so build it here (this downloads the binary when missing).
+                    $styles = report('test:styles:build', ['php', 'bin/console', 'tailwind:build', '--no-interaction']);
+                    if (0 !== $styles) {
+                        return $styles;
                     }
                 }
                 ensureStackNetwork($mode);
