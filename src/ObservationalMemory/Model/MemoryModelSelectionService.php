@@ -28,6 +28,9 @@ final readonly class MemoryModelSelectionService
         #[Autowire('%env(default::ZAI_API_KEY)%')]
         #[\SensitiveParameter]
         private ?string $zaiApiKey = null,
+        #[Autowire('%env(default::VLLM_API_KEY)%')]
+        #[\SensitiveParameter]
+        private ?string $vllmApiKey = null,
     ) {
     }
 
@@ -141,6 +144,7 @@ final readonly class MemoryModelSelectionService
         $key = match ($keyEnv) {
             MemoryModelCatalog::ENV_OPENCODE_API_KEY => $this->opencodeApiKey,
             MemoryModelCatalog::ENV_ZAI_API_KEY => $this->zaiApiKey,
+            MemoryModelCatalog::ENV_VLLM_API_KEY => $this->vllmApiKey,
             default => null,
         };
 

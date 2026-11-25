@@ -15,6 +15,8 @@ parameters:
     env(OM_OBSERVATIONS_MAX_TOKENS): '30000'
     env(OPENCODE_API_KEY): ''
     env(ZAI_API_KEY): ''
+    env(VLLM_BASE_URL): ''
+    env(VLLM_API_KEY): ''
 
 services:
     _defaults:
@@ -36,3 +38,4 @@ services:
             $localModel: '%env(OM_MODEL)%'
             $localModelUrl: '%env(OM_MODEL_URL)%'
             $localThinkingFormat: '%env(default::OM_MODEL_THINKING_FORMAT)%'
+            $vllmBaseUrl: '%env(default::VLLM_BASE_URL)%'
