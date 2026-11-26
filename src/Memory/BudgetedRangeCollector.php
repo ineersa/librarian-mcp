@@ -22,14 +22,9 @@ use App\ObservationalMemory\Observer\SessionEventDTO;
  */
 final class BudgetedRangeCollector
 {
-    /** Same event types and fields OmSourceBlockBuilder pairs on. */
-    private const string EVENT_TOOL_CALLS = 'llm_step_completed';
-    private const string EVENT_TOOL_RESULT = 'tool_execution_end';
-
     /** @var list<SessionEventDTO> */
     private array $events = [];
-    /** @var array<string, OpenToolCallRef> */
-    private array $openCalls = [];
+    private OpenToolCalls $openCalls;
     /** @var array{seq: int, end: int}|null */
     private ?array $last = null;
     private int $spent = 0;
@@ -43,9 +38,7 @@ final class BudgetedRangeCollector
         array $carried = [],
         private readonly int $budgetBytes = JsonlLines::RANGE_BUDGET_BYTES,
     ) {
-        foreach ($carried as $call) {
-            $this->openCalls[$call->id] = $call;
-        }
+        $this->openCalls = new OpenToolCalls($carried);
     }
 
     /**
@@ -63,7 +56,7 @@ final class BudgetedRangeCollector
                 continue;
             }
             $this->events[] = $event;
-            $this->track($event, $start, $end);
+            $this->openCalls->track($event, $start, $end);
             $kept = true;
         }
         $this->last = ['seq' => $seq, 'end' => $end];
@@ -73,7 +66,7 @@ final class BudgetedRangeCollector
         if ($seq >= $this->endSeq || $this->spent < $this->budgetBytes) {
             return true;
         }
-        if ([] === $this->openCalls) {
+        if ($this->openCalls->isEmpty()) {
             $this->truncated = true;
 
             return false;
@@ -112,7 +105,7 @@ final class BudgetedRangeCollector
             $ids = array_fill_keys(array_map(static fn (OpenToolCallRef $ref): string => $ref->id, $lineRefs), true);
             foreach ($eventsForLine($line, $lineRefs[0]->seq) as $event) {
                 $assistant = $event->payload['assistant_message'] ?? null;
-                if (self::EVENT_TOOL_CALLS !== $event->type || !\is_array($assistant) || !\is_array($assistant['tool_calls'] ?? null)) {
+                if (OpenToolCalls::EVENT_TOOL_CALLS !== $event->type || !\is_array($assistant) || !\is_array($assistant['tool_calls'] ?? null)) {
                     continue;
                 }
                 $calls = array_values(array_filter(
@@ -141,7 +134,7 @@ final class BudgetedRangeCollector
     {
         $last = $this->last;
         // Open calls only travel with a forced cut; at the requested end they flush unmatched as before.
-        $openCalls = $this->truncated ? $this->carriedCalls() : [];
+        $openCalls = $this->truncated ? $this->openCalls->sorted() : [];
 
         return new SessionSourceRange(
             $this->events,
@@ -150,39 +143,5 @@ final class BudgetedRangeCollector
             $this->truncated,
             $carried,
         );
-    }
-
-    /**
-     * Earliest open calls first. Every outstanding call is preserved so a
-     * continuation can re-read its source line and pair it with its result.
-     *
-     * @return list<OpenToolCallRef>
-     */
-    private function carriedCalls(): array
-    {
-        $calls = array_values($this->openCalls);
-        usort($calls, static fn (OpenToolCallRef $a, OpenToolCallRef $b): int => $a->offset <=> $b->offset);
-
-        return $calls;
-    }
-
-    private function track(SessionEventDTO $event, int $start, int $end): void
-    {
-        if (self::EVENT_TOOL_CALLS === $event->type) {
-            $assistant = $event->payload['assistant_message'] ?? null;
-            $toolCalls = \is_array($assistant) ? ($assistant['tool_calls'] ?? null) : null;
-            foreach (\is_array($toolCalls) ? $toolCalls : [] as $toolCall) {
-                $id = \is_array($toolCall) ? (string) ($toolCall['id'] ?? $toolCall['tool_call_id'] ?? '') : '';
-                if ('' !== $id) {
-                    $this->openCalls[$id] = new OpenToolCallRef($id, $event->seq, $start, $end - $start);
-                }
-            }
-        } elseif (self::EVENT_TOOL_RESULT === $event->type) {
-            $result = $event->payload['tool_result'] ?? null;
-            $id = \is_array($result) ? ($result['tool_call_id'] ?? null) : null;
-            if (\is_string($id) || \is_int($id)) {
-                unset($this->openCalls[(string) $id]);
-            }
-        }
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Memory;
 
+use App\ObservationalMemory\Observer\OmSourceBlockBuilder;
 use App\ObservationalMemory\Observer\SessionEventDTO;
 
 /**
@@ -99,7 +100,7 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         return $ids;
     }
 
-    /** Unterminated last lines are still being written and are ignored. */
+    /** Unterminated last lines are still being written and are ignored; ranges never end between a call and its result. */
     public function rangeEndSeqs(string $sourceRoot, string $sessionId, int $coveredSeq, int $rangeBytes): array
     {
         if ($coveredSeq < 0 || $rangeBytes < 1) {
@@ -117,13 +118,23 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         $ends = [];
         $seq = 0;
         $bytes = 0;
+        $openCalls = new OpenToolCalls();
+        /** @var array<string, string> $toolNames */
+        $toolNames = [];
         try {
             foreach (JsonlLines::completeLines($handle, 0, JsonlLines::size($handle)) as $read) {
                 if (++$seq <= $coveredSeq) {
                     continue;
                 }
                 $bytes += $read['end'] - $read['start'];
-                if ($bytes >= $rangeBytes) {
+                $record = $this->decode($read['line']);
+                foreach (null === $record ? [] : $this->eventsFor($record, $sessionId, $seq, $toolNames) as $event) {
+                    if (\in_array($event->type, OmSourceBlockBuilder::RENDERED_EVENT_TYPES, true)) {
+                        $openCalls->track($event, $read['start'], $read['end']);
+                    }
+                }
+                // A requested end flushes open calls unmatched, so only cut where none is waiting.
+                if ($bytes >= $rangeBytes && $openCalls->isEmpty()) {
                     $ends[] = $seq;
                     $bytes = 0;
                 }

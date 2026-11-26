@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Memory;
 
+use App\ObservationalMemory\Observer\OmSourceBlockBuilder;
 use App\ObservationalMemory\Observer\SessionEventDTO;
 
 /**
@@ -237,6 +238,7 @@ final class SessionEventsJournalReader implements SessionSourceReader
         $ends = [];
         $bytes = 0;
         $lastSeq = 0;
+        $openCalls = new OpenToolCalls();
         try {
             // Only committed bytes: an append Hatfield has not finalized is not readable yet.
             $cut = $this->committedCut($pathOrError['path'], JsonlLines::size($handle));
@@ -250,7 +252,11 @@ final class SessionEventsJournalReader implements SessionSourceReader
                 }
                 $bytes += $read['end'] - $read['start'];
                 $lastSeq = $event->seq;
-                if ($bytes >= $rangeBytes) {
+                if (\in_array($event->type, OmSourceBlockBuilder::RENDERED_EVENT_TYPES, true)) {
+                    $openCalls->track($event, $read['start'], $read['end']);
+                }
+                // A requested end flushes open calls unmatched, so only cut where none is waiting.
+                if ($bytes >= $rangeBytes && $openCalls->isEmpty()) {
                     $ends[] = $lastSeq;
                     $bytes = 0;
                 }
