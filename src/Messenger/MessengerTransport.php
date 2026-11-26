@@ -10,13 +10,14 @@ enum MessengerTransport: string
 {
     case Async = 'async';
     case Om = 'om';
+    case OmReflect = 'om_reflect';
     case Cron = CronSchedule::TRANSPORT;
     case Failed = 'failed';
 
     /** @return list<self> */
     public static function monitored(): array
     {
-        return [self::Async, self::Om, self::Cron];
+        return [self::Async, self::Om, self::OmReflect, self::Cron];
     }
 
     public function queueName(): string

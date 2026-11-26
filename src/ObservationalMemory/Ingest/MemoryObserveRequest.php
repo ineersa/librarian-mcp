@@ -75,6 +75,19 @@ final readonly class MemoryObserveRequest
         );
     }
 
+    /**
+     * Internal signal for a range of an existing source (admin backfill); identical to an HTTP signal
+     * with the default terminal status.
+     */
+    public static function forRange(MemorySourceKind $sourceKind, string $sessionId, int $endSeq): self
+    {
+        if ($endSeq < 1) {
+            throw new \InvalidArgumentException('end_seq must be an integer >= 1.');
+        }
+
+        return new self($sourceKind, self::identifier($sessionId, 'session_id'), null, $endSeq, MemoryTerminalStatus::Completed);
+    }
+
     private static function identifier(mixed $value, string $field): string
     {
         // Same constraints as the journal reader's session directory names.

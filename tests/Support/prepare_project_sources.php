@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Index\Source\MemoryKind;
+use App\Memory\ClaudeTranscriptReader;
 use App\Tests\Support\ProjectSourceFixture;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
@@ -31,6 +32,8 @@ const OM_SCHEMA_VERSIONS = [
 ];
 
 const PROJECT_SOURCE_SLUGS = ['default-om', 'custom-relative'];
+const CLAUDE_PROJECTS_DIRECTORY = 'claude-projects';
+const CLAUDE_FIXTURE_SESSION_ID = '0f0e0d0c-0b0a-4908-8706-050403020100';
 
 $projectDir = dirname(__DIR__, 2);
 $targetRoot = $projectDir.'/var/browser-live/project-sources';
@@ -44,6 +47,7 @@ if (file_exists($targetRoot)) {
     prepareMemoryToolProjects($targetRoot);
     ensureFixtureOmGenerationTables($targetRoot);
     prepareBackupFixtures($targetRoot);
+    prepareClaudeTranscripts($targetRoot);
     echo "Synthetic project sources already prepared at {$targetRoot}\n";
     exit(0);
 }
@@ -72,6 +76,7 @@ assertPreparedProjectSources($targetRoot);
 prepareMemoryToolProjects($targetRoot);
 ensureFixtureOmGenerationTables($targetRoot);
 prepareBackupFixtures($targetRoot);
+prepareClaudeTranscripts($targetRoot);
 echo "Prepared synthetic project sources at {$targetRoot}\n";
 echo "Visible mount: /project-sources\n";
 echo "HATFIELD_USER_HOME=/synthetic-home -> /project-sources/context-home\n";
@@ -158,6 +163,25 @@ function refreshDefaultOmRecallFixtures(string $path): void
         canonicalIds: true,
     );
     writeSessionJournal($path.'/.hatfield/sessions/108/events.jsonl', '108', 2);
+}
+
+/**
+ * One synthetic Claude Code transcript for default-om at CLAUDE_PROJECTS_PATH
+ * (/project-sources/claude-projects in the browser stack), for the backfill action.
+ */
+function prepareClaudeTranscripts(string $targetRoot): void
+{
+    $directory = $targetRoot.'/'.CLAUDE_PROJECTS_DIRECTORY.'/'.ClaudeTranscriptReader::encodeProjectRoot(ProjectSourceFixture::visibleProjectPath('default-om'));
+    $lines = [
+        ['type' => 'user', 'isSidechain' => false, 'sessionId' => CLAUDE_FIXTURE_SESSION_ID, 'timestamp' => '2026-11-25T10:00:00.000Z',
+            'message' => ['role' => 'user', 'content' => 'synthetic claude question fx-claude']],
+        ['type' => 'assistant', 'isSidechain' => false, 'sessionId' => CLAUDE_FIXTURE_SESSION_ID, 'timestamp' => '2026-11-25T10:00:05.000Z',
+            'message' => ['role' => 'assistant', 'content' => [['type' => 'text', 'text' => 'synthetic claude answer fx-claude']]]],
+    ];
+    writeFile(
+        $directory.'/'.CLAUDE_FIXTURE_SESSION_ID.'.jsonl',
+        implode('', array_map(static fn (array $line): string => json_encode($line, \JSON_THROW_ON_ERROR)."\n", $lines)),
+    );
 }
 
 function prepareBackupFixtures(string $targetRoot): void

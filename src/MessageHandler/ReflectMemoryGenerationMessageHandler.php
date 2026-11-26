@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Entity\MemoryGenerationFailureCode;
+use App\Entity\MemorySourceKind;
 use App\Index\ProjectIndexManager;
 use App\Message\ReflectMemoryGenerationMessage;
 use App\ObservationalMemory\Compaction\DropperPipeline;
@@ -13,6 +14,7 @@ use App\ObservationalMemory\Compaction\ReflectorPipeline;
 use App\ObservationalMemory\MemorySessionLock;
 use App\ObservationalMemory\MemorySessionWorkOutcome;
 use App\ObservationalMemory\Model\MemoryModelSelectionService;
+use App\ObservationalMemory\Model\MemoryTokenLimits;
 use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Observer\OmTokenEstimator;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
@@ -27,6 +29,7 @@ use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 
 /**
  * Port of OM ReflectGenerationJobHandler: delta Reflector then conditional bounded Dropper.
+ * Routed to the `om_reflect` transport, which the OM consumer polls before `om`.
  */
 #[AsMessageHandler]
 final readonly class ReflectMemoryGenerationMessageHandler
@@ -39,6 +42,7 @@ final readonly class ReflectMemoryGenerationMessageHandler
         private ObservationRepository $observationRepo,
         private MemoryGenerationRepository $generationRepo,
         private MemoryModelSelectionService $selections,
+        private MemoryTokenLimits $tokenLimits,
         private ProjectIndexManager $projectIndexManager,
         private ClockInterface $clock,
         private LoggerInterface $logger,
@@ -56,7 +60,10 @@ final readonly class ReflectMemoryGenerationMessageHandler
         $generationId = $message->generationId;
         $model = $message->reflectorModel;
         $reflectorSchemaVersion = $message->reflectorSchemaVersion;
-        $settings = $this->resolveSettings($message);
+        $sourceKind = MemorySourceKind::tryFrom($session['source_kind'])
+            ?? throw new UnrecoverableMessageHandlingException('Unknown memory source kind.');
+        // Limits are read per source kind when the job runs; the identity pins model and schema only.
+        $settings = $this->tokenLimits->apply($this->resolveSettings($message), $sourceKind);
 
         $expectedId = OmIdentity::thresholdGenerationId(
             $runId,

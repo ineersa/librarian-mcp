@@ -16,6 +16,7 @@ use App\Index\Status\ProjectIndexStatusFactory;
 use App\Index\Status\ProjectStatusTopics;
 use App\Memory\MemoryRecall;
 use App\Messenger\Monitor\MessengerStatsProvider;
+use App\ObservationalMemory\Ingest\ClaudeSessionBackfill;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\ObservationRepository;
 use App\ObservationalMemory\Storage\ObserverCoverageReader;
@@ -44,9 +45,11 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Form\Extension\Core\Type\FormType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Security\Http\Attribute\IsCsrfTokenValid;
 
 /**
  * @extends AbstractCrudController<Project>
@@ -59,6 +62,7 @@ class ProjectCrudController extends AbstractCrudController
     public const string RETURN_INDEX = 'index';
     public const string RETURN_SEARCH = 'search';
     public const string MEMORY_ID_QUERY = 'memoryId';
+    public const string BACKFILL_CLAUDE_CSRF_ID = 'project_backfill_claude';
 
     /** @var array<string, string> */
     public const array RELEVANCE_BADGE_COLORS = [
@@ -71,6 +75,7 @@ class ProjectCrudController extends AbstractCrudController
     private const string ACTION_SEARCH_MEMORY = 'searchMemory';
     private const string ACTION_OM_INDEX = 'omIndex';
     private const string ACTION_RECALL_MEMORY = 'recallMemory';
+    private const string ACTION_BACKFILL_CLAUDE = 'backfillClaude';
     private const string SESSION_FILTER_FORM = 'memory_filter';
     private const string SESSION_FILTER_FIELD = 'session';
 
@@ -88,6 +93,7 @@ class ProjectCrudController extends AbstractCrudController
         private readonly ObserverCoverageReader $coverage,
         private readonly MessengerStatsProvider $messengerStats,
         private readonly RequestStack $requests,
+        private readonly ClaudeSessionBackfill $claudeBackfill,
     ) {
     }
 
@@ -224,6 +230,12 @@ class ProjectCrudController extends AbstractCrudController
         $omIndex = Action::new(self::ACTION_OM_INDEX, 'OM index details', 'fa fa-book-open')
             ->linkToCrudAction(self::ACTION_OM_INDEX)
             ->addCssClass('btn btn-outline-secondary');
+        $backfillClaude = Action::new(self::ACTION_BACKFILL_CLAUDE, 'Backfill Claude sessions', 'fa fa-clock-rotate-left')
+            ->linkToCrudAction(self::ACTION_BACKFILL_CLAUDE)
+            // POST form with a CSRF token; EasyAdmin's renderAsForm() renders no token.
+            ->setTemplatePath('admin/project/_backfill_claude_action.html.twig')
+            ->addCssClass('btn btn-outline-secondary')
+            ->displayIf(fn (Project $project): bool => $this->claudeBackfill->isAvailable($project));
 
         return $actions
             ->disable(Action::EDIT)
@@ -234,10 +246,11 @@ class ProjectCrudController extends AbstractCrudController
                 ->addCssClass('d-none'))
             ->add(Crud::PAGE_INDEX, $searchMemory)
             ->add(Crud::PAGE_INDEX, $omIndex)
+            ->add(Crud::PAGE_INDEX, $backfillClaude)
             ->update(Crud::PAGE_INDEX, Action::DELETE, static fn (Action $action) => $action
                 ->setLabel('Delete')
                 ->setIcon('fa fa-trash'))
-            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_OM_INDEX, self::ACTION_SEARCH_MEMORY, Action::DELETE])
+            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_OM_INDEX, self::ACTION_SEARCH_MEMORY, self::ACTION_BACKFILL_CLAUDE, Action::DELETE])
             ->setPermission(Action::DELETE, 'ROLE_ADMIN');
     }
 
@@ -327,6 +340,32 @@ class ProjectCrudController extends AbstractCrudController
 
         // Registration removal must never delete source project files.
         $this->projectIndexManager->removeRegistration($entityInstance);
+    }
+
+    /**
+     * Queues observe signals for the project's existing Claude transcripts; never runs models.
+     *
+     * @param AdminContext<Project> $context
+     */
+    #[AdminRoute(path: '/{entityId}/backfill-claude', name: 'backfill-claude', options: ['methods' => [Request::METHOD_POST]])]
+    #[IsCsrfTokenValid(self::BACKFILL_CLAUDE_CSRF_ID)]
+    public function backfillClaude(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
+    {
+        /** @var Project $project */
+        $project = $context->getEntity()->getInstance();
+        if (null === $project->id || !$this->claudeBackfill->isAvailable($project)) {
+            throw $this->createNotFoundException('Claude transcripts for this project are not available.');
+        }
+
+        $result = $this->claudeBackfill->queue($project);
+        $this->addFlash('success', \sprintf(
+            'Queued %d observe job(s) for %d Claude session(s); %d session(s) already covered.',
+            $result->signals,
+            $result->queuedSessions,
+            $result->skippedSessions,
+        ));
+
+        return $this->redirect($urlGenerator->setController(self::class)->setAction(Action::INDEX)->unset('entityId')->generateUrl());
     }
 
     /**

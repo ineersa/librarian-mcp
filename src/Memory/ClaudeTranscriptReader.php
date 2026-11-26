@@ -84,6 +84,71 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         return false === $files ? 0 : \count($files);
     }
 
+    /**
+     * Session ids of the transcripts directly inside the directory, sorted.
+     *
+     * @return list<string>
+     */
+    public function sessionIds(string $transcriptDirectory): array
+    {
+        $files = glob($transcriptDirectory.\DIRECTORY_SEPARATOR.'*'.self::TRANSCRIPT_EXTENSION);
+        $ids = [];
+        foreach (false === $files ? [] : $files as $file) {
+            $id = basename($file, self::TRANSCRIPT_EXTENSION);
+            if (1 === preg_match(self::SESSION_ID_PATTERN, $id)) {
+                $ids[] = $id;
+            }
+        }
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * End seqs that split the complete lines after $coveredSeq into consecutive ranges of about
+     * $rangeBytes raw bytes each; the last one is the final complete line. Empty when nothing
+     * past $coveredSeq is complete. Unterminated last lines are still being written and are ignored.
+     *
+     * @return list<int>
+     */
+    public function rangeEndSeqs(string $transcriptDirectory, string $sessionId, int $coveredSeq, int $rangeBytes): array
+    {
+        if ($coveredSeq < 0 || $rangeBytes < 1) {
+            throw new \InvalidArgumentException('Transcript ranges require covered_seq >= 0 and range_bytes >= 1.');
+        }
+        $pathOrError = $this->resolveTranscriptPath($transcriptDirectory, $sessionId);
+        if (!isset($pathOrError['path'])) {
+            throw new \RuntimeException($pathOrError['message']);
+        }
+        $handle = @fopen($pathOrError['path'], 'rb');
+        if (false === $handle) {
+            throw new \RuntimeException('Claude transcript is unreadable.');
+        }
+
+        $ends = [];
+        $seq = 0;
+        $bytes = 0;
+        try {
+            foreach (JsonlLines::completeLines($handle, 0, JsonlLines::size($handle)) as $read) {
+                if (++$seq <= $coveredSeq) {
+                    continue;
+                }
+                $bytes += $read['end'] - $read['start'];
+                if ($bytes >= $rangeBytes) {
+                    $ends[] = $seq;
+                    $bytes = 0;
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+        if ($bytes > 0) {
+            $ends[] = $seq;
+        }
+
+        return $ends;
+    }
+
     public function readRange(string $sourceRoot, string $sessionId, int $startSeq, int $endSeq, ?SourceCheckpoint $from = null): SessionSourceRange
     {
         if ($startSeq < 1 || $endSeq < $startSeq) {

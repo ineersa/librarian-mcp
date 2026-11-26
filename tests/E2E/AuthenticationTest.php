@@ -19,7 +19,7 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         self::assertTrue($page->getByRole('heading', ['name' => 'Projects dashboard', 'exact' => true])->isVisible());
         $this->assertPageContains('Librarian MCP');
         $stats = $page->locator('#messenger-stats');
-        foreach (['async', 'om', 'cron'] as $transport) {
+        foreach (['async', 'om', 'om_reflect', 'cron'] as $transport) {
             $card = $stats->locator(\sprintf('.card:has(h3:text-is("%s"))', $transport));
             self::assertMatchesRegularExpression('/Queued:\s*\d+.*Delayed retries:\s*\d+/s', $card->innerText());
         }
@@ -55,6 +55,19 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         $reasoning->selectOption('high');
         $page->getByRole('button', ['name' => 'Save OM model', 'exact' => true])->click();
         $page->getByText('Saved OM model llama_cpp/flash at High.', ['exact' => true])->waitFor();
+        // Per-source OM token limits: the singleton opens on its edit page with the env defaults.
+        $page->getByRole('link', ['name' => 'Settings'])->click();
+        $claudeReflect = $page->getByLabel('Claude reflect after (tokens)', ['exact' => true]);
+        $claudeReflect->waitFor();
+        self::assertSame('40000', $claudeReflect->inputValue());
+        self::assertSame('30000', $page->getByLabel('Claude observations max (tokens)', ['exact' => true])->inputValue());
+        self::assertSame('40000', $page->getByLabel('Hatfield reflect after (tokens)', ['exact' => true])->inputValue());
+        self::assertSame('30000', $page->getByLabel('Hatfield observations max (tokens)', ['exact' => true])->inputValue());
+        $claudeReflect->fill('35000');
+        $page->getByRole('button', ['name' => 'Save settings', 'exact' => true])->click();
+        $page->getByText('Saved settings.', ['exact' => true])->waitFor();
+        self::assertSame('35000', $page->getByLabel('Claude reflect after (tokens)', ['exact' => true])->inputValue());
+        self::assertSame('40000', $page->getByLabel('Hatfield reflect after (tokens)', ['exact' => true])->inputValue());
         $page->getByRole('link', ['name' => 'Logs'])->click();
         $page->getByRole('heading', ['name' => 'Operations logs'])->waitFor();
         $source = $page->getByLabel('Source', ['exact' => true]);

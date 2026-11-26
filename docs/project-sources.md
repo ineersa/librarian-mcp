@@ -69,7 +69,7 @@ Config surface:
 - `BGE_URL`, `BGE_MODEL`
 - `INDEX_INTERVAL`, `LOCK_DSN`
 
-The `worker` consumes Messenger `async` and `scheduler_default` (plus `scheduler_cron`/`cron` for [backups](backups.md)); memory generation runs on the separate `om` transport and `om-worker` consumer. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs for registered projects (default interval 60s); successful discovery queues incremental indexing. Last source/index check is shown separately from last successful index. An unchanged revision is checked, not rebuilt.
+The `worker` consumes Messenger `async` and `scheduler_default` (plus `scheduler_cron`/`cron` for [backups](backups.md)); memory generation runs on the separate `om_reflect` (Reflector, polled first) and `om` transports and the `om-worker` consumer. Scheduler uses `CallbackMessageProvider` to yield source-discovery jobs for registered projects (default interval 60s); successful discovery queues incremental indexing. Last source/index check is shown separately from last successful index. An unchanged revision is checked, not rebuilt.
 
 ## Docker source mounts
 

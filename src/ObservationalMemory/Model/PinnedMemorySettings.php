@@ -46,6 +46,27 @@ final readonly class PinnedMemorySettings
         $this->providerModelName = substr($model, strpos($model, '/') + 1);
     }
 
+    public function withTokenLimits(int $reflectAfterObservationTokens, int $observationsMaxTokens): self
+    {
+        return new self(
+            presetId: $this->presetId,
+            model: $this->model,
+            reasoningLevel: $this->reasoningLevel,
+            contextWindow: $this->contextWindow,
+            thinkingFormat: $this->thinkingFormat,
+            baseUrl: $this->baseUrl,
+            completionsPath: $this->completionsPath,
+            apiKeyEnv: $this->apiKeyEnv,
+            supportsTrueOff: $this->supportsTrueOff,
+            observerContextWindowRatio: $this->observerContextWindowRatio,
+            reflectAfterObservationTokens: $reflectAfterObservationTokens,
+            observationsMaxTokens: $observationsMaxTokens,
+            rendererVersion: $this->rendererVersion,
+            observerSchemaVersion: $this->observerSchemaVersion,
+            reflectorSchemaVersion: $this->reflectorSchemaVersion,
+        );
+    }
+
     public function observerEnvelope(): int
     {
         return (int) floor($this->contextWindow * $this->observerContextWindowRatio);

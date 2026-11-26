@@ -149,6 +149,13 @@ final class ProjectCrudTest extends LibrarianNetworkBrowserTest
 
             ProjectSourceFixture::assertUnchanged($before, ProjectSourceFixture::hashTree($builderPath), 'default-om after session deletion');
 
+            // Existing Claude transcripts are queued as ordinary observe jobs; the journey asserts
+            // the queuing only. Removing the project right after makes any queued job inert.
+            $this->openProjectsIndex();
+            $this->page->locator('tr[data-project-id="'.$projectId.'"]')
+                ->getByRole('button', ['name' => 'Backfill Claude sessions', 'exact' => true])->click();
+            $this->page->getByText('Queued 1 observe job(s) for 1 Claude session(s); 0 session(s) already covered.', ['exact' => true])->waitFor();
+
             $this->deleteRecord('/admin/projects/'.$projectId);
             $this->openProjectsIndex();
             self::assertSame(0, $this->page->locator('tr[data-project-id="'.$projectId.'"]')->count());
