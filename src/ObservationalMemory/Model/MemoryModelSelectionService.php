@@ -31,6 +31,9 @@ final readonly class MemoryModelSelectionService
         #[Autowire('%env(default::VLLM_API_KEY)%')]
         #[\SensitiveParameter]
         private ?string $vllmApiKey = null,
+        #[Autowire('%env(default::INKLING_API_KEY)%')]
+        #[\SensitiveParameter]
+        private ?string $inklingApiKey = null,
     ) {
     }
 
@@ -145,6 +148,7 @@ final readonly class MemoryModelSelectionService
             MemoryModelCatalog::ENV_OPENCODE_API_KEY => $this->opencodeApiKey,
             MemoryModelCatalog::ENV_ZAI_API_KEY => $this->zaiApiKey,
             MemoryModelCatalog::ENV_VLLM_API_KEY => $this->vllmApiKey,
+            MemoryModelCatalog::ENV_INKLING_API_KEY => $this->inklingApiKey,
             default => null,
         };
 

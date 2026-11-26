@@ -13,6 +13,7 @@ enum MemoryModelProvider: string
     case OpencodeGo = 'opencode-go';
     case Zai = 'zai';
     case Vllm = 'vllm';
+    case Hyperinkling = 'hyperinkling';
 
     public function label(): string
     {
@@ -21,6 +22,7 @@ enum MemoryModelProvider: string
             self::OpencodeGo => 'OpenCode Go',
             self::Zai => 'Z.ai',
             self::Vllm => 'vLLM',
+            self::Hyperinkling => 'Inkling (vLLM)',
         };
     }
 
@@ -28,7 +30,7 @@ enum MemoryModelProvider: string
     {
         return match ($this) {
             self::LlamaCpp => false,
-            self::OpencodeGo, self::Zai, self::Vllm => true,
+            self::OpencodeGo, self::Zai, self::Vllm, self::Hyperinkling => true,
         };
     }
 }

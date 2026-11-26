@@ -8,12 +8,15 @@ namespace App\ObservationalMemory\Model;
  * Fixed OM provider/model catalog for EasyAdmin and runtime resolution.
  *
  * OpenCode Go IDs and reasoning levels follow the installed Hatfield catalog; Z.ai exposes GLM 5.3 Flash only.
- * The vLLM Qwen preset is registered only when VLLM_BASE_URL is configured.
+ * The vLLM Qwen preset is registered only when VLLM_BASE_URL is configured; the vLLM Inkling preset only
+ * when INKLING_BASE_URL is configured.
  */
 final class MemoryModelCatalog
 {
     public const string LOCAL_PRESET_ID = 'llama_cpp/flash';
     public const string VLLM_PRESET_ID = 'vllm/Qwen3.8-27B';
+    public const string INKLING_PRESET_ID = 'hyperinkling/inkling-2-mini';
+    public const int INKLING_MAX_CONTEXT_WINDOW = 268_544;
 
     /**
      * Hardcoded local llama.cpp context window (tokens). Deliberately not env-overridable.
@@ -31,6 +34,7 @@ final class MemoryModelCatalog
     public const string ENV_OPENCODE_API_KEY = 'OPENCODE_API_KEY';
     public const string ENV_ZAI_API_KEY = 'ZAI_API_KEY';
     public const string ENV_VLLM_API_KEY = 'VLLM_API_KEY';
+    public const string ENV_INKLING_API_KEY = 'INKLING_API_KEY';
 
     /**
      * @var array<string, MemoryModelPreset>|null
@@ -42,6 +46,7 @@ final class MemoryModelCatalog
         private readonly string $localModelUrl,
         private readonly ?string $localThinkingFormat,
         private readonly ?string $vllmBaseUrl = null,
+        private readonly ?string $inklingBaseUrl = null,
     ) {
     }
 
@@ -200,6 +205,32 @@ final class MemoryModelCatalog
                 supportsTrueOff: false,
                 apiKeyEnv: self::ENV_VLLM_API_KEY,
                 baseUrl: rtrim($this->vllmBaseUrl, '/'),
+            );
+        }
+
+        if (null !== $this->inklingBaseUrl && '' !== trim($this->inklingBaseUrl)) {
+            $cloud[] = new MemoryModelPreset(
+                id: self::INKLING_PRESET_ID,
+                provider: MemoryModelProvider::Hyperinkling,
+                modelId: 'inkling-2-mini',
+                label: 'Inkling 2 Mini',
+                thinkingFormat: MemoryThinkingFormat::ReasoningEffort,
+                defaultContextWindow: self::CLOUD_DEFAULT_CONTEXT_WINDOW,
+                maxContextWindow: self::INKLING_MAX_CONTEXT_WINDOW,
+                reasoningLevels: [
+                    MemoryReasoningLevel::Off,
+                    MemoryReasoningLevel::Minimal,
+                    MemoryReasoningLevel::Low,
+                    MemoryReasoningLevel::Medium,
+                    MemoryReasoningLevel::High,
+                    MemoryReasoningLevel::Xhigh,
+                    MemoryReasoningLevel::Max,
+                ],
+                defaultReasoningLevel: MemoryReasoningLevel::Low,
+                // Hatfield maps "off" to reasoning_effort "none" for this server.
+                supportsTrueOff: true,
+                apiKeyEnv: self::ENV_INKLING_API_KEY,
+                baseUrl: rtrim($this->inklingBaseUrl, '/'),
             );
         }
 

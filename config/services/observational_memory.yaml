@@ -17,6 +17,8 @@ parameters:
     env(ZAI_API_KEY): ''
     env(VLLM_BASE_URL): ''
     env(VLLM_API_KEY): ''
+    env(INKLING_BASE_URL): ''
+    env(INKLING_API_KEY): ''
 
 services:
     _defaults:
@@ -39,3 +41,4 @@ services:
             $localModelUrl: '%env(OM_MODEL_URL)%'
             $localThinkingFormat: '%env(default::OM_MODEL_THINKING_FORMAT)%'
             $vllmBaseUrl: '%env(default::VLLM_BASE_URL)%'
+            $inklingBaseUrl: '%env(default::INKLING_BASE_URL)%'
