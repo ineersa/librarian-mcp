@@ -31,6 +31,20 @@ class IndexGenerationRepository extends ServiceEntityRepository
         );
     }
 
+    /** Newest active, committed generation of any project built with this embedding signature. */
+    public function findCommittedWithSignature(string $signature): ?IndexGeneration
+    {
+        return $this->createQueryBuilder('generation')
+            ->andWhere('generation.active = true')
+            ->andWhere('generation.signature = :signature')
+            ->andWhere('generation.committedRevision IS NOT NULL')
+            ->setParameter('signature', $signature)
+            ->orderBy('generation.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function findLatestForProject(int $projectId): ?IndexGeneration
     {
         return $this->findOneBy(

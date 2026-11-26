@@ -26,6 +26,14 @@ Embeddings use the official Generic platform for the local OpenAI-compatible Cod
 
 Local BGE keeps the small Voyage request/response adapter for llama.cpp `/v1/rerank` (`results[{index,relevance_score}]`). No hosted Voyage backend and no custom HTTP transport.
 
+### Model endpoints
+
+`IndexSettings` holds only the embedding identity (artifact SHA-256, model label, 768 dimensions, chunking and query-prefix versions); it no longer contains URLs. `ModelEndpoints` resolves the request endpoint per operation from **Settings**: Built-in (`http://embeddings:8080/v1`, `http://reranker:8080/v1`, the optional `models` Compose profile) or API (Settings URL/model, else `CODERANK_*` / `BGE_*`, with the key only from `EMBEDDING_API_KEY` / `RERANKER_API_KEY`). `EndpointVectorizer` and `LocalBgeReranker` build their clients on first use and implement `ResetInterface`, so the kernel's service reset between FrankenPHP worker requests and Messenger messages picks up a saved change; one indexing message keeps one endpoint.
+
+Serving the same GGUF elsewhere does not change the generation signature, so switching Built-in and API never forces a reindex. On save, a changed embeddings endpoint must reproduce a stored chunk vector of the newest committed generation (cosine ≥ 0.99; CPU vs CUDA for the same Q8_0 GGUF measured 0.9997). Otherwise the save is rejected.
+
+Built-in servers run with micro-batch equal to context (llama.cpp needs a whole non-causal input in one micro-batch): embeddings `-c 2048`, reranker `-c 512`. 512 is bge-reranker-base's training context; llama.cpp caps `-c` there. Over-long inputs fail with HTTP 500 (`input (N tokens) is too large to process`) or 400 (`exceed_context_size_error`); llama-server does not truncate. Embedding queries are cut to 2040 UTF-8 bytes (`IndexSettings::EMBEDDING_INPUT_BYTES`; every token covers at least one byte) because `memory_search` accepts 16 KiB. Chunks are at most 1200 bytes. Reranker inputs are unchanged (768 characters per document, full query) by owner decision: production's 31,122 rerank requests peaked at 355 tokens.
+
 ## Corpus and identity
 
 Read retained `om_observation` and `om_reflection` only. Journals are not embedded.

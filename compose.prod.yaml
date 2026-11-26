@@ -126,6 +126,17 @@ services:
   postgres:
     networks:
       - app_net
+
+  # Optional built-in models (COMPOSE_PROFILES=models); private, no published ports.
+  embeddings:
+    <<: *json-logging
+    networks:
+      - app_net
+
+  reranker:
+    <<: *json-logging
+    networks:
+      - app_net
     # Production keeps the existing app_net name and owner volumes; Postgres stays private.
 
 networks:

@@ -63,9 +63,16 @@ final class AuthenticationTest extends LibrarianNetworkBrowserTest
         self::assertSame('30000', $page->getByLabel('Claude observations max (tokens)', ['exact' => true])->inputValue());
         self::assertSame('40000', $page->getByLabel('Hatfield reflect after (tokens)', ['exact' => true])->inputValue());
         self::assertSame('30000', $page->getByLabel('Hatfield observations max (tokens)', ['exact' => true])->inputValue());
+        // Model endpoints: API mode on the env defaults; the browser stack runs no built-in models.
+        self::assertTrue($page->getByRole('radio', ['name' => 'API'])->first()->isChecked());
+        self::assertSame(0, $page->getByRole('radio', ['name' => 'Built-in'])->count());
+        $page->getByText('Active: http://host.docker.internal:8059/v1 (CodeRankEmbed)')->waitFor();
         $claudeReflect->fill('35000');
+        // Same model as the env default: the endpoint is unchanged, so saving probes nothing.
+        $page->getByLabel('Embeddings API model', ['exact' => true])->fill('CodeRankEmbed');
         $page->getByRole('button', ['name' => 'Save settings', 'exact' => true])->click();
         $page->getByText('Saved settings.', ['exact' => true])->waitFor();
+        self::assertSame('CodeRankEmbed', $page->getByLabel('Embeddings API model', ['exact' => true])->inputValue());
         self::assertSame('35000', $page->getByLabel('Claude reflect after (tokens)', ['exact' => true])->inputValue());
         self::assertSame('40000', $page->getByLabel('Hatfield reflect after (tokens)', ['exact' => true])->inputValue());
         $page->getByRole('link', ['name' => 'Logs'])->click();

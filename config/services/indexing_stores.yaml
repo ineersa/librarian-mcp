@@ -8,6 +8,8 @@ parameters:
     env(CODERANK_ARTIFACT): ''
     env(BGE_URL): 'http://host.docker.internal:8060/v1'
     env(BGE_MODEL): 'bge-reranker-base'
+    env(EMBEDDING_API_KEY): ''
+    env(RERANKER_API_KEY): ''
     env(INDEX_STORAGE_DIR): 'data/indexes'
     app.index_execution_lock_dir: '%kernel.project_dir%/%env(INDEX_STORAGE_DIR)%/locks'
 
@@ -18,12 +20,20 @@ services:
 
     App\Index\IndexSettings:
         arguments:
-            $embeddingUrl: '%env(CODERANK_URL)%'
             $embeddingModel: '%env(CODERANK_MODEL)%'
             $embeddingArtifact: '%env(CODERANK_ARTIFACT)%'
-            $rerankerUrl: '%env(BGE_URL)%'
-            $rerankerModel: '%env(BGE_MODEL)%'
             $dimensions: 768
+
+    # Settings choose Built-in or API per model; these env values are the API defaults.
+    App\Index\Model\ModelEndpoints:
+        arguments:
+            $defaultEmbeddingUrl: '%env(CODERANK_URL)%'
+            $defaultEmbeddingModel: '%env(CODERANK_MODEL)%'
+            $defaultRerankerUrl: '%env(BGE_URL)%'
+            $defaultRerankerModel: '%env(BGE_MODEL)%'
+            $embeddingApiKey: '%env(EMBEDDING_API_KEY)%'
+            $rerankerApiKey: '%env(RERANKER_API_KEY)%'
+            $httpClient: null
 
     App\Index\MemoryChunker: ~
 
@@ -39,10 +49,11 @@ services:
         arguments:
             $httpClient: null
 
-    Symfony\AI\Store\Document\Vectorizer:
-        factory: ['@App\Index\Model\CodeRankVectorizerFactory', 'create']
+    App\Index\Model\EndpointVectorizer: ~
+    App\Index\Model\EmbeddingEndpointGuard: ~
 
-    Symfony\AI\Store\Document\VectorizerInterface: '@Symfony\AI\Store\Document\Vectorizer'
+    # Resettable: recreated for the Settings endpoint after each worker request or Messenger message.
+    Symfony\AI\Store\Document\VectorizerInterface: '@App\Index\Model\EndpointVectorizer'
 
     App\Index\Model\LocalBgeReranker:
         arguments:

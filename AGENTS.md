@@ -99,6 +99,7 @@ Resolved dependency selections (runtime validation is recorded separately):
 
 - Runtime stack: FrankenPHP (PHP 8.5), Symfony worker mode, Mercure, PostgreSQL + pgvector (`pgvector/pgvector:pg17-bookworm`, digest `sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`).
 - Shared `DATABASE_URL` for Doctrine metadata and official Symfony AI Postgres store tables. PHP has `pdo_pgsql` and `pdo_sqlite`.
+- Optional `models` Compose profile (`COMPOSE_PROFILES=models` in `.env.local` / `.env.prod.local`): pinned official llama.cpp `embeddings` and `reranker` services, CPU only, private network. Admin Settings switches each model between Built-in and API at runtime; the web app never controls containers. See [docs/setup.md](docs/setup.md#built-in-models-docker-without-host-llamacpp).
 - Keep `data/.gitignore` as `*` and `!.gitignore` for any remaining local files; do not commit private source or index data.
 - Dev compose: `compose.yaml` + `compose.override.yaml` (+ browser override when present).
 - Prod-like compose: `compose.yaml` + `compose.prod.yaml`.

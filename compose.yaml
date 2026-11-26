@@ -1,3 +1,22 @@
+# Built-in index models (optional): official llama.cpp server, CPU only, enabled by COMPOSE_PROFILES=models.
+# Image verified 2026-11-26: server-v1.1.0 multi-arch index (linux/amd64, linux/arm64).
+x-llama-server: &llama-server
+  image: ghcr.io/ggml-org/llama.cpp:server-v1.1.0@sha256:ce3817b50dae557848c3a5b7df6264f25b08792c9fc39d35b4e67e1d19b15b20
+  profiles: [models]
+  restart: unless-stopped
+  environment:
+    # First start downloads the pinned GGUF from Hugging Face into the named volume.
+    LLAMA_CACHE: /models
+  volumes:
+    - llama_models:/models
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+    interval: 10s
+    timeout: 5s
+    # Covers the first-start model download.
+    start_period: 300s
+    retries: 3
+
 services:
   php:
     image: "${COMPOSE_PROJECT_NAME:-librarian-mcp}-php:prod"
@@ -42,7 +61,26 @@ services:
       start_period: 10s
       retries: 10
 
+  # Micro-batch equals context: llama.cpp needs a whole non-causal input in one micro-batch.
+  # Embedding queries are cut to IndexSettings::EMBEDDING_INPUT_BYTES to fit -c 2048.
+  embeddings:
+    <<: *llama-server
+    # SHA-256 02d538aa… equals CODERANK_ARTIFACT, so existing indexes stay valid.
+    command: ["--hf-repo", "ineersa/CodeRankEmbed-Q8_0-GGUF", "--hf-file", "coderankembed-q8_0.gguf", "--alias", "CodeRankEmbed",
+      "--host", "0.0.0.0", "--port", "8080", "--embedding", "--pooling", "cls", "-c", "2048", "--batch-size", "2048", "--ubatch-size", "2048",
+      "--parallel", "1", "--no-cache-prompt", "--cache-ram", "0", "--no-webui", "--timeout", "120", "--threads", "${LLAMA_THREADS:-4}"]
+    mem_limit: 512m
+
+  reranker:
+    <<: *llama-server
+    # SHA-256 af4a1ad9… The model's training context is 512 tokens; llama.cpp caps -c there.
+    command: ["--hf-repo", "ineersa/bge-reranker-base-Q8_0-GGUF", "--hf-file", "bge-reranker-base-q8_0.gguf", "--alias", "bge-reranker-base",
+      "--host", "0.0.0.0", "--port", "8080", "--embedding", "--pooling", "rank", "--reranking", "-c", "512", "--batch-size", "512", "--ubatch-size", "512",
+      "--parallel", "1", "--no-cache-prompt", "--cache-ram", "0", "--no-webui", "--timeout", "120", "--threads", "${LLAMA_THREADS:-4}"]
+    mem_limit: 768m
+
 volumes:
   caddy_data:
   caddy_config:
   postgres_data:
+  llama_models:

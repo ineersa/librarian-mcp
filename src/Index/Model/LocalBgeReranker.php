@@ -5,42 +5,44 @@ declare(strict_types=1);
 namespace App\Index\Model;
 
 use App\Index\IndexException;
-use App\Index\IndexSettings;
 use Symfony\AI\Platform\Bridge\Voyage\Reranker;
 use Symfony\AI\Platform\Bridge\Voyage\Reranker\ModelClient as VoyageRerankerClient;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\Service\ResetInterface;
 
 /**
- * Local BGE reranker via Voyage-compatible request client + llama.cpp result validation.
+ * BGE reranker via Voyage-compatible request client + llama.cpp result validation.
+ *
+ * The endpoint is resolved from Settings on first use and again after a kernel reset.
  */
-final class LocalBgeReranker
+final class LocalBgeReranker implements ResetInterface
 {
     public const int BATCH_SIZE = 8;
     public const int DOCUMENT_CHARACTERS = 768;
     public const float MIN_SCORE = -4.0;
 
-    private readonly VoyageRerankerClient $client;
-    private readonly Reranker $model;
+    private readonly HttpClientInterface $http;
+    private ?VoyageRerankerClient $client = null;
+    private ?Reranker $model = null;
 
     public function __construct(
-        private readonly IndexSettings $settings,
+        private readonly ModelEndpoints $endpoints,
         ?HttpClientInterface $httpClient = null,
-        ?VoyageRerankerClient $client = null,
     ) {
-        $http = $httpClient ?? HttpClient::create([
+        $this->http = $httpClient ?? HttpClient::create([
             'timeout' => 30.0,
             'max_duration' => 30.0,
             'extra' => [
                 'trace_content' => false,
             ],
         ]);
-        $this->client = $client ?? new VoyageRerankerClient(
-            $http,
-            '',
-            $this->baseUrl($this->settings->rerankerUrl),
-        );
-        $this->model = new Reranker($this->settings->rerankerModel);
+    }
+
+    public function reset(): void
+    {
+        $this->client = null;
+        $this->model = null;
     }
 
     /**
@@ -70,6 +72,12 @@ final class LocalBgeReranker
      */
     private function rankDocuments(string $query, array $documents): array
     {
+        if (null === $this->client || null === $this->model) {
+            $endpoint = $this->endpoints->reranker();
+            $this->client = new VoyageRerankerClient($this->http, $endpoint->apiKey ?? '', $endpoint->baseUrl());
+            $this->model = new Reranker($endpoint->model);
+        }
+
         $scores = [];
         foreach (array_chunk($documents, self::BATCH_SIZE, true) as $batch) {
             $payloadDocuments = array_values(array_map(
@@ -110,15 +118,5 @@ final class LocalBgeReranker
         }
 
         return $ranked;
-    }
-
-    private function baseUrl(string $url): string
-    {
-        $normalized = rtrim($url, '/');
-        if (str_ends_with($normalized, '/v1')) {
-            return substr($normalized, 0, -3);
-        }
-
-        return $normalized;
     }
 }
