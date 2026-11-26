@@ -24,6 +24,19 @@ framework:
                     multiplier: 2
                     max_delay: 540000
                     jitter: 0.1
+            # Reflector jobs. The OM consumer polls this transport before `om` after every
+            # handled message (`messenger:consume om_reflect om`), so a threshold Reflector job
+            # runs before the next queued observe job. Same retry policy as `om`.
+            om_reflect:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    queue_name: om_reflect
+                retry_strategy:
+                    max_retries: 10
+                    delay: 30000
+                    multiplier: 2
+                    max_delay: 540000
+                    jitter: 0.1
             # Cron jobs (daily backup). Redispatched by the `cron` schedule or queued by the admin
             # "Run now" action. Failures are recorded on the cron run and retried by the next
             # schedule tick, so Messenger does not retry.
@@ -50,5 +63,5 @@ framework:
             'App\Message\ScanProjectMessage': async
             'App\Message\IndexProjectMessage': async
             'App\Message\ObserveMemorySessionMessage': om
-            'App\Message\ReflectMemoryGenerationMessage': om
+            'App\Message\ReflectMemoryGenerationMessage': om_reflect
             'App\Message\RunCronJobMessage': cron

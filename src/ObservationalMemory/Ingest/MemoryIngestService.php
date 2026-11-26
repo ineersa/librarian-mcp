@@ -56,6 +56,21 @@ final readonly class MemoryIngestService
     }
 
     /**
+     * Gap-free observed end seq of a session under the current renderer/schema versions;
+     * null when the session is unknown or nothing from seq 1 is covered yet.
+     */
+    public function coveredEndSeq(Project $project, MemorySourceKind $sourceKind, string $sessionId): ?int
+    {
+        $sessionPk = $this->findSessionPk($project, $sourceKind, $sessionId);
+        if (null === $sessionPk) {
+            return null;
+        }
+        $settings = $this->selections->currentPinned();
+
+        return $this->observations->contiguousCoveredEndSeq($sessionPk, $settings->rendererVersion, $settings->observerSchemaVersion);
+    }
+
+    /**
      * Rendered active memory for compaction; empty string when nothing is active.
      * Bounded DB reads only: no model call, no journal read, no queue wait.
      */

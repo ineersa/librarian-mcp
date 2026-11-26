@@ -51,7 +51,7 @@ The product path is local project registration, read-only Hatfield source discov
    vendor/bin/castor dev:stack:up
    ```
 
-   Default `app:console` executes inside the running development `php` service. Use the printed development URL; use `dev:stack:status` to rediscover it later. The `worker` consumes `scheduler_cron` and `cron` (daily backups, prioritized; see [backups](backups.md)), then `async` and `scheduler_default`; `om-worker` consumes `om` (memory generation).
+   Default `app:console` executes inside the running development `php` service. Use the printed development URL; use `dev:stack:status` to rediscover it later. The `worker` consumes `scheduler_cron` and `cron` (daily backups, prioritized; see [backups](backups.md)), then `async` and `scheduler_default`; `om-worker` consumes `om_reflect` then `om` (memory generation; Reflector jobs first).
 
 4. Migrate the development database and create a local admin when needed:
 

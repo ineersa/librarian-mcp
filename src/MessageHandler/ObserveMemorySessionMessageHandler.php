@@ -12,6 +12,7 @@ use App\Message\ReflectMemoryGenerationMessage;
 use App\ObservationalMemory\MemorySessionLock;
 use App\ObservationalMemory\MemorySessionWorkOutcome;
 use App\ObservationalMemory\Model\MemoryModelSelectionService;
+use App\ObservationalMemory\Model\MemoryTokenLimits;
 use App\ObservationalMemory\Model\PinnedMemorySettings;
 use App\ObservationalMemory\Observer\ObserverPipeline;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
@@ -39,6 +40,7 @@ final readonly class ObserveMemorySessionMessageHandler
         private ObservationRepository $repository,
         private MemoryGenerationRepository $generationRepository,
         private MemoryModelSelectionService $selections,
+        private MemoryTokenLimits $tokenLimits,
         private MessageBusInterface $bus,
         private ProjectIndexManager $projectIndexManager,
         private LoggerInterface $logger,
@@ -61,7 +63,7 @@ final readonly class ObserveMemorySessionMessageHandler
             throw new \RuntimeException('Session source root for this project is not available yet.');
         }
 
-        $settings = $this->resolveSettings($message);
+        $settings = $this->tokenLimits->apply($this->resolveSettings($message), $sourceKind);
 
         $lock = $this->sessionLock->tryAcquire($message->sessionPk);
         if (null === $lock) {

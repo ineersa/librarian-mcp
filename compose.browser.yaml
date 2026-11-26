@@ -11,6 +11,8 @@ services:
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
+      # Synthetic Claude Code transcripts inside the read-only fixture mount.
+      CLAUDE_PROJECTS_PATH: /project-sources/claude-projects
       MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       MERCURE_EXTRA_DIRECTIVES: |-
         transport bolt {
@@ -43,6 +45,8 @@ services:
       HATFIELD_USER_HOME: /synthetic-home
       HATFIELD_APP_ROOT: /synthetic-app
       HATFIELD_PATH_MAPPINGS: '{"/synthetic-home":"/project-sources/context-home","/synthetic-app":"/project-sources/context-app"}'
+      # Synthetic Claude Code transcripts inside the read-only fixture mount.
+      CLAUDE_PROJECTS_PATH: /project-sources/claude-projects
       MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS}'
       INDEX_STORAGE_DIR: var/browser-live/indexes
       INDEX_INTERVAL: '2'

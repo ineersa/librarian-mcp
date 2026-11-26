@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Memory;
 
+use App\ObservationalMemory\Observer\OmSourceBlockBuilder;
 use App\ObservationalMemory\Observer\SessionEventDTO;
 
 /**
@@ -82,6 +83,70 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         $files = glob($transcriptDirectory.\DIRECTORY_SEPARATOR.'*'.self::TRANSCRIPT_EXTENSION);
 
         return false === $files ? 0 : \count($files);
+    }
+
+    public function sessionIds(string $sourceRoot): array
+    {
+        $files = glob($sourceRoot.\DIRECTORY_SEPARATOR.'*'.self::TRANSCRIPT_EXTENSION);
+        $ids = [];
+        foreach (false === $files ? [] : $files as $file) {
+            $id = basename($file, self::TRANSCRIPT_EXTENSION);
+            if (1 === preg_match(self::SESSION_ID_PATTERN, $id)) {
+                $ids[] = $id;
+            }
+        }
+        sort($ids);
+
+        return $ids;
+    }
+
+    /** Unterminated last lines are still being written and are ignored; ranges never end between a call and its result. */
+    public function rangeEndSeqs(string $sourceRoot, string $sessionId, int $coveredSeq, int $rangeBytes): array
+    {
+        if ($coveredSeq < 0 || $rangeBytes < 1) {
+            throw new \InvalidArgumentException('Transcript ranges require covered_seq >= 0 and range_bytes >= 1.');
+        }
+        $pathOrError = $this->resolveTranscriptPath($sourceRoot, $sessionId);
+        if (!isset($pathOrError['path'])) {
+            throw new \RuntimeException($pathOrError['message']);
+        }
+        $handle = @fopen($pathOrError['path'], 'rb');
+        if (false === $handle) {
+            throw new \RuntimeException('Claude transcript is unreadable.');
+        }
+
+        $ends = [];
+        $seq = 0;
+        $bytes = 0;
+        $openCalls = new OpenToolCalls();
+        /** @var array<string, string> $toolNames */
+        $toolNames = [];
+        try {
+            foreach (JsonlLines::completeLines($handle, 0, JsonlLines::size($handle)) as $read) {
+                if (++$seq <= $coveredSeq) {
+                    continue;
+                }
+                $bytes += $read['end'] - $read['start'];
+                $record = $this->decode($read['line']);
+                foreach (null === $record ? [] : $this->eventsFor($record, $sessionId, $seq, $toolNames) as $event) {
+                    if (\in_array($event->type, OmSourceBlockBuilder::RENDERED_EVENT_TYPES, true)) {
+                        $openCalls->track($event, $read['start'], $read['end']);
+                    }
+                }
+                // A requested end flushes open calls unmatched, so only cut where none is waiting.
+                if ($bytes >= $rangeBytes && $openCalls->isEmpty()) {
+                    $ends[] = $seq;
+                    $bytes = 0;
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+        if ($bytes > 0) {
+            $ends[] = $seq;
+        }
+
+        return $ends;
     }
 
     public function readRange(string $sourceRoot, string $sessionId, int $startSeq, int $endSeq, ?SourceCheckpoint $from = null): SessionSourceRange

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Memory;
 
+use App\ObservationalMemory\Observer\OmSourceBlockBuilder;
 use App\ObservationalMemory\Observer\SessionEventDTO;
 
 /**
@@ -202,6 +203,72 @@ final class SessionEventsJournalReader implements SessionSourceReader
         } finally {
             fclose($handle);
         }
+    }
+
+    public function sessionIds(string $sourceRoot): array
+    {
+        clearstatcache(true, $sourceRoot);
+        $root = realpath($sourceRoot);
+        $entries = false === $root || !is_dir($root) ? false : scandir($root);
+        $ids = [];
+        foreach (false === $entries ? [] : $entries as $name) {
+            if ('.' !== $name && '..' !== $name && isset($this->resolveJournalPath($root, $name)['path'])) {
+                $ids[] = $name;
+            }
+        }
+        sort($ids);
+
+        return $ids;
+    }
+
+    public function rangeEndSeqs(string $sourceRoot, string $sessionId, int $coveredSeq, int $rangeBytes): array
+    {
+        if ($coveredSeq < 0 || $rangeBytes < 1) {
+            throw new \InvalidArgumentException('Journal ranges require covered_seq >= 0 and range_bytes >= 1.');
+        }
+        $pathOrError = $this->resolveJournalPath($sourceRoot, $sessionId);
+        if (!isset($pathOrError['path'])) {
+            throw new \RuntimeException($pathOrError['message']);
+        }
+        $handle = @fopen($pathOrError['path'], 'rb');
+        if (false === $handle) {
+            throw new \RuntimeException('Session event journal is unreadable.');
+        }
+
+        $ends = [];
+        $bytes = 0;
+        $lastSeq = 0;
+        $openCalls = new OpenToolCalls();
+        try {
+            // Only committed bytes: an append Hatfield has not finalized is not readable yet.
+            $cut = $this->committedCut($pathOrError['path'], JsonlLines::size($handle));
+            foreach (JsonlLines::completeLines($handle, 0, $cut) as $read) {
+                if (!str_contains($read['line'], $sessionId)) {
+                    continue;
+                }
+                $event = $this->eventFromLine($read['line'], $sessionId);
+                if (null === $event || $event->seq <= $coveredSeq) {
+                    continue;
+                }
+                $bytes += $read['end'] - $read['start'];
+                $lastSeq = $event->seq;
+                if (\in_array($event->type, OmSourceBlockBuilder::RENDERED_EVENT_TYPES, true)) {
+                    $openCalls->track($event, $read['start'], $read['end']);
+                }
+                // A requested end flushes open calls unmatched, so only cut where none is waiting.
+                if ($bytes >= $rangeBytes && $openCalls->isEmpty()) {
+                    $ends[] = $lastSeq;
+                    $bytes = 0;
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+        if ($bytes > 0) {
+            $ends[] = $lastSeq;
+        }
+
+        return $ends;
     }
 
     /**

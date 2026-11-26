@@ -115,12 +115,13 @@ services:
       - "${DOCKER_DNS_SECONDARY:-8.8.8.8}"
 
   # Observational memory generation consumer (Observer, Reflector + Dropper), one LLM job at a time.
+  # Receiver order is priority: waiting Reflector jobs (om_reflect) run before the next observe job (om).
   messenger-om:
     <<: *messenger
     environment:
       <<: *prod-messenger-environment
       APP_OPERATIONS_SOURCE: om-worker
-    command: ["php", "bin/console", "messenger:consume", "om"]
+    command: ["php", "bin/console", "messenger:consume", "om_reflect", "om"]
 
   postgres:
     networks:
