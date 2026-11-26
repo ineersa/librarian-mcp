@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Entity\MemorySourceKind;
 use App\Entity\Project;
 use App\Entity\ProjectHealth;
 use App\Form\Type\ProjectMemorySearchType;
@@ -16,7 +17,7 @@ use App\Index\Status\ProjectIndexStatusFactory;
 use App\Index\Status\ProjectStatusTopics;
 use App\Memory\MemoryRecall;
 use App\Messenger\Monitor\MessengerStatsProvider;
-use App\ObservationalMemory\Ingest\ClaudeSessionBackfill;
+use App\ObservationalMemory\Ingest\SessionBackfill;
 use App\ObservationalMemory\Storage\MemoryGenerationRepository;
 use App\ObservationalMemory\Storage\ObservationRepository;
 use App\ObservationalMemory\Storage\ObserverCoverageReader;
@@ -62,7 +63,7 @@ class ProjectCrudController extends AbstractCrudController
     public const string RETURN_INDEX = 'index';
     public const string RETURN_SEARCH = 'search';
     public const string MEMORY_ID_QUERY = 'memoryId';
-    public const string BACKFILL_CLAUDE_CSRF_ID = 'project_backfill_claude';
+    public const string BACKFILL_SESSIONS_CSRF_ID = 'project_backfill_sessions';
 
     /** @var array<string, string> */
     public const array RELEVANCE_BADGE_COLORS = [
@@ -75,7 +76,7 @@ class ProjectCrudController extends AbstractCrudController
     private const string ACTION_SEARCH_MEMORY = 'searchMemory';
     private const string ACTION_OM_INDEX = 'omIndex';
     private const string ACTION_RECALL_MEMORY = 'recallMemory';
-    private const string ACTION_BACKFILL_CLAUDE = 'backfillClaude';
+    private const string ACTION_BACKFILL_SESSIONS = 'backfillSessions';
     private const string SESSION_FILTER_FORM = 'memory_filter';
     private const string SESSION_FILTER_FIELD = 'session';
 
@@ -93,7 +94,7 @@ class ProjectCrudController extends AbstractCrudController
         private readonly ObserverCoverageReader $coverage,
         private readonly MessengerStatsProvider $messengerStats,
         private readonly RequestStack $requests,
-        private readonly ClaudeSessionBackfill $claudeBackfill,
+        private readonly SessionBackfill $sessionBackfill,
     ) {
     }
 
@@ -230,12 +231,12 @@ class ProjectCrudController extends AbstractCrudController
         $omIndex = Action::new(self::ACTION_OM_INDEX, 'OM index details', 'fa fa-book-open')
             ->linkToCrudAction(self::ACTION_OM_INDEX)
             ->addCssClass('btn btn-outline-secondary');
-        $backfillClaude = Action::new(self::ACTION_BACKFILL_CLAUDE, 'Backfill Claude sessions', 'fa fa-clock-rotate-left')
-            ->linkToCrudAction(self::ACTION_BACKFILL_CLAUDE)
+        $backfillSessions = Action::new(self::ACTION_BACKFILL_SESSIONS, 'Backfill sessions', 'fa fa-clock-rotate-left')
+            ->linkToCrudAction(self::ACTION_BACKFILL_SESSIONS)
             // POST form with a CSRF token; EasyAdmin's renderAsForm() renders no token.
-            ->setTemplatePath('admin/project/_backfill_claude_action.html.twig')
+            ->setTemplatePath('admin/project/_backfill_sessions_action.html.twig')
             ->addCssClass('btn btn-outline-secondary')
-            ->displayIf(fn (Project $project): bool => $this->claudeBackfill->isAvailable($project));
+            ->displayIf(fn (Project $project): bool => $this->sessionBackfill->isAvailable($project));
 
         return $actions
             ->disable(Action::EDIT)
@@ -246,11 +247,11 @@ class ProjectCrudController extends AbstractCrudController
                 ->addCssClass('d-none'))
             ->add(Crud::PAGE_INDEX, $searchMemory)
             ->add(Crud::PAGE_INDEX, $omIndex)
-            ->add(Crud::PAGE_INDEX, $backfillClaude)
+            ->add(Crud::PAGE_INDEX, $backfillSessions)
             ->update(Crud::PAGE_INDEX, Action::DELETE, static fn (Action $action) => $action
                 ->setLabel('Delete')
                 ->setIcon('fa fa-trash'))
-            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_OM_INDEX, self::ACTION_SEARCH_MEMORY, self::ACTION_BACKFILL_CLAUDE, Action::DELETE])
+            ->reorder(Crud::PAGE_INDEX, [Action::DETAIL, self::ACTION_OM_INDEX, self::ACTION_SEARCH_MEMORY, self::ACTION_BACKFILL_SESSIONS, Action::DELETE])
             ->setPermission(Action::DELETE, 'ROLE_ADMIN');
     }
 
@@ -343,27 +344,33 @@ class ProjectCrudController extends AbstractCrudController
     }
 
     /**
-     * Queues observe signals for the project's existing Claude transcripts; never runs models.
+     * Queues observe signals for the project's existing Claude transcripts and Hatfield journals;
+     * never runs models.
      *
      * @param AdminContext<Project> $context
      */
-    #[AdminRoute(path: '/{entityId}/backfill-claude', name: 'backfill-claude', options: ['methods' => [Request::METHOD_POST]])]
-    #[IsCsrfTokenValid(self::BACKFILL_CLAUDE_CSRF_ID)]
-    public function backfillClaude(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
+    #[AdminRoute(path: '/{entityId}/backfill-sessions', name: 'backfill-sessions', options: ['methods' => [Request::METHOD_POST]])]
+    #[IsCsrfTokenValid(self::BACKFILL_SESSIONS_CSRF_ID)]
+    public function backfillSessions(AdminContext $context, AdminUrlGenerator $urlGenerator): RedirectResponse
     {
         /** @var Project $project */
         $project = $context->getEntity()->getInstance();
-        if (null === $project->id || !$this->claudeBackfill->isAvailable($project)) {
-            throw $this->createNotFoundException('Claude transcripts for this project are not available.');
+        if (null === $project->id || !$this->sessionBackfill->isAvailable($project)) {
+            throw $this->createNotFoundException('Session sources for this project are not available.');
         }
 
-        $result = $this->claudeBackfill->queue($project);
-        $this->addFlash('success', \sprintf(
-            'Queued %d observe job(s) for %d Claude session(s); %d session(s) already covered.',
-            $result->signals,
-            $result->queuedSessions,
-            $result->skippedSessions,
-        ));
+        foreach ($this->sessionBackfill->queue($project) as $result) {
+            $this->addFlash('success', \sprintf(
+                '%s: queued %d observe job(s) for %d session(s); %d session(s) already covered.',
+                match ($result->sourceKind) {
+                    MemorySourceKind::ClaudeCode => 'Claude Code',
+                    MemorySourceKind::Hatfield => 'Hatfield',
+                },
+                $result->signals,
+                $result->queuedSessions,
+                $result->skippedSessions,
+            ));
+        }
 
         return $this->redirect($urlGenerator->setController(self::class)->setAction(Action::INDEX)->unset('entityId')->generateUrl());
     }

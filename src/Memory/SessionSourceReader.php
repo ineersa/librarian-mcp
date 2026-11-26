@@ -23,6 +23,24 @@ interface SessionSourceReader
     public function readRange(string $sourceRoot, string $sessionId, int $startSeq, int $endSeq, ?SourceCheckpoint $from = null): SessionSourceRange;
 
     /**
+     * Session ids with a transcript directly under the source root, sorted (admin backfill).
+     *
+     * @return list<string>
+     */
+    public function sessionIds(string $sourceRoot): array;
+
+    /**
+     * End seqs splitting the committed records after $coveredSeq into consecutive ranges of about
+     * $rangeBytes raw bytes each; the last one is the final committed record. Empty when nothing
+     * past $coveredSeq is committed (admin backfill).
+     *
+     * @return list<int>
+     *
+     * @throws \RuntimeException when the transcript is missing, unreadable, or malformed
+     */
+    public function rangeEndSeqs(string $sourceRoot, string $sessionId, int $coveredSeq, int $rangeBytes): array;
+
+    /**
      * Bounded recall evidence for the given seqs.
      *
      * @param list<int> $seqs

@@ -84,14 +84,9 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         return false === $files ? 0 : \count($files);
     }
 
-    /**
-     * Session ids of the transcripts directly inside the directory, sorted.
-     *
-     * @return list<string>
-     */
-    public function sessionIds(string $transcriptDirectory): array
+    public function sessionIds(string $sourceRoot): array
     {
-        $files = glob($transcriptDirectory.\DIRECTORY_SEPARATOR.'*'.self::TRANSCRIPT_EXTENSION);
+        $files = glob($sourceRoot.\DIRECTORY_SEPARATOR.'*'.self::TRANSCRIPT_EXTENSION);
         $ids = [];
         foreach (false === $files ? [] : $files as $file) {
             $id = basename($file, self::TRANSCRIPT_EXTENSION);
@@ -104,19 +99,13 @@ final readonly class ClaudeTranscriptReader implements SessionSourceReader
         return $ids;
     }
 
-    /**
-     * End seqs that split the complete lines after $coveredSeq into consecutive ranges of about
-     * $rangeBytes raw bytes each; the last one is the final complete line. Empty when nothing
-     * past $coveredSeq is complete. Unterminated last lines are still being written and are ignored.
-     *
-     * @return list<int>
-     */
-    public function rangeEndSeqs(string $transcriptDirectory, string $sessionId, int $coveredSeq, int $rangeBytes): array
+    /** Unterminated last lines are still being written and are ignored. */
+    public function rangeEndSeqs(string $sourceRoot, string $sessionId, int $coveredSeq, int $rangeBytes): array
     {
         if ($coveredSeq < 0 || $rangeBytes < 1) {
             throw new \InvalidArgumentException('Transcript ranges require covered_seq >= 0 and range_bytes >= 1.');
         }
-        $pathOrError = $this->resolveTranscriptPath($transcriptDirectory, $sessionId);
+        $pathOrError = $this->resolveTranscriptPath($sourceRoot, $sessionId);
         if (!isset($pathOrError['path'])) {
             throw new \RuntimeException($pathOrError['message']);
         }

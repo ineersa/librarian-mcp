@@ -88,11 +88,16 @@ final readonly class MemoryObserveRequest
         return new self($sourceKind, self::identifier($sessionId, 'session_id'), null, $endSeq, MemoryTerminalStatus::Completed);
     }
 
+    /** Same constraints as the journal reader's session directory names. */
+    public static function isSessionIdentifier(string $value): bool
+    {
+        return '' !== $value && trim($value) === $value && \strlen($value) <= self::MAX_IDENTIFIER_BYTES
+            && 1 !== preg_match('#[\x00-\x1F\x7F/\\\\]#', $value) && '.' !== $value && '..' !== $value;
+    }
+
     private static function identifier(mixed $value, string $field): string
     {
-        // Same constraints as the journal reader's session directory names.
-        if (!\is_string($value) || '' === $value || trim($value) !== $value || \strlen($value) > self::MAX_IDENTIFIER_BYTES
-            || 1 === preg_match('#[\x00-\x1F\x7F/\\\\]#', $value) || '.' === $value || '..' === $value) {
+        if (!\is_string($value) || !self::isSessionIdentifier($value)) {
             throw self::invalid(\sprintf('%s must be a non-empty session identifier of at most %d bytes.', $field, self::MAX_IDENTIFIER_BYTES));
         }
 

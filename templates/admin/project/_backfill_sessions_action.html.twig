@@ -4,7 +4,7 @@
     isIncludedInDropdown?: 'bool',
 } %}
 <form action="{{ action.linkUrl }}" method="post" class="d-inline">
-    <input type="hidden" name="_token" data-controller="csrf-protection" value="{{ csrf_token(constant('App\\Controller\\Admin\\ProjectCrudController::BACKFILL_CLAUDE_CSRF_ID')) }}">
+    <input type="hidden" name="_token" data-controller="csrf-protection" value="{{ csrf_token(constant('App\\Controller\\Admin\\ProjectCrudController::BACKFILL_SESSIONS_CSRF_ID')) }}">
     <button type="submit" class="{{ action.cssClass }}">
         {%- if action.icon %}<i class="{{ action.icon }}" aria-hidden="true"></i> {% endif -%}
         <span class="action-label">{{ action.label|trans }}</span>
