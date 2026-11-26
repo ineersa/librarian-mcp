@@ -32,6 +32,8 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_ADMIN')]
 class LibrarianSettingsCrudController extends AbstractCrudController
 {
+    /** A blank field submits 0, which the Positive constraint rejects, instead of null into an int property. */
+    private const string BLANK_AS_ZERO = '0';
     private const string TOKEN_HELP = 'Estimated tokens of unreflected plus retained observations in one session.';
 
     public function __construct(
@@ -66,14 +68,18 @@ class LibrarianSettingsCrudController extends AbstractCrudController
     {
         yield FormField::addFieldset('Claude Code sessions');
         yield IntegerField::new('claudeReflectAfterObservationTokens', 'Claude reflect after (tokens)')
+            ->setFormTypeOption('empty_data', self::BLANK_AS_ZERO)
             ->setHelp('Run the Reflector once the working set exceeds this. '.self::TOKEN_HELP);
         yield IntegerField::new('claudeObservationsMaxTokens', 'Claude observations max (tokens)')
+            ->setFormTypeOption('empty_data', self::BLANK_AS_ZERO)
             ->setHelp('Dropper target after a reflection. '.self::TOKEN_HELP);
 
         yield FormField::addFieldset('Hatfield sessions');
         yield IntegerField::new('hatfieldReflectAfterObservationTokens', 'Hatfield reflect after (tokens)')
+            ->setFormTypeOption('empty_data', self::BLANK_AS_ZERO)
             ->setHelp('Run the Reflector once the working set exceeds this. '.self::TOKEN_HELP);
         yield IntegerField::new('hatfieldObservationsMaxTokens', 'Hatfield observations max (tokens)')
+            ->setFormTypeOption('empty_data', self::BLANK_AS_ZERO)
             ->setHelp('Dropper target after a reflection. '.self::TOKEN_HELP);
     }
 

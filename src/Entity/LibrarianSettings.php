@@ -19,6 +19,8 @@ use Symfony\Component\Validator\Constraints as Assert;
 class LibrarianSettings
 {
     public const string ACTIVE_SLOT = 'active';
+    /** Upper bound of the 32-bit integer columns. */
+    public const int MAX_TOKENS = 2_147_483_647;
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -31,21 +33,27 @@ class LibrarianSettings
     /** Claude Code sessions: Reflector runs once the working set exceeds this many tokens. */
     #[ORM\Column]
     #[Assert\Positive]
+    #[Assert\LessThanOrEqual(self::MAX_TOKENS)]
     public int $claudeReflectAfterObservationTokens;
 
     /** Claude Code sessions: Dropper target for the working set after a reflection. */
     #[ORM\Column]
     #[Assert\Positive]
+    #[Assert\LessThanOrEqual(self::MAX_TOKENS)]
+    #[Assert\LessThan(propertyPath: 'claudeReflectAfterObservationTokens', message: 'Observations max must be lower than reflect after, or the Reflector reruns after every observe job.')]
     public int $claudeObservationsMaxTokens;
 
     /** Hatfield sessions: Reflector runs once the working set exceeds this many tokens. */
     #[ORM\Column]
     #[Assert\Positive]
+    #[Assert\LessThanOrEqual(self::MAX_TOKENS)]
     public int $hatfieldReflectAfterObservationTokens;
 
     /** Hatfield sessions: Dropper target for the working set after a reflection. */
     #[ORM\Column]
     #[Assert\Positive]
+    #[Assert\LessThanOrEqual(self::MAX_TOKENS)]
+    #[Assert\LessThan(propertyPath: 'hatfieldReflectAfterObservationTokens', message: 'Observations max must be lower than reflect after, or the Reflector reruns after every observe job.')]
     public int $hatfieldObservationsMaxTokens;
 
     public function __construct(int $reflectAfterObservationTokens, int $observationsMaxTokens)

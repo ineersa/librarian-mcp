@@ -56,6 +56,7 @@ final readonly class ClaudeSessionBackfill
 
     private function transcriptDirectory(Project $project): ?string
     {
-        return $this->transcripts->transcriptDirectory('' !== $project->rootCanonical ? $project->rootCanonical : $project->rootPath);
+        // Same root the observe handler resolves (root_canonical), so queued jobs find the transcript.
+        return '' === $project->rootCanonical ? null : $this->transcripts->transcriptDirectory($project->rootCanonical);
     }
 }
