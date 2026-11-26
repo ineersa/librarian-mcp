@@ -30,7 +30,8 @@ This is a shared local memory service for registered Hatfield projects:
 
 - **Project catalog + health** (`pending` / `scanning` / `ready` / `error`)
 - **Async read-only discovery** (so scans do not block web requests)
-- **Derived hybrid indexing** (CodeRank 768-dim vectors via the official Symfony AI Postgres store + local BGE; stock weighted hybrid/`ts_rank`, not BM25/RRF)
+- **Derived hybrid indexing** (CodeRank 768-dim vectors via the official Symfony AI Postgres store + BGE reranker; stock weighted hybrid/`ts_rank`, not BM25/RRF)
+- **Switchable model servers** — admin **Settings** picks, per model, an OpenAI-compatible API (default: host llama.cpp) or the optional built-in llama.cpp containers (`models` Compose profile, CPU), without a restart. See [built-in models](docs/setup.md#built-in-models-docker-without-host-llamacpp) and [model endpoints](docs/indexing-design.md#model-endpoints)
 - **Stable project identity** (auto-increment ID survives rescans and explicit path rebinds)
 - **Setup-selectable MCP token auth** (`MCP_AUTH_REQUIRED=1` by default; set `0` for trusted-network anonymous access; admin/login remain protected)
 - **MCP tools** — `memory_search` and `recall` with OM schemas; project via `X-Librarian-Project` (not a tool arg). See [MCP contract](docs/MCP.md)
@@ -64,6 +65,8 @@ Edit `.env.prod.local` and set at least:
 - `DATABASE_URL` (shared Doctrine + store Postgres)
 - `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
 - `BGE_URL`, `BGE_MODEL`
+- optional: `EMBEDDING_API_KEY`, `RERANKER_API_KEY` (only for API servers that need a key)
+- optional: `COMPOSE_PROFILES=models` (and `LLAMA_THREADS`) to run the built-in embeddings/reranker containers, e.g. on a machine without host llama.cpp ([setup](docs/setup.md#built-in-models-docker-without-host-llamacpp))
 - `INDEX_INTERVAL`, `LOCK_DSN`
 - `MERCURE_JWT_SECRET`
 - `MERCURE_PUBLISHER_JWT_KEY`
@@ -151,7 +154,7 @@ Summary:
 - `DOCKER_DNS_PRIMARY`, `DOCKER_DNS_SECONDARY`
   DNS override for container resolution reliability.
 - `PROJECTS_HOST_PATH`
-  Host path mounted read-write into the service as `/projects` (default `.`), allowing SQLite WAL/SHM sidecars while database connections remain `mode=ro`.
+  Host path mounted read-only into the service as `/projects` (default `.`); SQLite connections remain `mode=ro`.
 
 ### Symfony / app
 
@@ -168,10 +171,16 @@ Summary:
   Optional JSON longest-prefix host→service path mappings.
 - `DATABASE_URL`
   Shared PostgreSQL + pgvector for Doctrine metadata and official store tables.
-- `CODERANK_URL`, `CODERANK_MODEL`, `CODERANK_ARTIFACT`
-  Local CodeRankEmbed endpoint, model alias, and immutable artifact digest.
+- `CODERANK_URL`, `CODERANK_MODEL`
+  Default CodeRankEmbed API endpoint and model alias. Used in API mode when the Settings URL/model fields are empty; a saved Settings value or Built-in mode overrides them at runtime. `CODERANK_MODEL` is also the model label in the index generation signature, so changing it in env rebuilds indexes (the Settings model field does not).
+- `CODERANK_ARTIFACT`
+  Immutable GGUF SHA-256 of the embedding model. Part of the index generation signature; changing it rebuilds indexes. Not overridden by Settings.
 - `BGE_URL`, `BGE_MODEL`
-  Local BGE reranker endpoint/model (Voyage request client used only as protocol adapter).
+  Default BGE reranker API endpoint/model (Voyage request client used only as protocol adapter), overridable in Settings like the embeddings values.
+- `EMBEDDING_API_KEY`, `RERANKER_API_KEY`
+  Optional bearer keys for API-mode servers. Read only from env (never stored in the database; Settings shows set / not set) and never sent to the built-in containers. Changing one needs a container recreate.
+- `COMPOSE_PROFILES=models`, `LLAMA_THREADS`
+  Start the built-in `embeddings` / `reranker` llama.cpp containers (private network, no host ports; GGUFs downloaded on first start). Settings offers **Built-in** only while they respond.
 - `INDEX_INTERVAL`, `LOCK_DSN`
   Automatic source-discovery/index-check interval (`CallbackMessageProvider` yields discovery jobs; successful scans queue incremental indexing) and shared lock DSN.
 
@@ -202,7 +211,7 @@ Summary:
 
 - Shared PostgreSQL + pgvector database for app metadata and generation-scoped store tables
 - Scheduler freshness via Messenger `scheduler_default` (`INDEX_INTERVAL`, default 60s)
-- Daily Google Cloud Storage backups of PostgreSQL, Hatfield and Claude data, tracked in admin **Cron runs** ([docs/backups.md](docs/backups.md))
+- Daily Google Cloud Storage backups of PostgreSQL, Hatfield and Claude data, tracked in admin **Cron runs** ([docs/backups.md](docs/backups.md)). **Settings › Backups › Scheduled daily backups** turns the scheduled run off (e.g. on a laptop without GCS credentials); **Run backup now** still works.
 - Registered project sources stay on the mounted project tree (`/projects` and optional `compose.sources.yaml` overlays)
 - Do not commit private project settings, OM databases, or session journals as fixtures
 
