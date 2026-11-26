@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Index\Model\ModelEndpointMode;
 use App\Repository\LibrarianSettingsRepository;
+use App\Validator\UsableModelEndpoints;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -16,11 +18,14 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity(repositoryClass: LibrarianSettingsRepository::class)]
 #[ORM\Table(name: 'librarian_settings')]
 #[ORM\UniqueConstraint(name: 'uniq_librarian_settings_slot', columns: ['slot'])]
+#[UsableModelEndpoints]
 class LibrarianSettings
 {
     public const string ACTIVE_SLOT = 'active';
     /** Upper bound of the 32-bit integer columns. */
     public const int MAX_TOKENS = 2_147_483_647;
+    public const int URL_LENGTH = 2048;
+    public const int MODEL_LENGTH = 255;
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -56,12 +61,49 @@ class LibrarianSettings
     #[Assert\LessThan(propertyPath: 'hatfieldReflectAfterObservationTokens', message: 'Observations max must be lower than reflect after, or the Reflector reruns after every observe job.')]
     public int $hatfieldObservationsMaxTokens;
 
+    /** Off: the 30-minute cron tick skips the daily backup. Forced runs (Run backup now, --force) still run. */
+    #[ORM\Column(options: ['default' => true])]
+    public bool $scheduledBackupsEnabled = true;
+
+    /** Embeddings server. API URL/model left empty use the CODERANK_URL/CODERANK_MODEL env defaults. */
+    #[ORM\Column(length: 16, enumType: ModelEndpointMode::class, options: ['default' => ModelEndpointMode::Api->value])]
+    public ModelEndpointMode $embeddingMode = ModelEndpointMode::Api;
+
+    #[ORM\Column(length: self::URL_LENGTH, nullable: true)]
+    #[Assert\Url(requireTld: false)]
+    #[Assert\Length(max: self::URL_LENGTH)]
+    public ?string $embeddingApiUrl = null;
+
+    #[ORM\Column(length: self::MODEL_LENGTH, nullable: true)]
+    #[Assert\Length(max: self::MODEL_LENGTH)]
+    public ?string $embeddingApiModel = null;
+
+    /** Reranker server. API URL/model left empty use the BGE_URL/BGE_MODEL env defaults. */
+    #[ORM\Column(length: 16, enumType: ModelEndpointMode::class, options: ['default' => ModelEndpointMode::Api->value])]
+    public ModelEndpointMode $rerankerMode = ModelEndpointMode::Api;
+
+    #[ORM\Column(length: self::URL_LENGTH, nullable: true)]
+    #[Assert\Url(requireTld: false)]
+    #[Assert\Length(max: self::URL_LENGTH)]
+    public ?string $rerankerApiUrl = null;
+
+    #[ORM\Column(length: self::MODEL_LENGTH, nullable: true)]
+    #[Assert\Length(max: self::MODEL_LENGTH)]
+    public ?string $rerankerApiModel = null;
+
     public function __construct(int $reflectAfterObservationTokens, int $observationsMaxTokens)
     {
         $this->claudeReflectAfterObservationTokens = $reflectAfterObservationTokens;
         $this->claudeObservationsMaxTokens = $observationsMaxTokens;
         $this->hatfieldReflectAfterObservationTokens = $reflectAfterObservationTokens;
         $this->hatfieldObservationsMaxTokens = $observationsMaxTokens;
+    }
+
+    public function scheduledRunsEnabled(CronJob $job): bool
+    {
+        return match ($job) {
+            CronJob::Backup => $this->scheduledBackupsEnabled,
+        };
     }
 
     /** @return array{reflectAfterObservationTokens: int, observationsMaxTokens: int} */

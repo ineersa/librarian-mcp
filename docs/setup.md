@@ -42,6 +42,8 @@ The product path is local project registration, read-only Hatfield source discov
    - optional `HATFIELD_PATH_MAPPINGS` JSON longest-prefix mappings
    - `CODERANK_URL` / `CODERANK_MODEL` / `CODERANK_ARTIFACT`
    - `BGE_URL` / `BGE_MODEL`
+   - optional `EMBEDDING_API_KEY` / `RERANKER_API_KEY`, sent only to API-mode endpoints
+   - optional `COMPOSE_PROFILES=models` (and `LLAMA_THREADS`) for the built-in model servers; see [Built-in models](#built-in-models-docker-without-host-llamacpp)
    - `INDEX_INTERVAL`
    - optional ignored `compose.sources.yaml` for additional user/global/custom mounts (dev/prod via Castor; never imported by the browser stack); read-only mounts suffice
 
@@ -87,6 +89,16 @@ vendor/bin/castor browser:stack:status
 ```
 
 Use the printed browser URL for host exploration. The browser database is `librarian_browser` in the checkout-scoped Postgres Docker volume. The browser stack maps synthetic `/project-sources` fixtures, keeps Postgres private, and never imports operator `compose.sources.yaml` overlays. Details: [TESTING.md](../TESTING.md).
+
+## Built-in models (Docker without host llama.cpp)
+
+On a machine with Docker but no host llama.cpp (for example a Mac; Docker Desktop has no Metal, so this is CPU only), run the embeddings and reranker inside the stack:
+
+1. Set `COMPOSE_PROFILES=models` in `.env.local` (dev) or `.env.prod.local` (prod). Optionally set `LLAMA_THREADS` (default 4 per server). Castor passes these env files to Compose, so every `dev:*` / `prod:*` stack command includes the `embeddings` and `reranker` services. The browser test stack never reads them.
+2. Start the stack as usual. On first start each service downloads its pinned GGUF from Hugging Face (`ineersa/CodeRankEmbed-Q8_0-GGUF`, `ineersa/bge-reranker-base-Q8_0-GGUF`, about 450 MB together) into the `llama_models` volume; health checks pass once the model is loaded.
+3. In **Settings**, choose **Built-in** for Embeddings and Reranker and save. The option appears only while the service responds. The change applies to the next search or indexing job without a restart.
+
+The built-in embeddings GGUF is byte-identical to `CODERANK_ARTIFACT`, so existing indexes stay valid. Measured on CPU (amd64 host, 4 threads): peak memory 271 MiB (embeddings) + 460 MiB (reranker) during indexing and search; limits are 512 MiB / 768 MiB. Indexing is CPU-bound, roughly 1.4 chunks per second for ~540-token chunks.
 
 ## Production-like local run
 

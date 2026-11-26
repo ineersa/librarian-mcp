@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Index\Model;
 
-use App\Index\IndexSettings;
 use Symfony\AI\Platform\Bridge\Generic\EmbeddingsModel;
 use Symfony\AI\Platform\Bridge\Generic\Factory as GenericFactory;
 use Symfony\AI\Platform\Bridge\Generic\ModelCatalog;
@@ -18,24 +17,25 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 /**
  * Builds the native Generic CodeRank platform and Document Vectorizer.
  *
- * This is DI glue only: no VectorizerInterface replacement wrapper.
+ * The endpoint is resolved from Settings when created; EndpointVectorizer recreates it after a reset.
  */
 final class CodeRankVectorizerFactory
 {
     public function __construct(
-        private readonly IndexSettings $settings,
+        private readonly ModelEndpoints $endpoints,
         private readonly EmbeddingResultValidator $validator,
         private readonly ?HttpClientInterface $httpClient = null,
     ) {
     }
 
-    public function createPlatform(): PlatformInterface
+    public function createPlatform(ModelEndpoint $endpoint): PlatformInterface
     {
         $dispatcher = new EventDispatcher();
         $dispatcher->addSubscriber($this->validator);
 
         return GenericFactory::createPlatform(
-            baseUrl: $this->settings->embeddingUrl,
+            baseUrl: $endpoint->url,
+            apiKey: $endpoint->apiKey,
             httpClient: $this->httpClient ?? HttpClient::create([
                 'timeout' => 30.0,
                 'max_duration' => 30.0,
@@ -44,7 +44,7 @@ final class CodeRankVectorizerFactory
                 ],
             ]),
             modelCatalog: new ModelCatalog([
-                $this->settings->embeddingModel => [
+                $endpoint->model => [
                     'class' => EmbeddingsModel::class,
                     'capabilities' => [
                         Capability::INPUT_TEXT,
@@ -56,16 +56,19 @@ final class CodeRankVectorizerFactory
             eventDispatcher: $dispatcher,
             supportsCompletions: false,
             supportsEmbeddings: true,
-            embeddingsPath: self::embeddingsPath($this->settings->embeddingUrl),
+            embeddingsPath: self::embeddingsPath($endpoint->url),
             name: EmbeddingResultValidator::PROVIDER_NAME,
         );
     }
 
-    public function create(): Vectorizer
+    /** Vectorizer for the given endpoint, or for the one currently selected in Settings. */
+    public function create(?ModelEndpoint $endpoint = null): Vectorizer
     {
+        $endpoint ??= $this->endpoints->embedding();
+
         return new Vectorizer(
-            $this->createPlatform(),
-            $this->settings->embeddingModel,
+            $this->createPlatform($endpoint),
+            $endpoint->model,
             includeText: true,
         );
     }

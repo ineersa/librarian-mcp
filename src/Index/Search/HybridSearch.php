@@ -77,7 +77,7 @@ final readonly class HybridSearch
         }
 
         try {
-            $vector = $this->vectorizer->vectorize(IndexSettings::QUERY_PREFIX.$question);
+            $vector = $this->vectorizer->vectorize(mb_strcut(IndexSettings::QUERY_PREFIX.$question, 0, IndexSettings::EMBEDDING_INPUT_BYTES, 'UTF-8'));
         } catch (\Throwable $error) {
             throw $this->failure(IndexException::QUERY_EMBEDDING_FAILED, 'Query embedding failed.', $error);
         }
