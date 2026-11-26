@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repository;
 
 use App\Entity\IndexGeneration;
+use App\Entity\IndexState;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -31,14 +32,18 @@ class IndexGenerationRepository extends ServiceEntityRepository
         );
     }
 
-    /** Newest active, committed generation of any project built with this embedding signature. */
-    public function findCommittedWithSignature(string $signature): ?IndexGeneration
+    /**
+     * Newest non-obsolete generation of any project with this embedding signature that holds vectors.
+     * Includes generations still being built: chunks are stored per batch, long before the commit.
+     */
+    public function findPopulatedWithSignature(string $signature): ?IndexGeneration
     {
         return $this->createQueryBuilder('generation')
-            ->andWhere('generation.active = true')
             ->andWhere('generation.signature = :signature')
-            ->andWhere('generation.committedRevision IS NOT NULL')
+            ->andWhere('generation.chunkCount > 0')
+            ->andWhere('generation.state != :obsolete')
             ->setParameter('signature', $signature)
+            ->setParameter('obsolete', IndexState::Obsolete)
             ->orderBy('generation.id', 'DESC')
             ->setMaxResults(1)
             ->getQuery()

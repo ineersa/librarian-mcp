@@ -16,7 +16,8 @@ use Symfony\AI\Store\Query\VectorQuery;
  *
  * Re-embeds one stored chunk with the candidate and compares it with its stored vector. The same
  * GGUF on another device or backend stays above 0.999 (CPU vs CUDA measured 0.9997); a different
- * model does not share the vector space. With no committed generation there is nothing to mix.
+ * model does not share the vector space. Samples any generation holding vectors, including one still
+ * being built; only when no generation holds vectors is any model accepted.
  */
 final readonly class EmbeddingEndpointGuard
 {
@@ -34,7 +35,7 @@ final readonly class EmbeddingEndpointGuard
     /** Null when the endpoint is compatible, otherwise the reason it is not. */
     public function incompatibility(ModelEndpoint $candidate): ?string
     {
-        $generation = $this->generations->findCommittedWithSignature($this->settings->signature());
+        $generation = $this->generations->findPopulatedWithSignature($this->settings->signature());
         if (null === $generation) {
             return null;
         }
@@ -53,7 +54,8 @@ final readonly class EmbeddingEndpointGuard
         }
         $text = $stored instanceof VectorDocumentInterface ? $stored->getMetadata()->getText() : null;
         if (null === $text || '' === $text) {
-            return null;
+            // The generation holds vectors, so a missing sample is not proof that nothing would mix.
+            return 'Could not read a stored chunk to compare the embeddings endpoint with the existing indexes. Try again after indexing finishes.';
         }
 
         try {
