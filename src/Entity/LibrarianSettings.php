@@ -61,6 +61,10 @@ class LibrarianSettings
     #[Assert\LessThan(propertyPath: 'hatfieldReflectAfterObservationTokens', message: 'Observations max must be lower than reflect after, or the Reflector reruns after every observe job.')]
     public int $hatfieldObservationsMaxTokens;
 
+    /** Off: the 30-minute cron tick skips the daily backup. Forced runs (Run backup now, --force) still run. */
+    #[ORM\Column(options: ['default' => true])]
+    public bool $scheduledBackupsEnabled = true;
+
     /** Embeddings server. API URL/model left empty use the CODERANK_URL/CODERANK_MODEL env defaults. */
     #[ORM\Column(length: 16, enumType: ModelEndpointMode::class, options: ['default' => ModelEndpointMode::Api->value])]
     public ModelEndpointMode $embeddingMode = ModelEndpointMode::Api;
@@ -93,6 +97,13 @@ class LibrarianSettings
         $this->claudeObservationsMaxTokens = $observationsMaxTokens;
         $this->hatfieldReflectAfterObservationTokens = $reflectAfterObservationTokens;
         $this->hatfieldObservationsMaxTokens = $observationsMaxTokens;
+    }
+
+    public function scheduledRunsEnabled(CronJob $job): bool
+    {
+        return match ($job) {
+            CronJob::Backup => $this->scheduledBackupsEnabled,
+        };
     }
 
     /** @return array{reflectAfterObservationTokens: int, observationsMaxTokens: int} */

@@ -30,6 +30,7 @@ A registered project whose root is missing or unreadable fails the run. A readab
 ## Schedule, status and reruns
 
 - The `cron` schedule (`scheduler_cron`) queues the backup on the `cron` transport every 30 minutes. If a backup already **succeeded today**, the run is skipped without recording a row. "Today" is the day in `app.display_timezone`.
+- **Settings › Backups › Scheduled daily backups** turns the scheduled run off (on by default), for example on a laptop without GCS credentials. While it is off, every tick is skipped without recording a row; **Run backup now** and `app:cron:run backup --force` still run one.
 - The worker consumes `scheduler_cron` and `cron` before `async` and `scheduler_default`. Messenger checks receivers in that priority order, so a busy indexing queue cannot starve backups.
 - A failed or missing run executes on the next tick. A failed day therefore retries every 30 minutes and uploads every source again; retention keeps storage bounded. A Symfony Lock prevents overlapping runs. A `running` row left behind by a stopped worker is marked failed.
 - **Admin › Operations › Cron runs** lists runs read-only: status, whether the run was forced, timing, an error summary, and the uploaded objects on the detail page. **Run backup now** queues a forced run. The action is a POST protected by a session CSRF token.

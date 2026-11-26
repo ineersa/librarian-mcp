@@ -18,6 +18,7 @@ use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Config\KeyValueStore;
 use EasyCorp\Bundle\EasyAdminBundle\Context\AdminContext;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
+use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\FormField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\IntegerField;
@@ -87,6 +88,10 @@ class LibrarianSettingsCrudController extends AbstractCrudController
         yield IntegerField::new('hatfieldObservationsMaxTokens', 'Hatfield observations max (tokens)')
             ->setFormTypeOption('empty_data', self::BLANK_AS_ZERO)
             ->setHelp('Dropper target after a reflection. '.self::TOKEN_HELP);
+
+        yield FormField::addFieldset('Backups');
+        yield BooleanField::new('scheduledBackupsEnabled', 'Scheduled daily backups')
+            ->setHelp('Off: the cron schedule skips the daily backup, for example on a laptop without GCS credentials. Operations › Cron runs › Run backup now still runs one.');
 
         yield from $this->endpointFields();
     }

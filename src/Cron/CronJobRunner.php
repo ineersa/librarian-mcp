@@ -8,6 +8,7 @@ use App\Entity\CronJob;
 use App\Entity\CronRun;
 use App\Entity\CronRunStatus;
 use App\Repository\CronRunRepository;
+use App\Repository\LibrarianSettingsRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -17,6 +18,7 @@ use Symfony\Component\Lock\LockFactory;
 
 /**
  * Runs a cron job at most once successfully per day (display timezone) unless forced.
+ * A job whose scheduled runs are off in Settings runs only when forced.
  *
  * Run rows are written in short flushes before and after the work, never inside one transaction.
  */
@@ -37,6 +39,7 @@ final class CronJobRunner
         #[AutowireIterator(CronJobTask::class)]
         iterable $tasks,
         private readonly CronRunRepository $cronRunRepository,
+        private readonly LibrarianSettingsRepository $settings,
         private readonly EntityManagerInterface $entityManager,
         private readonly LockFactory $lockFactory,
         private readonly ClockInterface $clock,
@@ -52,6 +55,9 @@ final class CronJobRunner
     public function run(CronJob $job, bool $force): CronRunOutcome
     {
         $task = $this->tasks[$job->value] ?? throw new \LogicException(\sprintf('No task is registered for cron job "%s".', $job->value));
+        if (!$force && false === $this->settings->current()?->scheduledRunsEnabled($job)) {
+            return CronRunOutcome::Disabled;
+        }
         $day = $this->today();
         if (!$force && $this->cronRunRepository->hasSucceededOn($job, $day)) {
             return CronRunOutcome::Skipped;
